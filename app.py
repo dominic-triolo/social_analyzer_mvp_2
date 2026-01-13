@@ -368,6 +368,10 @@ def handle_webhook():
                 if media_url:
                     media_format = determine_media_format(media_url)
             
+            # Clean up the URL - remove trailing periods
+            if media_url:
+                media_url = media_url.rstrip('.')
+            
             if not media_url:
                 print(f"STEP 2.{idx}: No media URL found, skipping")
                 continue
