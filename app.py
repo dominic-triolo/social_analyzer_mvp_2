@@ -9,8 +9,6 @@ import base64
 
 app = Flask(__name__)
 
-print("=== APP VERSION: v2025-01-13-COLLECTION-FIX ===")
-
 # Configuration from environment variables
 INSIGHTIQ_USERNAME = os.getenv('INSIGHTIQ_USERNAME')
 INSIGHTIQ_PASSWORD = os.getenv('INSIGHTIQ_PASSWORD')
@@ -333,26 +331,63 @@ def handle_webhook():
         for idx, item in enumerate(content_items[:5], 1):  # Process up to 5 items for MVP
             print(f"STEP 2.{idx}: Processing content item {idx}/{min(5, len(content_items))}")
             
-            # Extract media URL from the item
-            media_url = item.get('media_url') or item.get('image_url') or item.get('url')
+            # Extract content type and format
+            content_format = item.get('format')  # VIDEO, COLLECTION, etc.
+            content_type = item.get('type')  # REELS, FEED, etc.
+            description = item.get('description', '')
+            
+            print(f"STEP 2.{idx}: Format={content_format}, Type={content_type}")
+            
+            # Determine media URL based on format
+            media_url = None
+            media_format = None
+            
+            if content_format == 'VIDEO':
+                # For videos, use media_url
+                media_url = item.get('media_url')
+                media_format = 'VIDEO'
+                print(f"STEP 2.{idx}: VIDEO - Using media_url")
+            elif content_format == 'COLLECTION':
+                # For collections, get the first image from content_group_media
+                content_group_media = item.get('content_group_media', [])
+                print(f"STEP 2.{idx}: COLLECTION - Found {len(content_group_media)} items in content_group_media")
+                
+                if content_group_media and len(content_group_media) > 0:
+                    media_url = content_group_media[0].get('media_url')
+                    print(f"STEP 2.{idx}: Using first media from collection")
+                else:
+                    # Fallback to thumbnail_url
+                    media_url = item.get('thumbnail_url')
+                    print(f"STEP 2.{idx}: No content_group_media, using thumbnail_url")
+                
+                media_format = 'IMAGE'
+            else:
+                # Fallback for other formats
+                media_url = item.get('media_url') or item.get('thumbnail_url')
+                print(f"STEP 2.{idx}: Other format, using media_url or thumbnail")
+                if media_url:
+                    media_format = determine_media_format(media_url)
             
             if not media_url:
-                print(f"STEP 2.{idx}: No media URL found, skipping. Item keys: {item.keys()}")
+                print(f"STEP 2.{idx}: No media URL found, skipping")
                 continue
             
+            print(f"STEP 2.{idx}: Final URL (first 100 chars): {media_url[:100]}...")
+            
             try:
-                # Determine format
-                media_format = determine_media_format(media_url)
-                print(f"STEP 2.{idx}: Media format: {media_format}, URL: {media_url[:100]}...")
-                
-                # Analyze content (transcribe + summarize if video, describe if image)
-                print(f"STEP 2.{idx}: Analyzing content...")
+                print(f"STEP 2.{idx}: Analyzing {media_format}...")
                 analysis = analyze_content_item(media_url, media_format)
+                
+                # Add the description from InsightIQ to the analysis
+                analysis['description'] = description
+                
                 content_analyses.append(analysis)
                 print(f"STEP 2.{idx}: Analysis complete")
                 
             except Exception as e:
                 print(f"STEP 2.{idx} ERROR: {str(e)}")
+                import traceback
+                print(f"Traceback: {traceback.format_exc()}")
                 continue
         
         # Step 3: Check if we have content to analyze
