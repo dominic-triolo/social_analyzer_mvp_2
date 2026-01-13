@@ -13,7 +13,7 @@ app = Flask(__name__)
 INSIGHTIQ_USERNAME = os.getenv('INSIGHTIQ_USERNAME')
 INSIGHTIQ_PASSWORD = os.getenv('INSIGHTIQ_PASSWORD')
 INSIGHTIQ_WORK_PLATFORM_ID = os.getenv('INSIGHTIQ_WORK_PLATFORM_ID')  # Set this manually
-INSIGHTIQ_API_URL = os.getenv('INSIGHTIQ_API_URL', 'https://api.staging.insightiq.ai')  # Defaults to sandbox
+INSIGHTIQ_API_URL = os.getenv('INSIGHTIQ_API_URL', 'https://api.sandbox.insightiq.ai')  # Defaults to sandbox
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 HUBSPOT_WEBHOOK_URL = os.getenv('HUBSPOT_WEBHOOK_URL')
 
