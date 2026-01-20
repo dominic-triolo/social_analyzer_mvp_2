@@ -235,14 +235,20 @@ def analyze_content_item(media_url: str, media_format: str) -> Dict[str, Any]:
                     "content": [
                         {
                             "type": "text",
-                            "text": """Analyze this social media image and provide a brief summary (2-3 sentences) covering:
-1. Visual content and composition
-2. Any text or messaging visible
-3. Overall tone and style
+                            "text": """Analyze this social media image and provide a detailed summary covering:
+
+1. Content theme/topic (e.g., fitness, fashion, food, travel, lifestyle, etc.)
+2. What the creator is sharing (advice, personal update, product showcase, tutorial, entertainment, storytelling, etc.)
+3. Visual composition and style
+4. Any text, captions, or messaging visible
+5. Whether the creator is visible in the image (and if so, how prominently)
+6. Signs of monetization (product placements, brand mentions, sponsored content indicators)
+7. Any calls-to-action or community building efforts (subscribe, join, follow, link in bio, etc.)
+8. How the creator addresses the audience (directly speaking to viewers, casual tone, professional, etc.)
 
 Respond in JSON format:
 {
-  "summary": "your summary here"
+  "summary": "comprehensive 3-4 sentence summary covering the points above"
 }"""
                         },
                         {
@@ -276,14 +282,23 @@ Respond in JSON format:
             messages=[
                 {
                     "role": "user",
-                    "content": f"""Based on this video transcription, provide a brief summary (2-3 sentences) of the video content, main points, and tone.
+                    "content": f"""Based on this video transcription, provide a detailed summary covering:
+
+1. Content theme/topic (e.g., fitness advice, personal vlog, product review, tutorial, storytelling, etc.)
+2. What the creator is sharing (advice/expertise, personal experience, entertainment, education, product promotion, etc.)
+3. Main points and key messages
+4. How the creator addresses the audience (speaking directly to camera, using "you", asking questions, casual vs professional tone, etc.)
+5. Signs of monetization (mentions of sponsors, products, affiliate links, paid partnerships, etc.)
+6. Any calls-to-action or community building (subscribe, join mailing list/Patreon/Discord, visit website, etc.)
+7. The creator's presence and on-camera style
+8. Overall tone and approach
 
 TRANSCRIPTION:
 {transcript}
 
 Respond in JSON format:
 {{
-  "summary": "your summary here"
+  "summary": "comprehensive 3-4 sentence summary covering the points above"
 }}"""
                 }
             ],
@@ -429,12 +444,20 @@ Respond in JSON format:
     }
 
 
-def send_to_hubspot(contact_id: str, summary: str, lead_score: float):
+def send_to_hubspot(contact_id: str, summary: str, lead_score: float, creator_profile: Dict[str, Any]):
     """Send results back to HubSpot via webhook"""
     payload = {
         "contact_id": contact_id,
         "summary": summary,
         "lead_score": lead_score,
+        "creator_profile": {
+            "content_category": creator_profile.get('content_category'),
+            "content_types": creator_profile.get('content_types'),
+            "audience_engagement": creator_profile.get('audience_engagement'),
+            "creator_presence": creator_profile.get('creator_presence'),
+            "monetization": creator_profile.get('monetization'),
+            "community_building": creator_profile.get('community_building')
+        },
         "analyzed_at": datetime.now().isoformat()
     }
     
@@ -576,7 +599,8 @@ def handle_webhook():
         send_to_hubspot(
             contact_id,
             lead_analysis['summary'],
-            lead_analysis['lead_score']
+            lead_analysis['lead_score'],
+            creator_profile
         )
         print(f"STEP 6 COMPLETE: Results sent to HubSpot")
         
