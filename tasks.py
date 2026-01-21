@@ -99,8 +99,18 @@ def rehost_media_on_r2(media_url: str, contact_id: str, media_format: str) -> st
         return media_url
     
     try:
-        media_response = requests.get(media_url, timeout=30)
-        media_response.raise_for_status()
+        # Download with shorter timeout and retry
+        max_retries = 2
+        for attempt in range(max_retries):
+            try:
+                media_response = requests.get(media_url, timeout=15)
+                media_response.raise_for_status()
+                break
+            except requests.exceptions.Timeout:
+                if attempt == max_retries - 1:
+                    print(f"Media download timed out after {max_retries} attempts, using original URL")
+                    return media_url
+                print(f"Download timeout, retrying... (attempt {attempt + 1}/{max_retries})")
         
         url_hash = hashlib.md5(media_url.encode()).hexdigest()
         extension = 'mp4' if media_format == 'VIDEO' else 'jpg'
@@ -109,6 +119,7 @@ def rehost_media_on_r2(media_url: str, contact_id: str, media_format: str) -> st
         
         content_type = 'video/mp4' if media_format == 'VIDEO' else 'image/jpeg'
         
+        # Upload to R2 with timeout
         r2_client.put_object(
             Bucket=R2_BUCKET_NAME,
             Key=object_key,
@@ -116,9 +127,13 @@ def rehost_media_on_r2(media_url: str, contact_id: str, media_format: str) -> st
             ContentType=content_type
         )
         
-        return f"{R2_PUBLIC_URL}/{object_key}"
+        rehosted_url = f"{R2_PUBLIC_URL}/{object_key}"
+        print(f"Successfully re-hosted to R2: {object_key}")
+        return rehosted_url
+        
     except Exception as e:
-        print(f"ERROR re-hosting: {e}")
+        print(f"ERROR re-hosting media: {e}")
+        print("Falling back to original URL")
         return media_url
 
 
@@ -290,10 +305,23 @@ def send_to_hubspot(contact_id: str, lead_score: float, section_scores: Dict, sc
     content_summaries = [f"Content {idx} ({item['type']}): {item['summary']}" 
                         for idx, item in enumerate(content_analyses, 1)]
     
+    # Helper function to safely convert values to strings
+    def safe_str(value):
+        if value is None:
+            return ''
+        if isinstance(value, list):
+            # Filter out None values and convert all items to strings
+            str_items = [str(item) for item in value if item is not None]
+            return ', '.join(str_items)
+        if isinstance(value, dict):
+            # Convert dict to JSON string
+            return json.dumps(value)
+        return str(value)
+    
     # Handle community_building as either string or list
     community_building = creator_profile.get('community_building', '')
     if isinstance(community_building, list):
-        community_text = ' '.join(str(item) for item in community_building).lower()
+        community_text = ' '.join(str(item) for item in community_building if item).lower()
     else:
         community_text = str(community_building).lower()
     
@@ -313,12 +341,12 @@ def send_to_hubspot(contact_id: str, lead_score: float, section_scores: Dict, sc
         "score_community_infrastructure": section_scores.get('community_infrastructure', 0.0),
         "score_trip_fit": section_scores.get('trip_fit_and_travelability', 0.0),
         "content_summary_structured": "\n\n".join(content_summaries),
-        "profile_category": creator_profile.get('content_category'),
-        "profile_content_types": ", ".join(creator_profile.get('content_types', [])) if isinstance(creator_profile.get('content_types'), list) else str(creator_profile.get('content_types', '')),
-        "profile_engagement": str(creator_profile.get('audience_engagement', '')),
-        "profile_presence": str(creator_profile.get('creator_presence', '')),
-        "profile_monetization": str(creator_profile.get('monetization', '')),
-        "profile_community_building": str(community_building) if not isinstance(community_building, list) else ", ".join(str(item) for item in community_building),
+        "profile_category": safe_str(creator_profile.get('content_category')),
+        "profile_content_types": safe_str(creator_profile.get('content_types')),
+        "profile_engagement": safe_str(creator_profile.get('audience_engagement')),
+        "profile_presence": safe_str(creator_profile.get('creator_presence')),
+        "profile_monetization": safe_str(creator_profile.get('monetization')),
+        "profile_community_building": safe_str(community_building),
         "has_community_platform": len(platforms) > 0,
         "community_platforms_detected": ", ".join(platforms) if platforms else "None",
         "analyzed_at": datetime.now().isoformat()
@@ -348,15 +376,23 @@ def process_creator_profile(self, contact_id: str, profile_url: str):
         if not content_items:
             return {"status": "error", "message": "No content found"}
         
-        # Process content items
-        self.update_state(state='PROGRESS', meta={'stage': 'Analyzing content', 'total': min(3, len(content_items))})
+        # Process content items - try up to 10 items to get 3 successful analyses
+        self.update_state(state='PROGRESS', meta={'stage': 'Analyzing content'})
         
         content_analyses = []
-        for idx, item in enumerate(content_items[:3], 1):
+        items_to_try = min(10, len(content_items))  # Try up to 10 items
+        
+        for idx, item in enumerate(content_items[:items_to_try], 1):
+            if len(content_analyses) >= 3:
+                break  # Stop once we have 3 successful analyses
+            
+            print(f"Processing item {idx}/{items_to_try} (have {len(content_analyses)} successful so far)")
+            
             content_format = item.get('format')
             media_url = None
             media_format = None
             
+            # Determine media URL and format
             if content_format == 'VIDEO':
                 media_url = item.get('media_url')
                 media_format = 'VIDEO'
@@ -371,12 +407,50 @@ def process_creator_profile(self, contact_id: str, profile_url: str):
                 media_url = item.get('media_url') or item.get('thumbnail_url')
                 media_format = 'IMAGE'
             
-            if media_url:
-                media_url = media_url.rstrip('.')
+            if not media_url:
+                print(f"Item {idx}: No media URL, skipping")
+                continue
+            
+            media_url = media_url.rstrip('.')
+            
+            # Check video file size before processing
+            if media_format == 'VIDEO':
+                try:
+                    head_response = requests.head(media_url, timeout=10)
+                    content_length = int(head_response.headers.get('content-length', 0))
+                    max_size = 25 * 1024 * 1024  # 25MB in bytes
+                    
+                    if content_length > max_size:
+                        print(f"Item {idx}: Video too large ({content_length / 1024 / 1024:.1f}MB), skipping")
+                        continue
+                except Exception as e:
+                    print(f"Item {idx}: Could not check video size: {e}, attempting anyway")
+            
+            try:
+                # Re-host media on R2
                 rehosted_url = rehost_media_on_r2(media_url, contact_id, media_format)
+                
+                # Analyze content
                 analysis = analyze_content_item(rehosted_url, media_format)
                 analysis['description'] = item.get('description', '')
                 content_analyses.append(analysis)
+                print(f"Item {idx}: Successfully analyzed")
+                
+            except Exception as e:
+                error_msg = str(e)
+                if '413' in error_msg or 'Maximum content size' in error_msg:
+                    print(f"Item {idx}: Video too large, skipping")
+                elif 'Timeout while downloading' in error_msg:
+                    print(f"Item {idx}: R2 timeout, skipping")
+                else:
+                    print(f"Item {idx}: Analysis failed - {error_msg}")
+                continue
+        
+        # Check if we have enough content to analyze
+        if len(content_analyses) < 1:
+            return {"status": "error", "message": "Could not analyze any content items"}
+        
+        print(f"Successfully analyzed {len(content_analyses)} items")
         
         # Generate profile
         self.update_state(state='PROGRESS', meta={'stage': 'Generating creator profile'})
@@ -404,7 +478,8 @@ def process_creator_profile(self, contact_id: str, profile_url: str):
             "contact_id": contact_id,
             "lead_score": lead_analysis['lead_score'],
             "section_scores": lead_analysis.get('section_scores', {}),
-            "creator_profile": creator_profile
+            "creator_profile": creator_profile,
+            "items_analyzed": len(content_analyses)
         }
         
     except Exception as e:
