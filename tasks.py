@@ -71,9 +71,26 @@ def fetch_social_content(profile_url: str) -> Dict[str, Any]:
         "work_platform_id": INSIGHTIQ_WORK_PLATFORM_ID
     }
     
-    response = requests.post(url, json=payload, headers=headers, timeout=30)
-    response.raise_for_status()
-    return response.json()
+    # Enhanced logging
+    print(f"InsightIQ Request URL: {url}")
+    print(f"Profile URL: {profile_url}")
+    print(f"Work Platform ID: {INSIGHTIQ_WORK_PLATFORM_ID}")
+    
+    try:
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        print(f"InsightIQ Response Status: {response.status_code}")
+        
+        if response.status_code != 200:
+            print(f"ERROR Response Body: {response.text}")
+        
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        print(f"InsightIQ API Error: {e}")
+        if hasattr(e, 'response') and e.response is not None:
+            print(f"Response Status: {e.response.status_code}")
+            print(f"Response Body: {e.response.text}")
+        raise
 
 
 def rehost_media_on_r2(media_url: str, contact_id: str, media_format: str) -> str:
@@ -242,7 +259,13 @@ def send_to_hubspot(contact_id: str, lead_score: float, section_scores: Dict, sc
     content_summaries = [f"Content {idx} ({item['type']}): {item['summary']}" 
                         for idx, item in enumerate(content_analyses, 1)]
     
-    community_text = creator_profile.get('community_building', '').lower()
+    # Handle community_building as either string or list
+    community_building = creator_profile.get('community_building', '')
+    if isinstance(community_building, list):
+        community_text = ' '.join(str(item) for item in community_building).lower()
+    else:
+        community_text = str(community_building).lower()
+    
     platforms = []
     for keyword, name in [('email', 'Email List'), ('patreon', 'Patreon'), 
                          ('discord', 'Discord'), ('substack', 'Substack')]:
@@ -260,17 +283,19 @@ def send_to_hubspot(contact_id: str, lead_score: float, section_scores: Dict, sc
         "score_trip_fit": section_scores.get('trip_fit_and_travelability', 0.0),
         "content_summary_structured": "\n\n".join(content_summaries),
         "profile_category": creator_profile.get('content_category'),
-        "profile_content_types": ", ".join(creator_profile.get('content_types', [])),
-        "profile_engagement": creator_profile.get('audience_engagement', ''),
-        "profile_presence": creator_profile.get('creator_presence', ''),
-        "profile_monetization": creator_profile.get('monetization', ''),
-        "profile_community_building": creator_profile.get('community_building', ''),
+        "profile_content_types": ", ".join(creator_profile.get('content_types', [])) if isinstance(creator_profile.get('content_types'), list) else str(creator_profile.get('content_types', '')),
+        "profile_engagement": str(creator_profile.get('audience_engagement', '')),
+        "profile_presence": str(creator_profile.get('creator_presence', '')),
+        "profile_monetization": str(creator_profile.get('monetization', '')),
+        "profile_community_building": str(community_building) if not isinstance(community_building, list) else ", ".join(str(item) for item in community_building),
         "has_community_platform": len(platforms) > 0,
         "community_platforms_detected": ", ".join(platforms) if platforms else "None",
         "analyzed_at": datetime.now().isoformat()
     }
     
-    requests.post(HUBSPOT_WEBHOOK_URL, json=payload, timeout=10)
+    print(f"Sending to HubSpot: {HUBSPOT_WEBHOOK_URL}")
+    response = requests.post(HUBSPOT_WEBHOOK_URL, json=payload, timeout=10)
+    print(f"HubSpot response: {response.status_code}")
 
 
 @celery_app.task(bind=True, name='tasks.process_creator_profile')
@@ -353,6 +378,8 @@ def process_creator_profile(self, contact_id: str, profile_url: str):
         
     except Exception as e:
         print(f"=== ERROR: {contact_id} - {str(e)} ===")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
         return {
             "status": "error",
             "contact_id": contact_id,
