@@ -275,8 +275,8 @@ AUTOMATIC DISQUALIFIERS - Score ALL sections 0.0-0.2 if ANY apply:
 OTHER BAD FITS (score low but not automatic disqualification):
 - Pure artists/performers with fan bases (not communities)
 - Very niche specialists where audience doesn't want group travel together
-- Religious/spiritual content as PRIMARY focus (unless lifestyle/travel-oriented)
-- Creators without clear monetization (not business-minded)
+- Religious/spiritual content as PRIMARY EXCLUSIVE focus (BUT: faith + lifestyle/travel/wellness is GOOD)
+- Creators without clear monetization AND without strong face-forward presence (need at least one)
 
 SCORING CRITERIA (0.0-1.0 each):"""
         }, {
@@ -290,24 +290,29 @@ FIRST: Check for AUTOMATIC DISQUALIFIERS above. If ANY apply, score all sections
 OTHERWISE, score these 5 sections (0.0 to 1.0):
 
 1. **niche_and_audience_identity** (0.0-1.0)
-   HIGH scores (0.7-1.0): Clear lifestyle niche where audience shares identity (widows, DINKs, book lovers, history nerds, foodies, wellness seekers, outdoor enthusiasts). People want to connect with EACH OTHER. Niche can be supported by standard group travel (no specialized equipment needed).
-   LOW scores (0.0-0.4): Generic content, pure performance/art fans, religious-primary content, very technical/specialized, requires unsupported sports/equipment, or unclear who the audience is.
+   HIGH scores (0.7-1.0): Clear lifestyle niche where audience shares identity (widows, DINKs, book lovers, history nerds, foodies, wellness seekers, outdoor enthusiasts, faith + lifestyle communities). People want to connect with EACH OTHER. Niche can be supported by standard group travel (no specialized equipment needed).
+   MID scores (0.5-0.6): Somewhat broad (humor, general lifestyle) BUT if host is very face-forward and engaging, audience likely wants to meet them.
+   LOW scores (0.0-0.4): Generic content, pure performance/art fans, religious-ONLY content (no lifestyle mix), very technical/specialized, requires unsupported sports/equipment, or unclear who the audience is.
    
 2. **host_likeability_and_content_style** (0.0-1.0)
-   HIGH scores (0.7-1.0): Face-forward, appears regularly on camera, warm/conversational tone, shares experiences, "come with me" energy, feels like someone you'd travel with.
+   HIGH scores (0.7-1.0): Face-forward, appears regularly on camera, warm/conversational tone, shares experiences, "come with me" energy, feels like someone you'd travel with. Strong personality can compensate for less defined niche.
+   MID scores (0.5-0.6): Sometimes on camera, shows some personality but not consistently engaging.
    LOW scores (0.0-0.4): Behind-the-camera content, aesthetic-only, formal/sterile tone, doesn't show personality, pure expertise without relatability, business account without personal host.
 
 3. **monetization_and_business_mindset** (0.0-1.0)
    HIGH scores (0.7-1.0): Already selling something (coaching, courses, products, Patreon, brand deals, services). Audience pays for access. Comfortable with sales/launches.
-   LOW scores (0.0-0.4): No monetization, only donations, free content only, or explicitly states "no monetization."
+   MID scores (0.4-0.6): Some monetization signs (affiliate links, sponsorships, building audience for future monetization) OR no clear monetization BUT very strong face-forward presence and audience engagement (shows business potential).
+   LOW scores (0.0-0.3): No monetization, only donations, free content only, AND not face-forward/engaging enough to suggest future business capability.
    
 4. **community_infrastructure** (0.0-1.0)
    HIGH scores (0.7-1.0): Has owned channels beyond social media (email list, podcast, YouTube, Patreon, Discord, membership, in-person groups). Can reach audience directly.
-   LOW scores (0.0-0.4): Only social media presence, no owned channels mentioned, purely algorithm-dependent.
+   MID scores (0.4-0.6): Active social media with strong engagement, mentions of wanting to connect deeper with audience, building toward owned channels.
+   LOW scores (0.0-0.3): Only social media presence, no owned channels mentioned, purely algorithm-dependent.
 
 5. **trip_fit_and_travelability** (0.0-1.0)
-   HIGH scores (0.7-1.0): Content naturally fits a trip we can support (food/wine tours, history tours, wellness retreats, adventure travel with hiking/camping, cultural experiences, creative workshops). Audience has money/time for travel (professionals, DINKs, older audiences). Already travels or audience asks to travel together.
-   LOW scores (0.0-0.4): No natural trip concept, requires unsupported equipment/activities, very young/broke audience, content doesn't translate to group experiences, highly specialized/technical focus.
+   HIGH scores (0.7-1.0): Content naturally fits a trip we can support (food/wine tours, history tours, wellness retreats including specific health focuses, adventure travel with hiking/camping, cultural experiences, creative workshops, faith + travel experiences). Audience has money/time for travel (professionals, DINKs, older audiences, health-focused communities). Already travels or audience asks to travel together.
+   MID scores (0.5-0.6): Somewhat broad content (humor, general lifestyle) but host personality could anchor a "come hang with me" style trip. Or specific wellness niche (like TMJ, chronic illness) that fits wellness retreat model.
+   LOW scores (0.0-0.4): No natural trip concept, requires unsupported equipment/activities, very young/broke audience, content doesn't translate to group experiences, highly specialized/technical focus that wouldn't work as group travel.
 
 Also provide:
 - **combined_lead_score**: Weighted average: (niche × 0.25) + (likeability × 0.20) + (monetization × 0.25) + (community × 0.15) + (trip_fit × 0.15)
