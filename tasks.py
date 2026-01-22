@@ -232,7 +232,7 @@ JSON format with those 6 fields as arrays/strings."""
 
 
 def generate_lead_score(content_analyses: List[Dict[str, Any]], creator_profile: Dict[str, Any]) -> Dict[str, Any]:
-    """Generate TrovaTrip lead score"""
+    """Generate TrovaTrip lead score based on ICP criteria"""
     summaries = [f"Content {idx} ({item['type']}): {item['summary']}" for idx, item in enumerate(content_analyses, 1)]
     combined = "\n\n".join(summaries)
     
@@ -248,25 +248,72 @@ def generate_lead_score(content_analyses: List[Dict[str, Any]], creator_profile:
         model="gpt-4o",
         messages=[{
             "role": "system",
-            "content": "You score creators for TrovaTrip (group travel platform). You must score 5 sections between 0-1."
+            "content": """You score creators for TrovaTrip, a group travel platform where hosts lead trips with their communities.
+
+CRITICAL: A good fit is someone whose AUDIENCE wants to meet each other AND the host in real life. Think: book clubs traveling to Ireland, widow communities on healing retreats, food bloggers doing culinary tours.
+
+AUTOMATIC DISQUALIFIERS - Score ALL sections 0.0-0.2 if ANY apply:
+1. UNSUPPORTED SPORTS/ACTIVITIES (requires specialized equipment/facilities we can't provide):
+   - Gymnastics (needs specialized equipment like bars, beams, vault)
+   - Golf (needs golf courses and equipment)
+   - Watersports (surfing, diving, fishing - requires specialized equipment/boats)
+   - Snowsports (skiing, snowboarding - requires mountains/resorts)
+   - Hunting, mountain biking, horseback riding
+   - Note: Dance, ballet, yoga, pilates, barre, pole dance ARE supported (we can secure studio space)
+   - Note: Hiking, camping, swimming, meditation ARE supported
+   
+2. INAPPROPRIATE CONTENT:
+   - Offensive content (racist, misogynistic, xenophobic)
+   - Sexual/explicit content (OnlyFans promotion, adult content)
+   - Firearms-focused content
+   
+3. NOT A PERSONAL CREATOR:
+   - Business accounts (restaurant, store, brand pages)
+   - Accounts that only repost others' content (meme pages, aggregators)
+   - No identifiable individual creator/host
+
+OTHER BAD FITS (score low but not automatic disqualification):
+- Pure artists/performers with fan bases (not communities)
+- Very niche specialists where audience doesn't want group travel together
+- Religious/spiritual content as PRIMARY focus (unless lifestyle/travel-oriented)
+- Creators without clear monetization (not business-minded)
+
+SCORING CRITERIA (0.0-1.0 each):"""
         }, {
             "role": "user",
             "content": f"""{profile_context}
 
 CONTENT: {combined}
 
-Provide scores for these 5 sections (each 0.0 to 1.0):
-1. niche_and_audience_identity - How well-defined is their niche and audience?
-2. host_likeability_and_content_style - How likeable and engaging is the creator?
-3. monetization_and_business_mindset - Do they show business/monetization capability?
-4. community_infrastructure - Do they have platforms to gather their community (email, Discord, Patreon, etc)?
-5. trip_fit_and_travelability - How well does their content fit with group travel experiences?
+FIRST: Check for AUTOMATIC DISQUALIFIERS above. If ANY apply, score all sections 0.0-0.2 and explain why in reasoning.
+
+OTHERWISE, score these 5 sections (0.0 to 1.0):
+
+1. **niche_and_audience_identity** (0.0-1.0)
+   HIGH scores (0.7-1.0): Clear lifestyle niche where audience shares identity (widows, DINKs, book lovers, history nerds, foodies, wellness seekers, outdoor enthusiasts). People want to connect with EACH OTHER. Niche can be supported by standard group travel (no specialized equipment needed).
+   LOW scores (0.0-0.4): Generic content, pure performance/art fans, religious-primary content, very technical/specialized, requires unsupported sports/equipment, or unclear who the audience is.
+   
+2. **host_likeability_and_content_style** (0.0-1.0)
+   HIGH scores (0.7-1.0): Face-forward, appears regularly on camera, warm/conversational tone, shares experiences, "come with me" energy, feels like someone you'd travel with.
+   LOW scores (0.0-0.4): Behind-the-camera content, aesthetic-only, formal/sterile tone, doesn't show personality, pure expertise without relatability, business account without personal host.
+
+3. **monetization_and_business_mindset** (0.0-1.0)
+   HIGH scores (0.7-1.0): Already selling something (coaching, courses, products, Patreon, brand deals, services). Audience pays for access. Comfortable with sales/launches.
+   LOW scores (0.0-0.4): No monetization, only donations, free content only, or explicitly states "no monetization."
+   
+4. **community_infrastructure** (0.0-1.0)
+   HIGH scores (0.7-1.0): Has owned channels beyond social media (email list, podcast, YouTube, Patreon, Discord, membership, in-person groups). Can reach audience directly.
+   LOW scores (0.0-0.4): Only social media presence, no owned channels mentioned, purely algorithm-dependent.
+
+5. **trip_fit_and_travelability** (0.0-1.0)
+   HIGH scores (0.7-1.0): Content naturally fits a trip we can support (food/wine tours, history tours, wellness retreats, adventure travel with hiking/camping, cultural experiences, creative workshops). Audience has money/time for travel (professionals, DINKs, older audiences). Already travels or audience asks to travel together.
+   LOW scores (0.0-0.4): No natural trip concept, requires unsupported equipment/activities, very young/broke audience, content doesn't translate to group experiences, highly specialized/technical focus.
 
 Also provide:
-- combined_lead_score: Average of all 5 scores (0.0 to 1.0)
-- score_reasoning: 2-3 sentences explaining the overall assessment
+- **combined_lead_score**: Weighted average: (niche × 0.25) + (likeability × 0.20) + (monetization × 0.25) + (community × 0.15) + (trip_fit × 0.15)
+- **score_reasoning**: 2-3 sentences on fit for group travel with their community. If disqualified, explain why.
 
-Respond ONLY with JSON in this exact format:
+RESPOND ONLY with JSON:
 {{
   "niche_and_audience_identity": 0.0,
   "host_likeability_and_content_style": 0.0,
