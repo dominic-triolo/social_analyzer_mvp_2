@@ -371,8 +371,7 @@ Respond in JSON format:
     return result
 
 
-def generate_lead_analysis(content_analyses: List[Dict[str, Any]], creator_profile: Dict[str, Any], 
-                          follower_count: int = 0, engagement_rate: float = 0.0) -> Dict[str, Any]:
+def generate_lead_analysis(content_analyses: List[Dict[str, Any]], creator_profile: Dict[str, Any]) -> Dict[str, Any]:
     """Combine all content summaries and creator profile to generate a TrovaTrip-specific lead score"""
     
     # Extract all the individual summaries AND descriptions
@@ -389,16 +388,14 @@ def generate_lead_analysis(content_analyses: List[Dict[str, Any]], creator_profi
     
     combined_summaries = "\n\n".join(summaries)
     
-    # Format creator profile for context (including quantitative metrics)
+    # Format creator profile for context
     profile_context = f"""CREATOR PROFILE:
 - Content Category: {creator_profile.get('content_category', 'Unknown')}
 - Content Types: {', '.join(creator_profile.get('content_types', []))}
 - Audience Engagement: {creator_profile.get('audience_engagement', 'Unknown')}
 - Creator Presence: {creator_profile.get('creator_presence', 'Unknown')}
 - Monetization: {creator_profile.get('monetization', 'Unknown')}
-- Community Building: {creator_profile.get('community_building', 'Unknown')}
-- Follower Count: {follower_count:,}
-- Engagement Rate: {engagement_rate:.2%}"""
+- Community Building: {creator_profile.get('community_building', 'Unknown')}"""
     
     # TrovaTrip-specific scoring
     response = client.chat.completions.create(
@@ -413,27 +410,6 @@ TrovaTrip is a platform that allows content creators, community leaders, and ent
 
 YOUR ROLE:
 You score creators based on the likelihood that they will be interested in hosting a trip with their audience/community and the likelihood that they will be successful selling a trip to their audience/community. i.e. the degree to which the creator's audience/community is likely to be interested in connecting with each other and the creator in real life.
-
-QUANTITATIVE INDICATORS TO CONSIDER:
-
-Follower Count signals:
-- <5K: May be too small for viable trips (need 8-15 travelers minimum)
-- 5K-50K: SWEET SPOT - manageable, engaged community size
-- 50K-500K: Good size - larger reach helps fill trips
-- >500K: Large audience - can work well if engagement is healthy
-
-Engagement Rate signals:
-- <1%: RED FLAG - likely bought followers or disengaged audience
-- 1-2%: Below average - scrutinize for fan base vs community dynamics
-- 2-4%: Average/acceptable, especially for larger accounts (100K+)
-- 4-8%: GOOD - indicates real connection and community
-- >8%: EXCELLENT - highly engaged micro-community
-
-CRITICAL: It's the COMBINATION that matters:
-- High followers (>150K) + low engagement (<1.5%) = RED FLAG - likely bought followers or pure fan base, PENALIZE heavily
-- High followers (>150K) + good engagement (>3%) = GREAT - large engaged community, BOOST score
-- Medium followers (10K-100K) + high engagement (>5%) = EXCELLENT - strong tight-knit community
-- Small followers (<10K) + any engagement = May struggle to fill trips (need 8-15 people)
 
 SCORING GUIDE:
 - 0.0-0.3: Low quality, poor engagement potential
@@ -580,17 +556,14 @@ def handle_webhook_async():
         
         contact_id = data.get('contact_id')
         profile_url = data.get('profile_url')
-        follower_count = data.get('follower_count', 0)
-        engagement_rate = data.get('engagement_rate', 0.0)
         
         if not all([contact_id, profile_url]):
             return jsonify({"error": "Missing required fields: contact_id, profile_url"}), 400
         
         print(f"=== QUEUEING: {contact_id} ===")
-        print(f"Metrics: followers={follower_count:,}, engagement={engagement_rate:.2%}")
         
-        # Queue the task with all parameters
-        task = process_creator_profile.delay(contact_id, profile_url, follower_count, engagement_rate)
+        # Queue the task
+        task = process_creator_profile.delay(contact_id, profile_url)
         
         print(f"=== QUEUED: {contact_id} - Task ID: {task.id} ===")
         
@@ -649,14 +622,11 @@ def handle_webhook():
         
         contact_id = data.get('contact_id')
         profile_url = data.get('profile_url')
-        follower_count = data.get('follower_count', 0)  # Optional, default to 0
-        engagement_rate = data.get('engagement_rate', 0.0)  # Optional, decimal format
         
         if not all([contact_id, profile_url]):
             return jsonify({"error": "Missing required fields: contact_id, profile_url"}), 400
         
         print(f"Processing: contact_id={contact_id}, profile_url={profile_url}")
-        print(f"Metrics: followers={follower_count:,}, engagement={engagement_rate:.2%}")
         
         # Step 1: Fetch social content
         print(f"STEP 1: Fetching content from InsightIQ...")
@@ -764,7 +734,7 @@ def handle_webhook():
         
         # Step 5: Generate lead score using creator profile and content summaries
         print(f"STEP 5: Generating TrovaTrip lead analysis...")
-        lead_analysis = generate_lead_analysis(content_analyses, creator_profile, follower_count, engagement_rate)
+        lead_analysis = generate_lead_analysis(content_analyses, creator_profile)
         print(f"STEP 5 COMPLETE: Lead score: {lead_analysis['lead_score']}")
         print(f"  - Section scores: {lead_analysis.get('section_scores', {})}")
         
