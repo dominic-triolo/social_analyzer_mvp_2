@@ -230,9 +230,8 @@ JSON format with those 6 fields as arrays/strings."""
     return json.loads(response.choices[0].message.content)
 
 
-def generate_lead_score(content_analyses: List[Dict[str, Any]], creator_profile: Dict[str, Any], 
-                        follower_count: int = 0, engagement_rate: float = 0.0) -> Dict[str, Any]:
-    """Generate TrovaTrip lead score based on ICP criteria - v1.1 with Quantitative Metrics"""
+def generate_lead_score(content_analyses: List[Dict[str, Any]], creator_profile: Dict[str, Any]) -> Dict[str, Any]:
+    """Generate TrovaTrip lead score based on ICP criteria - v1.1 (Production)"""
     summaries = [f"Content {idx} ({item['type']}): {item['summary']}" for idx, item in enumerate(content_analyses, 1)]
     combined = "\n\n".join(summaries)
     
@@ -242,9 +241,7 @@ def generate_lead_score(content_analyses: List[Dict[str, Any]], creator_profile:
 - Engagement: {creator_profile.get('audience_engagement')}
 - Presence: {creator_profile.get('creator_presence')}
 - Monetization: {creator_profile.get('monetization')}
-- Community: {creator_profile.get('community_building')}
-- Follower Count: {follower_count:,}
-- Engagement Rate: {engagement_rate:.2%}"""
+- Community: {creator_profile.get('community_building')}"""
     
     response = client.chat.completions.create(
         model="gpt-4o",
@@ -254,33 +251,11 @@ def generate_lead_score(content_analyses: List[Dict[str, Any]], creator_profile:
 
 CRITICAL: A good fit is someone whose AUDIENCE wants to meet each other AND the host in real life. Think: book clubs traveling to Ireland, widow communities on healing retreats, food bloggers doing culinary tours.
 
-QUANTITATIVE INDICATORS TO CONSIDER:
-
-Follower Count signals:
-- <5K: May be too small for viable trips (need 8-15 travelers minimum)
-- 5K-50K: SWEET SPOT - manageable, engaged community size
-- 50K-500K: Good size - larger reach helps fill trips
-- >500K: Large audience - can work well if engagement is healthy
-
-Engagement Rate signals:
-- <1%: RED FLAG - likely bought followers or disengaged audience
-- 1-2%: Below average - scrutinize for fan base vs community dynamics
-- 2-4%: Average/acceptable, especially for larger accounts (100K+)
-- 4-8%: GOOD - indicates real connection and community
-- >8%: EXCELLENT - highly engaged micro-community
-
-CRITICAL: It's the COMBINATION that matters:
-- High followers (>150K) + low engagement (<1.5%) = RED FLAG - likely bought followers or pure fan base, PENALIZE heavily
-- High followers (>150K) + good engagement (>3%) = GREAT - large engaged community, BOOST score
-- Medium followers (10K-100K) + high engagement (>5%) = EXCELLENT - strong tight-knit community
-- Small followers (<10K) + any engagement = May struggle to fill trips (need 8-15 people)
-
 BAD FITS to avoid:
 - Pure artists/performers with fan bases (not communities)
-- Very niche specialists where audience doesn't want group travel
+- Very niche specialists (ballet, physical therapy) where audience doesn't want group travel
 - Religious/spiritual content as primary focus (unless lifestyle/travel-oriented)
 - Creators without clear monetization (not business-minded)
-- High follower counts (>150K) with very low engagement (<1.5%) = likely bought followers or fan base
 
 SCORING CRITERIA (0.0-1.0 each):"""
         }, {
@@ -292,8 +267,8 @@ CONTENT: {combined}
 Score these 5 sections (0.0 to 1.0):
 
 1. **niche_and_audience_identity** (0.0-1.0)
-   HIGH scores (0.7-1.0): Clear lifestyle niche where audience shares identity (widows, DINKs, book lovers, history nerds, foodies, wellness seekers). People want to connect with EACH OTHER. High engagement rate (>4%) strongly suggests real community. Large follower count (>150K) with good engagement (>3%) indicates scalable community.
-   LOW scores (0.0-0.4): Generic content, pure performance/art fans, religious-primary content, very technical/specialized, or unclear who the audience is. PENALIZE heavily: high followers (>150K) with very low engagement (<1.5%) = likely bought followers or pure fan base.
+   HIGH scores (0.7-1.0): Clear lifestyle niche where audience shares identity (widows, DINKs, book lovers, history nerds, foodies, wellness seekers). People want to connect with EACH OTHER.
+   LOW scores (0.0-0.4): Generic content, pure performance/art fans, religious-primary content, very technical/specialized, or unclear who the audience is.
    
 2. **host_likeability_and_content_style** (0.0-1.0)
    HIGH scores (0.7-1.0): Face-forward, appears regularly on camera, warm/conversational tone, shares experiences, "come with me" energy, feels like someone you'd travel with.
@@ -308,12 +283,12 @@ Score these 5 sections (0.0 to 1.0):
    LOW scores (0.0-0.4): Only social media presence, no owned channels mentioned, purely algorithm-dependent.
 
 5. **trip_fit_and_travelability** (0.0-1.0)
-   HIGH scores (0.7-1.0): Content naturally fits a trip (food/wine tours, history tours, wellness retreats, adventure travel, cultural experiences). Audience has money/time for travel (professionals, DINKs, older audiences). Medium to large follower count (10K+) with good engagement makes filling trips easier. Already travels or audience expresses interest.
-   LOW scores (0.0-0.4): No natural trip concept, very young/broke audience, content doesn't translate to group experiences, highly specialized/technical focus. Very small follower count (<5K) may struggle to fill trips (need 8-15 people minimum).
+   HIGH scores (0.7-1.0): Content naturally fits a trip (food/wine tours, history tours, wellness retreats, adventure travel, cultural experiences). Audience has money/time for travel (professionals, DINKs, older audiences). Already travels or audience asks to travel together.
+   LOW scores (0.0-0.4): No natural trip concept, very young/broke audience, content doesn't translate to group experiences, highly specialized/technical focus.
 
 Also provide:
 - **combined_lead_score**: Weighted average: (niche × 0.25) + (likeability × 0.20) + (monetization × 0.25) + (community × 0.15) + (trip_fit × 0.15)
-- **score_reasoning**: 2-3 sentences on fit for group travel with their community. Reference follower count and engagement rate if they significantly impact the assessment.
+- **score_reasoning**: 2-3 sentences on fit for group travel with their community.
 
 RESPOND ONLY with JSON:
 {{
@@ -328,6 +303,24 @@ RESPOND ONLY with JSON:
         }],
         response_format={"type": "json_object"}
     )
+    
+    result = json.loads(response.choices[0].message.content)
+    print(f"GPT Lead Score Response: {json.dumps(result, indent=2)}")
+    
+    # Extract section scores
+    section_scores = {
+        "niche_and_audience_identity": result.get('niche_and_audience_identity', 0.0),
+        "host_likeability_and_content_style": result.get('host_likeability_and_content_style', 0.0),
+        "monetization_and_business_mindset": result.get('monetization_and_business_mindset', 0.0),
+        "community_infrastructure": result.get('community_infrastructure', 0.0),
+        "trip_fit_and_travelability": result.get('trip_fit_and_travelability', 0.0)
+    }
+    
+    return {
+        "section_scores": section_scores,
+        "lead_score": result.get('combined_lead_score', 0.0),
+        "score_reasoning": result.get('score_reasoning', '')
+    }
     
     result = json.loads(response.choices[0].message.content)
     print(f"GPT Lead Score Response: {json.dumps(result, indent=2)}")
@@ -438,11 +431,10 @@ def send_to_hubspot(contact_id: str, lead_score: float, section_scores: Dict, sc
 
 
 @celery_app.task(bind=True, name='tasks.process_creator_profile')
-def process_creator_profile(self, contact_id: str, profile_url: str, follower_count: int = 0, engagement_rate: float = 0.0):
+def process_creator_profile(self, contact_id: str, profile_url: str):
     """Background task to process a creator profile"""
     try:
         print(f"=== PROCESSING: {contact_id} ===")
-        print(f"Metrics: followers={follower_count:,}, engagement={engagement_rate:.2%}")
         
         self.update_state(state='PROGRESS', meta={'stage': 'Fetching content from InsightIQ'})
         
@@ -526,7 +518,7 @@ def process_creator_profile(self, contact_id: str, profile_url: str, follower_co
         creator_profile = generate_creator_profile(content_analyses)
         
         self.update_state(state='PROGRESS', meta={'stage': 'Calculating lead score'})
-        lead_analysis = generate_lead_score(content_analyses, creator_profile, follower_count, engagement_rate)
+        lead_analysis = generate_lead_score(content_analyses, creator_profile)
         
         self.update_state(state='PROGRESS', meta={'stage': 'Sending to HubSpot'})
         send_to_hubspot(
