@@ -231,7 +231,7 @@ JSON format with those 6 fields as arrays/strings."""
 
 
 def generate_lead_score(content_analyses: List[Dict[str, Any]], creator_profile: Dict[str, Any]) -> Dict[str, Any]:
-    """Generate TrovaTrip lead score based on ICP criteria - v1.1"""
+    """Generate TrovaTrip lead score based on ICP criteria - v1.2 Revised"""
     summaries = [f"Content {idx} ({item['type']}): {item['summary']}" for idx, item in enumerate(content_analyses, 1)]
     combined = "\n\n".join(summaries)
     
@@ -249,13 +249,22 @@ def generate_lead_score(content_analyses: List[Dict[str, Any]], creator_profile:
             "role": "system",
             "content": """You score creators for TrovaTrip, a group travel platform where hosts lead trips with their communities.
 
-CRITICAL: A good fit is someone whose AUDIENCE wants to meet each other AND the host in real life. Think: book clubs traveling to Ireland, widow communities on healing retreats, food bloggers doing culinary tours.
+CRITICAL DISTINCTION - Community vs Fan Base:
+- COMMUNITY (GOOD): Followers want to meet EACH OTHER, share an identity, form friendships. Example: Book club members, widows supporting each other, DINKs with similar lifestyle, specific cultural/ethnic communities.
+- FAN BASE (BAD): Followers admire the creator but don't want to connect with each other. Example: Fitness coach's clients, motivational speaker's followers, fashion influencer's admirers.
 
-BAD FITS to avoid:
-- Pure artists/performers with fan bases (not communities)
-- Very niche specialists (ballet, physical therapy) where audience doesn't want group travel
-- Religious/spiritual content as primary focus (unless lifestyle/travel-oriented)
-- Creators without clear monetization (not business-minded)
+COMMON FALSE POSITIVES TO AVOID (look like good fits but aren't):
+1. Generic Fitness Coaches - Unless they have a specific community (e.g., "moms who lift," "nurses fitness group"), they have clients/fans, not communities.
+2. Personal Development Coaches - Motivational speakers create fans, not communities that want to travel together.
+3. Fashion/Beauty Influencers (generic) - Admirers, not a community with shared identity.
+4. Generic Lifestyle Content - Pretty photos don't create travel communities.
+
+ACTUAL GOOD FITS (may not look obvious):
+1. Niche Lifestyle Communities - Urban cultural communities, specific ethnic/regional groups, particular life stages (widows, DINKs, empty nesters).
+2. Specialized Wellness - Specific health conditions (chronic illness, TMJ, PCOS), holistic health communities.
+3. Food/Culinary Creators - With specific cuisine focus or cultural angle.
+4. Travel Creators - Obviously, if they already do group experiences.
+5. Hobby-Based - Book clubs, history nerds, specific craft/art forms (not performance art).
 
 SCORING CRITERIA (0.0-1.0 each):"""
         }, {
@@ -266,29 +275,64 @@ CONTENT: {combined}
 
 Score these 5 sections (0.0 to 1.0):
 
-1. **niche_and_audience_identity** (0.0-1.0)
-   HIGH scores (0.7-1.0): Clear lifestyle niche where audience shares identity (widows, DINKs, book lovers, history nerds, foodies, wellness seekers). People want to connect with EACH OTHER.
-   LOW scores (0.0-0.4): Generic content, pure performance/art fans, religious-primary content, very technical/specialized, or unclear who the audience is.
+1. **niche_and_audience_identity** (0.0-1.0) - MOST IMPORTANT
+   HIGH scores (0.7-1.0): 
+   - Clear sub-community with shared identity: "widows," "DINKs," "book lovers of X genre," "chronic illness warriors," specific ethnic/cultural groups, "nurses," "empty nesters"
+   - Evidence followers connect with EACH OTHER, not just the creator
+   - Specific lifestyle angle: urban professionals, cultural community, life stage group
    
-2. **host_likeability_and_content_style** (0.0-1.0)
-   HIGH scores (0.7-1.0): Face-forward, appears regularly on camera, warm/conversational tone, shares experiences, "come with me" energy, feels like someone you'd travel with.
-   LOW scores (0.0-0.4): Behind-the-camera content, aesthetic-only, formal/sterile tone, doesn't show personality, pure expertise without relatability.
+   MID scores (0.4-0.6):
+   - Somewhat defined but broad: "wellness seekers," "travelers," "foodies" (unless very specific cuisine/region)
+   - Lifestyle/fashion with cultural/regional identity
+   - Fitness with specific community angle (moms, nurses, specific age group)
+   
+   LOW scores (0.0-0.3):
+   - Generic categories: "fitness," "personal development," "motivation," "lifestyle," "fashion"
+   - No evidence of shared identity among followers
+   - Pure fan/client relationship (coaching clients, course students, fitness clients)
+   - Generic motivational/inspirational content
 
-3. **monetization_and_business_mindset** (0.0-1.0)
-   HIGH scores (0.7-1.0): Already selling something (coaching, courses, products, Patreon, brand deals, services). Audience pays for access. Comfortable with sales/launches.
-   LOW scores (0.0-0.4): No monetization, only donations, free content only, or explicitly states "no monetization."
-   
+2. **host_likeability_and_content_style** (0.0-1.0)
+   HIGH scores (0.7-1.0): Face-forward, warm/conversational, shares experiences, "come with me" energy
+   MID scores (0.5-0.6): Sometimes on camera OR strong aesthetic/lifestyle content that builds connection
+   LOW scores (0.0-0.4): No personal presence, purely educational/transactional, cold/formal tone
+
+3. **monetization_and_business_mindset** (0.0-1.0) - LESS IMPORTANT than before
+   HIGH scores (0.7-1.0): Sells products/services, comfortable with business, launches
+   MID scores (0.4-0.6): Some monetization OR strong community building even without monetization yet
+   LOW scores (0.0-0.3): No monetization AND no community infrastructure
+
 4. **community_infrastructure** (0.0-1.0)
-   HIGH scores (0.7-1.0): Has owned channels beyond social media (email list, podcast, YouTube, Patreon, Discord, membership, in-person groups). Can reach audience directly.
-   LOW scores (0.0-0.4): Only social media presence, no owned channels mentioned, purely algorithm-dependent.
+   HIGH scores (0.7-1.0): Email list, podcast, Discord, Patreon, membership, in-person meetups mentioned
+   MID scores (0.4-0.6): Evidence of wanting deeper connection, asks followers to connect, strong engagement
+   LOW scores (0.0-0.3): Pure social media, no evidence of community building
 
 5. **trip_fit_and_travelability** (0.0-1.0)
-   HIGH scores (0.7-1.0): Content naturally fits a trip (food/wine tours, history tours, wellness retreats, adventure travel, cultural experiences). Audience has money/time for travel (professionals, DINKs, older audiences). Already travels or audience asks to travel together.
-   LOW scores (0.0-0.4): No natural trip concept, very young/broke audience, content doesn't translate to group experiences, highly specialized/technical focus.
+   HIGH scores (0.7-1.0): 
+   - Natural trip concept: culinary tours, wellness retreats, cultural immersion, adventure travel, creative workshops
+   - Audience likely has resources: professionals, DINKs, established careers, older audiences
+   - Already travels or followers express wanting to meet
+   
+   MID scores (0.4-0.6):
+   - Could work as lifestyle/personality-driven trip
+   - Specific wellness niche could be retreat
+   - Urban/cultural community trip potential
+   
+   LOW scores (0.0-0.3):
+   - Generic fitness/coaching (no travel angle)
+   - Very young/student audience
+   - Content doesn't translate to group experiences
+   - Pure motivation/inspiration (not experiential)
+
+CRITICAL: Heavily penalize these red flags:
+- "Fitness and personal development" without specific community → Max 0.50 total score
+- "Coaching" or "clients" mentioned without community building → Niche score max 0.40
+- Generic "motivation," "inspiration," "personal growth" → Niche score max 0.40
+- No evidence followers want to meet each other → Niche score max 0.50
 
 Also provide:
-- **combined_lead_score**: Weighted average: (niche × 0.25) + (likeability × 0.20) + (monetization × 0.25) + (community × 0.15) + (trip_fit × 0.15)
-- **score_reasoning**: 2-3 sentences on fit for group travel with their community.
+- **combined_lead_score**: NEW WEIGHTED FORMULA: (niche × 0.35) + (likeability × 0.20) + (monetization × 0.15) + (community × 0.15) + (trip_fit × 0.15)
+- **score_reasoning**: 2-3 sentences. EXPLICITLY state if this is a "fan base" vs "community" and why.
 
 RESPOND ONLY with JSON:
 {{
