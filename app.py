@@ -556,14 +556,20 @@ def handle_webhook_async():
         
         contact_id = data.get('contact_id')
         profile_url = data.get('profile_url')
+        bio = data.get('bio', '')
+        follower_count = data.get('follower_count', 0)
         
         if not all([contact_id, profile_url]):
             return jsonify({"error": "Missing required fields: contact_id, profile_url"}), 400
         
         print(f"=== QUEUEING: {contact_id} ===")
+        if bio:
+            print(f"Bio: {bio[:100]}...")
+        if follower_count:
+            print(f"Follower count: {follower_count:,}")
         
-        # Queue the task
-        task = process_creator_profile.delay(contact_id, profile_url)
+        # Queue the task with profile data
+        task = process_creator_profile.delay(contact_id, profile_url, bio, follower_count)
         
         print(f"=== QUEUED: {contact_id} - Task ID: {task.id} ===")
         
