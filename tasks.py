@@ -186,13 +186,17 @@ def create_profile_snapshot(profile_data: Dict[str, Any], content_items: List[Di
     draw.text((40, y_offset), f"@{username}", font=font_header, fill='black')
     y_offset += 50
     
-    # Draw stats (if available)
+    # Draw follower count (if available)
     follower_count = profile_data.get('follower_count', 'N/A')
-    following_count = profile_data.get('following_count', 'N/A')
-    if follower_count != 'N/A':
-        stats = f"Followers: {follower_count:,} | Following: {following_count:,}"
+    
+    # Format follower count
+    if isinstance(follower_count, (int, float)) and follower_count > 0:
+        stats = f"Followers: {int(follower_count):,}"
+    elif follower_count != 'N/A':
+        stats = f"Followers: {follower_count}"
     else:
         stats = "Follower count not available"
+    
     draw.text((40, y_offset), stats, font=font_stats, fill='gray')
     y_offset += 40
     
@@ -743,7 +747,6 @@ def process_creator_profile(self, contact_id: str, profile_url: str, bio: str = 
             'username': profile_info.get('platform_username', 'Unknown'),
             'bio': bio if bio else 'Bio not provided',
             'follower_count': follower_count if follower_count else profile_info.get('follower_count', 'N/A'),
-            'following_count': 'N/A',  # Not available in current response
             'image_url': profile_info.get('image_url', '')
         }
         
