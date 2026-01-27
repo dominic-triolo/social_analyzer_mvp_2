@@ -4,12 +4,14 @@ import requests
 import tempfile
 import base64
 import hashlib
-from typing import Dict, List, Any
-from datetime import datetime
+from typing import Dict, List, Any, Tuple
+from datetime import datetime, timedelta
 import boto3
 from botocore.client import Config
 from celery_app import celery_app
 from openai import OpenAI
+from PIL import Image, ImageDraw, ImageFont
+from io import BytesIO
 
 # Configuration from environment variables
 INSIGHTIQ_USERNAME = os.getenv('INSIGHTIQ_USERNAME')
@@ -90,6 +92,252 @@ def fetch_social_content(profile_url: str) -> Dict[str, Any]:
             print(f"Response Status: {e.response.status_code}")
             print(f"Response Body: {e.response.text}")
         raise
+
+
+def filter_content_items(content_items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Filter out Stories from content items"""
+    filtered = [item for item in content_items if item.get('type') != 'STORY']
+    print(f"Filtered content: {len(content_items)} total → {len(filtered)} after removing Stories")
+    return filtered
+
+
+def check_post_frequency(content_items: List[Dict[str, Any]]) -> Tuple[bool, str]:
+    """
+    Check if profile should be disqualified based on post frequency
+    Returns: (should_disqualify, reason)
+    """
+    # Filter out pinned posts for frequency check
+    non_pinned = [item for item in content_items if not item.get('is_pinned', False)]
+    
+    if not non_pinned:
+        return True, "No non-pinned posts found"
+    
+    # Parse published dates
+    try:
+        dates = []
+        for item in non_pinned:
+            pub_date_str = item.get('published_at')
+            if pub_date_str:
+                # Parse ISO format: "2026-01-27T17:51:42"
+                pub_date = datetime.fromisoformat(pub_date_str.replace('Z', '+00:00'))
+                dates.append(pub_date)
+        
+        if not dates:
+            return True, "No valid publish dates found"
+        
+        # Sort dates (most recent first)
+        dates.sort(reverse=True)
+        
+        current_date = datetime.now()
+        six_weeks = timedelta(weeks=6)
+        
+        # Check 1: Most recent post is >6 weeks old
+        most_recent = dates[0]
+        if current_date - most_recent > six_weeks:
+            days_ago = (current_date - most_recent).days
+            return True, f"Most recent post is {days_ago} days old (>6 weeks)"
+        
+        # Check 2: Any gap between consecutive posts >6 weeks
+        for i in range(len(dates) - 1):
+            gap = dates[i] - dates[i + 1]
+            if gap > six_weeks:
+                gap_days = gap.days
+                return True, f"Gap of {gap_days} days between posts (>6 weeks)"
+        
+        print(f"Post frequency check passed: {len(dates)} posts, most recent {(current_date - most_recent).days} days ago")
+        return False, ""
+        
+    except Exception as e:
+        print(f"Error checking post frequency: {e}")
+        return True, f"Error parsing dates: {str(e)}"
+
+
+def create_profile_snapshot(profile_data: Dict[str, Any], content_items: List[Dict[str, Any]]) -> Image.Image:
+    """
+    Create a visual snapshot of the profile with bio and content thumbnails
+    
+    Args:
+        profile_data: {username, bio, follower_count, following_count, image_url}
+        content_items: List of content items with thumbnail_url
+    """
+    # Canvas dimensions
+    width = 1200
+    height = 1600
+    
+    # Create white canvas
+    img = Image.new('RGB', (width, height), 'white')
+    draw = ImageDraw.Draw(img)
+    
+    # Try to use default font (will work in most Linux environments)
+    try:
+        font_header = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 32)
+        font_bio = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 18)
+        font_stats = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 16)
+    except:
+        # Fallback to default font
+        font_header = ImageFont.load_default()
+        font_bio = ImageFont.load_default()
+        font_stats = ImageFont.load_default()
+    
+    y_offset = 40
+    
+    # Draw username
+    username = profile_data.get('username', 'Unknown')
+    draw.text((40, y_offset), f"@{username}", font=font_header, fill='black')
+    y_offset += 50
+    
+    # Draw stats (if available)
+    follower_count = profile_data.get('follower_count', 'N/A')
+    following_count = profile_data.get('following_count', 'N/A')
+    if follower_count != 'N/A':
+        stats = f"Followers: {follower_count:,} | Following: {following_count:,}"
+    else:
+        stats = "Follower count not available"
+    draw.text((40, y_offset), stats, font=font_stats, fill='gray')
+    y_offset += 40
+    
+    # Draw bio
+    bio = profile_data.get('bio', 'No bio available')
+    # Simple word wrap
+    max_width = width - 80
+    words = bio.split()
+    lines = []
+    current_line = []
+    
+    for word in words:
+        test_line = ' '.join(current_line + [word])
+        # Rough estimation of text width
+        if len(test_line) * 10 < max_width:  # ~10 pixels per char
+            current_line.append(word)
+        else:
+            if current_line:
+                lines.append(' '.join(current_line))
+            current_line = [word]
+    
+    if current_line:
+        lines.append(' '.join(current_line))
+    
+    # Limit bio to 4 lines
+    for line in lines[:4]:
+        draw.text((40, y_offset), line, font=font_bio, fill='black')
+        y_offset += 25
+    
+    if len(lines) > 4:
+        draw.text((40, y_offset), "...", font=font_bio, fill='gray')
+        y_offset += 25
+    
+    # Draw content thumbnails (2 rows of 5)
+    y_offset += 40
+    thumb_size = 200
+    spacing = 20
+    
+    for idx, item in enumerate(content_items[:10]):
+        row = idx // 5
+        col = idx % 5
+        
+        x = 40 + col * (thumb_size + spacing)
+        y = y_offset + row * (thumb_size + spacing)
+        
+        # Download and paste thumbnail
+        try:
+            thumb_url = item.get('thumbnail_url')
+            if thumb_url:
+                response = requests.get(thumb_url, timeout=5)
+                thumb = Image.open(BytesIO(response.content))
+                thumb = thumb.resize((thumb_size, thumb_size), Image.Resampling.LANCZOS)
+                img.paste(thumb, (x, y))
+            else:
+                # Draw placeholder
+                draw.rectangle([x, y, x+thumb_size, y+thumb_size], outline='lightgray', width=2, fill='#f0f0f0')
+                draw.text((x + thumb_size//2 - 20, y + thumb_size//2), "No Image", font=font_stats, fill='gray')
+        except Exception as e:
+            print(f"Error loading thumbnail {idx}: {e}")
+            # Draw placeholder on error
+            draw.rectangle([x, y, x+thumb_size, y+thumb_size], outline='red', width=2, fill='#ffe0e0')
+            draw.text((x + thumb_size//2 - 15, y + thumb_size//2), "Error", font=font_stats, fill='red')
+    
+    return img
+
+
+def pre_screen_profile(snapshot_image: Image.Image, profile_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Pre-screen profile using snapshot to identify obvious bad fits
+    Returns: {"decision": "reject"/"continue", "reasoning": "...", "selected_content_indices": [0,2,5]}
+    """
+    # Convert image to base64
+    buffered = BytesIO()
+    snapshot_image.save(buffered, format="PNG")
+    img_base64 = base64.b64encode(buffered.getvalue()).decode()
+    
+    username = profile_data.get('username', 'Unknown')
+    
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{
+            "role": "system",
+            "content": """You are a pre-screener for TrovaTrip, a group travel platform. Based on profile snapshots, quickly identify obvious BAD FITS to save processing time.
+
+ONLY DISQUALIFY when you have HIGH CONFIDENCE the profile is an unsupported type or focuses on unsupported activities.
+
+UNSUPPORTED ACTIVITIES (disqualify if PRIMARY focus):
+- Golf, biking, motorcycles, driving/cars/racing
+- Competitive sports: football, soccer, basketball, hockey, etc.
+- Snowsports: skiing, snowboarding, figure skating
+- Watersports: surfing, kitesurfing, scuba diving
+- Hunting
+- Traveling with children (family travel accounts/family vloggers)
+
+SUPPORTED ACTIVITIES (do NOT disqualify):
+- Dance (including pole dance), yoga, barre, pilates
+- General fitness, running
+- Camping, hiking, backpacking
+- Van/bus/RV life
+
+UNSUPPORTED PROFILE TYPES (disqualify if HIGH CONFIDENCE):
+- Brand accounts (no personal creator)
+- Meme accounts / content aggregators
+- Accounts that only repost content
+- Explicit or offensive content
+- Content focused on firearms
+- Family accounts / family travel accounts (PRIMARY focus on kids/family)
+- Creator appears under age 18
+- Non-English speaking creator (primary language is not English)
+
+PASS TO NEXT STAGE if:
+- Clear lifestyle niche (food, travel, wellness, parenting but not family travel)
+- Face-forward personal content
+- Community-oriented content
+- Specific audience identity visible
+- English-speaking creator
+- ANY uncertainty about whether to disqualify
+
+CONTENT SELECTION (if passing to next stage):
+Select the 3 pieces of content (by index 0-9) that are MOST REPRESENTATIVE of the profile and best for deeper analysis. Choose content that:
+- Shows the creator's personality and style
+- Demonstrates their niche/expertise
+- Shows face-forward engagement (if available)
+- Avoid purely aesthetic/sponsored content if possible
+
+Respond ONLY with JSON:
+{
+  "decision": "reject" or "continue",
+  "reasoning": "1-2 sentences explaining why",
+  "selected_content_indices": [0, 3, 7]  // ONLY if decision is "continue", otherwise empty array
+}"""
+        }, {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": f"Profile: @{username}\n\nShould we continue analyzing this profile? If yes, which 3 pieces of content (by grid position 0-9, top-left to bottom-right) should we analyze?"},
+                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_base64}", "detail": "high"}}
+            ]
+        }],
+        response_format={"type": "json_object"},
+        max_tokens=500
+    )
+    
+    result = json.loads(response.choices[0].message.content)
+    print(f"Pre-screen result: {result}")
+    return result
 
 
 def rehost_media_on_r2(media_url: str, contact_id: str, media_format: str) -> str:
@@ -432,28 +680,121 @@ def send_to_hubspot(contact_id: str, lead_score: float, section_scores: Dict, sc
 
 @celery_app.task(bind=True, name='tasks.process_creator_profile')
 def process_creator_profile(self, contact_id: str, profile_url: str):
-    """Background task to process a creator profile"""
+    """Background task to process a creator profile with pre-screening"""
     try:
         print(f"=== PROCESSING: {contact_id} ===")
         
+        # Step 1: Fetch content from InsightIQ
         self.update_state(state='PROGRESS', meta={'stage': 'Fetching content from InsightIQ'})
-        
         social_data = fetch_social_content(profile_url)
         content_items = social_data.get('data', [])
         
         if not content_items:
             return {"status": "error", "message": "No content found"}
         
-        self.update_state(state='PROGRESS', meta={'stage': 'Analyzing content'})
+        print(f"Fetched {len(content_items)} content items from InsightIQ")
+        
+        # Step 2: Filter out Stories
+        self.update_state(state='PROGRESS', meta={'stage': 'Filtering content'})
+        filtered_items = filter_content_items(content_items)
+        
+        if not filtered_items:
+            return {"status": "error", "message": "No content after filtering Stories"}
+        
+        # Step 3: Check post frequency (disqualify inactive/reactivated profiles)
+        self.update_state(state='PROGRESS', meta={'stage': 'Checking post frequency'})
+        should_disqualify, frequency_reason = check_post_frequency(filtered_items)
+        
+        if should_disqualify:
+            print(f"DISQUALIFIED: {frequency_reason}")
+            # Send low score to HubSpot with reason
+            send_to_hubspot(
+                contact_id,
+                lead_score=0.15,
+                section_scores={
+                    'niche_and_audience_identity': 0.15,
+                    'host_likeability_and_content_style': 0.15,
+                    'monetization_and_business_mindset': 0.15,
+                    'community_infrastructure': 0.15,
+                    'trip_fit_and_travelability': 0.15
+                },
+                score_reasoning=f"Profile disqualified - post frequency check: {frequency_reason}",
+                creator_profile={'content_category': 'Inactive/Low frequency'},
+                content_analyses=[]
+            )
+            return {
+                "status": "success",
+                "contact_id": contact_id,
+                "disqualified": True,
+                "reason": frequency_reason,
+                "lead_score": 0.15
+            }
+        
+        # Step 4: Create profile snapshot
+        self.update_state(state='PROGRESS', meta={'stage': 'Creating profile snapshot'})
+        
+        # Extract profile data for snapshot
+        profile_info = social_data.get('data', [{}])[0].get('profile', {})
+        profile_data = {
+            'username': profile_info.get('platform_username', 'Unknown'),
+            'bio': 'Bio not available in current API response',  # InsightIQ doesn't return bio in this endpoint
+            'follower_count': profile_info.get('follower_count', 'N/A'),
+            'following_count': 'N/A',  # Not available in current response
+            'image_url': profile_info.get('image_url', '')
+        }
+        
+        snapshot_image = create_profile_snapshot(profile_data, filtered_items)
+        print("Profile snapshot created")
+        
+        # Step 5: Pre-screen with snapshot
+        self.update_state(state='PROGRESS', meta={'stage': 'Pre-screening profile'})
+        pre_screen_result = pre_screen_profile(snapshot_image, profile_data)
+        
+        if pre_screen_result.get('decision') == 'reject':
+            print(f"PRE-SCREEN REJECTED: {pre_screen_result.get('reasoning')}")
+            # Send low score to HubSpot
+            send_to_hubspot(
+                contact_id,
+                lead_score=0.20,
+                section_scores={
+                    'niche_and_audience_identity': 0.20,
+                    'host_likeability_and_content_style': 0.20,
+                    'monetization_and_business_mindset': 0.20,
+                    'community_infrastructure': 0.20,
+                    'trip_fit_and_travelability': 0.20
+                },
+                score_reasoning=f"Pre-screen rejected: {pre_screen_result.get('reasoning')}",
+                creator_profile={'content_category': 'Pre-screened out'},
+                content_analyses=[]
+            )
+            return {
+                "status": "success",
+                "contact_id": contact_id,
+                "pre_screen_rejected": True,
+                "reason": pre_screen_result.get('reasoning'),
+                "lead_score": 0.20
+            }
+        
+        # Step 6: Deep analysis of selected content
+        self.update_state(state='PROGRESS', meta={'stage': 'Analyzing selected content'})
+        
+        selected_indices = pre_screen_result.get('selected_content_indices', [])
+        print(f"Pre-screen passed. Selected content indices: {selected_indices}")
+        
+        # If no indices selected, fall back to first 3 items
+        if not selected_indices:
+            selected_indices = [0, 1, 2]
+            print("No indices selected by pre-screen, using first 3 items")
         
         content_analyses = []
-        items_to_try = min(10, len(content_items))
         
-        for idx, item in enumerate(content_items[:items_to_try], 1):
-            if len(content_analyses) >= 3:
-                break
+        for idx in selected_indices[:3]:  # Limit to 3
+            if idx >= len(filtered_items):
+                print(f"Index {idx} out of range, skipping")
+                continue
             
-            print(f"Processing item {idx}/{items_to_try} (have {len(content_analyses)} successful so far)")
+            item = filtered_items[idx]
+            print(f"Processing selected item at index {idx}")
             
             content_format = item.get('format')
             media_url = None
@@ -474,7 +815,7 @@ def process_creator_profile(self, contact_id: str, profile_url: str):
                 media_format = 'IMAGE'
             
             if not media_url:
-                print(f"Item {idx}: No media URL, skipping")
+                print(f"Item at index {idx}: No media URL, skipping")
                 continue
             
             media_url = media_url.rstrip('.')
@@ -500,26 +841,23 @@ def process_creator_profile(self, contact_id: str, profile_url: str):
                 print(f"Item {idx}: Successfully analyzed")
                 
             except Exception as e:
-                error_msg = str(e)
-                if '413' in error_msg or 'Maximum content size' in error_msg:
-                    print(f"Item {idx}: Video too large, skipping")
-                elif 'Timeout while downloading' in error_msg:
-                    print(f"Item {idx}: R2 timeout, skipping")
-                else:
-                    print(f"Item {idx}: Analysis failed - {error_msg}")
+                print(f"Item {idx}: Error analyzing: {e}")
                 continue
         
-        if len(content_analyses) < 1:
-            return {"status": "error", "message": "Could not analyze any content items"}
+        if not content_analyses:
+            return {"status": "error", "message": "Could not analyze any selected content items"}
         
         print(f"Successfully analyzed {len(content_analyses)} items")
         
+        # Step 7: Generate creator profile
         self.update_state(state='PROGRESS', meta={'stage': 'Generating creator profile'})
         creator_profile = generate_creator_profile(content_analyses)
         
+        # Step 8: Calculate lead score
         self.update_state(state='PROGRESS', meta={'stage': 'Calculating lead score'})
         lead_analysis = generate_lead_score(content_analyses, creator_profile)
         
+        # Step 9: Send to HubSpot
         self.update_state(state='PROGRESS', meta={'stage': 'Sending to HubSpot'})
         send_to_hubspot(
             contact_id,
@@ -538,11 +876,13 @@ def process_creator_profile(self, contact_id: str, profile_url: str):
             "lead_score": lead_analysis['lead_score'],
             "section_scores": lead_analysis.get('section_scores', {}),
             "creator_profile": creator_profile,
-            "items_analyzed": len(content_analyses)
+            "items_analyzed": len(content_analyses),
+            "pre_screen_passed": True
         }
         
     except Exception as e:
-        print(f"=== ERROR: {contact_id} - {str(e)} ===")
+        print(f"=== ERROR: {contact_id} ===")
+        print(f"Error: {str(e)}")
         import traceback
         print(f"Traceback: {traceback.format_exc()}")
         return {
