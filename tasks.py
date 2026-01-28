@@ -263,6 +263,45 @@ def create_profile_snapshot(profile_data: Dict[str, Any], content_items: List[Di
     return img
 
 
+def check_for_travel_experience(bio: str, content_items: List[Dict[str, Any]]) -> bool:
+    """
+    Check if creator has hosted or is marketing group travel experiences
+    Returns True if travel experience indicators are found
+    """
+    # Keywords that indicate group travel hosting
+    travel_keywords = [
+        'retreat', 'workshop', 'trip', 'tour', 'travel', 'getaway', 'adventure',
+        'join me', 'join us', 'book now', 'spaces available', 'registration open',
+        'destination', 'experience', 'journey', 'expedition', 'immersion',
+        'hosted', 'hosting', 'leading', 'guiding'
+    ]
+    
+    # Check bio for travel indicators
+    bio_lower = bio.lower()
+    bio_has_travel = any(keyword in bio_lower for keyword in travel_keywords)
+    
+    if bio_has_travel:
+        print(f"Travel indicators found in bio: {bio[:100]}...")
+        return True
+    
+    # Check content descriptions for travel indicators
+    for item in content_items[:10]:  # Check up to 10 items
+        description = item.get('description', '').lower()
+        title = item.get('title', '').lower()
+        
+        combined_text = f"{description} {title}"
+        
+        # Look for strong indicators of hosted travel
+        if any(keyword in combined_text for keyword in travel_keywords):
+            # Extra validation: look for group/booking language
+            booking_indicators = ['sign up', 'register', 'book', 'join', 'spots', 'spaces', 'limited', 'reserve']
+            if any(indicator in combined_text for indicator in booking_indicators):
+                print(f"Travel experience found in content: {title[:50] if title else description[:50]}...")
+                return True
+    
+    return False
+
+
 def pre_screen_profile(snapshot_image: Image.Image, profile_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Pre-screen profile using snapshot to identify obvious bad fits
@@ -296,6 +335,12 @@ SUPPORTED ACTIVITIES (do NOT disqualify):
 - General fitness, running
 - Camping, hiking, backpacking
 - Van/bus/RV life
+- Food/beverage, nutrition, vegetarianism, veganism, pescatarianism
+- Mental health, spirituality, positivity / empowerment
+- Art and design (visual art, interior design, etc)
+- Literature/books (book clubs)
+- Learning (history, art, etc)
+- Professional coaches, personal coaches
 
 UNSUPPORTED PROFILE TYPES (disqualify if HIGH CONFIDENCE):
 - Brand accounts (no personal creator)
@@ -308,11 +353,7 @@ UNSUPPORTED PROFILE TYPES (disqualify if HIGH CONFIDENCE):
 - Non-English speaking creator (primary language is not English)
 
 PASS TO NEXT STAGE if:
-- Clear lifestyle niche (food, travel, wellness, parenting but not family travel)
-- Face-forward personal content
-- Community-oriented content
-- Specific audience identity visible
-- English-speaking creator
+- Is not an UNSUPPORTED PROFILE TYPE and does not show any UNSUPPORTED ACTIVITIES
 - ANY uncertainty about whether to disqualify
 
 CONTENT SELECTION (if passing to next stage):
@@ -499,14 +540,16 @@ def generate_lead_score(content_analyses: List[Dict[str, Any]], creator_profile:
         model="gpt-4o",
         messages=[{
             "role": "system",
-            "content": """You score creators for TrovaTrip, a group travel platform where hosts lead trips with their communities.
+            "content": """You score creators for TrovaTrip, a group travel platform where creators host trips with their communities.
 
-CRITICAL: A good fit is someone whose AUDIENCE wants to meet each other AND the host in real life. Think: book clubs traveling to Ireland, widow communities on healing retreats, food bloggers doing culinary tours.
+CRITICAL: A good fit is someone whose AUDIENCE wants to meet each other AND the host in real life. Examples: book clubs traveling to Ireland, widow communities on healing retreats, food bloggers doing culinary tours, wellness enthusiasts doing fitness / wellness retreats
 
 BAD FITS to avoid:
 - Pure artists/performers with fan bases (not communities)
-- Very niche specialists (ballet, physical therapy) where audience doesn't want group travel
-- Religious/spiritual content as primary focus (unless lifestyle/travel-oriented)
+- Very niche specialists where audience doesn't want group travel
+- Pastors / religious figures
+- Politicians
+- Creators who do only post transactional content (no invitation/CTA for audience to contribute/comment)
 - Creators without clear monetization (not business-minded)
 
 SCORING CRITERIA (0.0-1.0 each):"""
@@ -519,23 +562,23 @@ CONTENT: {combined}
 Score these 5 sections (0.0 to 1.0):
 
 1. **niche_and_audience_identity** (0.0-1.0)
-   HIGH scores (0.7-1.0): Clear lifestyle niche where audience shares identity (widows, DINKs, book lovers, history nerds, foodies, wellness seekers). People want to connect with EACH OTHER.
+   HIGH scores (0.7-1.0): Clear lifestyle niche where audience shares identity (including but not limited to: widows, DINKs, book lovers, history nerds, foodies, wellness seekers). People want to connect with EACH OTHER in addition to the host.
    LOW scores (0.0-0.4): Generic content, pure performance/art fans, religious-primary content, very technical/specialized, or unclear who the audience is.
-   
+
 2. **host_likeability_and_content_style** (0.0-1.0)
-   HIGH scores (0.7-1.0): Face-forward, appears regularly on camera, warm/conversational tone, shares experiences, "come with me" energy, feels like someone you'd travel with.
+   HIGH scores (0.7-1.0): Face-forward, appears regularly on camera, warm/conversational tone, shares experiences, content facilitates connection with audience through vulnerability and authenticity, genuine interest in knowing their audience and having their audience know them.
    LOW scores (0.0-0.4): Behind-the-camera content, aesthetic-only, formal/sterile tone, doesn't show personality, pure expertise without relatability.
 
 3. **monetization_and_business_mindset** (0.0-1.0)
    HIGH scores (0.7-1.0): Already selling something (coaching, courses, products, Patreon, brand deals, services). Audience pays for access. Comfortable with sales/launches.
    LOW scores (0.0-0.4): No monetization, only donations, free content only, or explicitly states "no monetization."
-   
+
 4. **community_infrastructure** (0.0-1.0)
-   HIGH scores (0.7-1.0): Has owned channels beyond social media (email list, podcast, YouTube, Patreon, Discord, membership, in-person groups). Can reach audience directly.
+   HIGH scores (0.7-1.0): Has owned channels (email list, podcast, YouTube, Patreon, Discord, membership, in-person groups, private Facebook group). Can reach audience directly.
    LOW scores (0.0-0.4): Only social media presence, no owned channels mentioned, purely algorithm-dependent.
 
 5. **trip_fit_and_travelability** (0.0-1.0)
-   HIGH scores (0.7-1.0): Content naturally fits a trip (food/wine tours, history tours, wellness retreats, adventure travel, cultural experiences). Audience has money/time for travel (professionals, DINKs, older audiences). Already travels or audience asks to travel together.
+   HIGH scores (0.7-1.0): Content naturally fits a trip (including but not limited to food/wine tours, history tours, retreats of any kind, adventure travel, cultural experiences). Audience has money/time for travel (including but not limited to professionals, DINKs, older audiences). Already travels or audience asks to travel together.
    LOW scores (0.0-0.4): No natural trip concept, very young/broke audience, content doesn't translate to group experiences, highly specialized/technical focus.
 
 Also provide:
@@ -555,24 +598,6 @@ RESPOND ONLY with JSON:
         }],
         response_format={"type": "json_object"}
     )
-    
-    result = json.loads(response.choices[0].message.content)
-    print(f"GPT Lead Score Response: {json.dumps(result, indent=2)}")
-    
-    # Extract section scores
-    section_scores = {
-        "niche_and_audience_identity": result.get('niche_and_audience_identity', 0.0),
-        "host_likeability_and_content_style": result.get('host_likeability_and_content_style', 0.0),
-        "monetization_and_business_mindset": result.get('monetization_and_business_mindset', 0.0),
-        "community_infrastructure": result.get('community_infrastructure', 0.0),
-        "trip_fit_and_travelability": result.get('trip_fit_and_travelability', 0.0)
-    }
-    
-    return {
-        "section_scores": section_scores,
-        "lead_score": result.get('combined_lead_score', 0.0),
-        "score_reasoning": result.get('score_reasoning', '')
-    }
     
     result = json.loads(response.choices[0].message.content)
     print(f"GPT Lead Score Response: {json.dumps(result, indent=2)}")
@@ -782,6 +807,14 @@ def process_creator_profile(self, contact_id: str, profile_url: str, bio: str = 
                 "lead_score": 0.20
             }
         
+        # Step 5.5: Check if creator has hosted group travel experiences
+        # This ensures they get into manual review range even if other signals are weak
+        self.update_state(state='PROGRESS', meta={'stage': 'Checking for travel experience'})
+        has_travel_experience = check_for_travel_experience(bio, filtered_items)
+        
+        if has_travel_experience:
+            print(f"TRAVEL EXPERIENCE DETECTED: Creator has hosted or is marketing group travel")
+        
         # Step 6: Deep analysis of selected content
         self.update_state(state='PROGRESS', meta={'stage': 'Analyzing selected content'})
         
@@ -864,6 +897,14 @@ def process_creator_profile(self, contact_id: str, profile_url: str, bio: str = 
         self.update_state(state='PROGRESS', meta={'stage': 'Calculating lead score'})
         lead_analysis = generate_lead_score(content_analyses, creator_profile)
         
+        # Step 8.5: Boost score if travel experience detected
+        # Ensures creators with group travel experience make it to manual review
+        if has_travel_experience and lead_analysis['lead_score'] < 0.50:
+            original_score = lead_analysis['lead_score']
+            lead_analysis['lead_score'] = 0.50
+            lead_analysis['score_reasoning'] = f"{lead_analysis.get('score_reasoning', '')} | TRAVEL EXPERIENCE BOOST: Creator has hosted or marketed group travel experiences (original score: {original_score:.2f}, boosted to 0.50 for manual review)"
+            print(f"SCORE BOOSTED: {original_score:.2f} → 0.50 (travel experience detected)")
+        
         # Step 9: Send to HubSpot
         self.update_state(state='PROGRESS', meta={'stage': 'Sending to HubSpot'})
         send_to_hubspot(
@@ -884,7 +925,8 @@ def process_creator_profile(self, contact_id: str, profile_url: str, bio: str = 
             "section_scores": lead_analysis.get('section_scores', {}),
             "creator_profile": creator_profile,
             "items_analyzed": len(content_analyses),
-            "pre_screen_passed": True
+            "pre_screen_passed": True,
+            "travel_experience_detected": has_travel_experience
         }
         
     except Exception as e:
