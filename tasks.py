@@ -54,6 +54,43 @@ if OPENAI_API_KEY:
         print(f"ERROR initializing OpenAI client: {e}")
 
 
+def save_analysis_cache(contact_id: str, cache_data: dict) -> bool:
+    """Save analysis results to R2 for later re-scoring"""
+    if not r2_client:
+        print("R2 client not available, skipping cache")
+        return False
+    
+    try:
+        key = f"analysis-cache/{contact_id}.json"
+        r2_client.put_object(
+            Bucket=R2_BUCKET_NAME,
+            Key=key,
+            Body=json.dumps(cache_data, indent=2),
+            ContentType='application/json'
+        )
+        print(f"Analysis cached to R2: {key}")
+        return True
+    except Exception as e:
+        print(f"Error caching analysis: {e}")
+        return False
+
+
+def load_analysis_cache(contact_id: str) -> dict:
+    """Load cached analysis results from R2"""
+    if not r2_client:
+        raise Exception("R2 client not available")
+    
+    try:
+        key = f"analysis-cache/{contact_id}.json"
+        obj = r2_client.get_object(Bucket=R2_BUCKET_NAME, Key=key)
+        cache_data = json.loads(obj['Body'].read())
+        print(f"Analysis loaded from cache: {key}")
+        return cache_data
+    except Exception as e:
+        print(f"Error loading cache: {e}")
+        raise
+
+
 def fetch_social_content(profile_url: str) -> Dict[str, Any]:
     """Fetch content from InsightIQ API"""
     url = f"{INSIGHTIQ_API_URL}/v1/social/creators/contents/fetch"
@@ -892,6 +929,20 @@ def process_creator_profile(self, contact_id: str, profile_url: str, bio: str = 
         # Step 7: Generate creator profile
         self.update_state(state='PROGRESS', meta={'stage': 'Generating creator profile'})
         creator_profile = generate_creator_profile(content_analyses)
+        
+        # Step 7.5: Cache analysis results for future re-scoring
+        cache_data = {
+            'contact_id': contact_id,
+            'profile_url': profile_url,
+            'bio': bio,
+            'follower_count': follower_count,
+            'content_analyses': content_analyses,
+            'creator_profile': creator_profile,
+            'has_travel_experience': has_travel_experience,
+            'timestamp': datetime.now().isoformat(),
+            'items_analyzed': len(content_analyses)
+        }
+        save_analysis_cache(contact_id, cache_data)
         
         # Step 8: Calculate lead score
         self.update_state(state='PROGRESS', meta={'stage': 'Calculating lead score'})
