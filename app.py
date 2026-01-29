@@ -585,6 +585,230 @@ def handle_webhook_async():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route('/rescore/<contact_id>', methods=['POST'])
+def rescore_profile(contact_id):
+    """
+    Re-score a profile using cached analysis data
+    This allows iterating on scoring without re-running expensive API calls
+    """
+    try:
+        print(f"=== RE-SCORING: {contact_id} ===")
+        
+        # Import here to avoid circular imports
+        from tasks import load_analysis_cache, generate_lead_score, send_to_hubspot
+        
+        # Load cached analysis data
+        try:
+            cache_data = load_analysis_cache(contact_id)
+        except Exception as e:
+            return jsonify({
+                "error": "Cache not found",
+                "message": f"No cached analysis found for contact {contact_id}. Profile must be analyzed first.",
+                "details": str(e)
+            }), 404
+        
+        # Extract cached data
+        content_analyses = cache_data.get('content_analyses', [])
+        creator_profile = cache_data.get('creator_profile', {})
+        has_travel_experience = cache_data.get('has_travel_experience', False)
+        
+        if not content_analyses or not creator_profile:
+            return jsonify({
+                "error": "Invalid cache data",
+                "message": "Cached data is missing required fields"
+            }), 400
+        
+        print(f"Loaded cache: {len(content_analyses)} content analyses")
+        
+        # Re-run scoring with current prompt
+        lead_analysis = generate_lead_score(content_analyses, creator_profile)
+        
+        # Apply travel experience boost if applicable
+        if has_travel_experience and lead_analysis['lead_score'] < 0.50:
+            original_score = lead_analysis['lead_score']
+            lead_analysis['lead_score'] = 0.50
+            lead_analysis['score_reasoning'] = f"{lead_analysis.get('score_reasoning', '')} | TRAVEL EXPERIENCE BOOST: Creator has hosted or marketed group travel experiences (original score: {original_score:.2f}, boosted to 0.50 for manual review)"
+            print(f"SCORE BOOSTED: {original_score:.2f} → 0.50 (travel experience detected)")
+        
+        # Send updated score to HubSpot
+        send_to_hubspot(
+            contact_id,
+            lead_analysis['lead_score'],
+            lead_analysis.get('section_scores', {}),
+            lead_analysis.get('score_reasoning', ''),
+            creator_profile,
+            content_analyses
+        )
+        
+        print(f"=== RE-SCORE COMPLETE: {contact_id} - New Score: {lead_analysis['lead_score']} ===")
+        
+        return jsonify({
+            "status": "success",
+            "contact_id": contact_id,
+            "lead_score": lead_analysis['lead_score'],
+            "section_scores": lead_analysis.get('section_scores', {}),
+            "score_reasoning": lead_analysis.get('score_reasoning', ''),
+            "cached_from": cache_data.get('timestamp'),
+            "items_analyzed": len(content_analyses),
+            "message": "Profile re-scored successfully using cached analysis"
+        }), 200
+        
+    except Exception as e:
+        print(f"Error re-scoring {contact_id}: {str(e)}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        return jsonify({
+            "error": "Re-scoring failed",
+            "message": str(e)
+        }), 500
+
+
+@app.route('/rescore/batch', methods=['POST'])
+def rescore_batch():
+    """
+    Re-score multiple profiles at once
+    Accepts: {"contact_ids": ["123", "456", "789"]}
+    """
+    try:
+        data = request.get_json()
+        contact_ids = data.get('contact_ids', [])
+        
+        if not contact_ids:
+            return jsonify({"error": "contact_ids array is required"}), 400
+        
+        print(f"=== BATCH RE-SCORING: {len(contact_ids)} profiles ===")
+        
+        results = []
+        errors = []
+        
+        from tasks import load_analysis_cache, generate_lead_score, send_to_hubspot
+        
+        for contact_id in contact_ids:
+            try:
+                # Load cache
+                cache_data = load_analysis_cache(contact_id)
+                content_analyses = cache_data.get('content_analyses', [])
+                creator_profile = cache_data.get('creator_profile', {})
+                has_travel_experience = cache_data.get('has_travel_experience', False)
+                
+                # Re-score
+                lead_analysis = generate_lead_score(content_analyses, creator_profile)
+                
+                # Apply travel boost
+                if has_travel_experience and lead_analysis['lead_score'] < 0.50:
+                    original_score = lead_analysis['lead_score']
+                    lead_analysis['lead_score'] = 0.50
+                    lead_analysis['score_reasoning'] = f"{lead_analysis.get('score_reasoning', '')} | TRAVEL EXPERIENCE BOOST (original: {original_score:.2f})"
+                
+                # Send to HubSpot
+                send_to_hubspot(
+                    contact_id,
+                    lead_analysis['lead_score'],
+                    lead_analysis.get('section_scores', {}),
+                    lead_analysis.get('score_reasoning', ''),
+                    creator_profile,
+                    content_analyses
+                )
+                
+                results.append({
+                    "contact_id": contact_id,
+                    "status": "success",
+                    "lead_score": lead_analysis['lead_score']
+                })
+                
+            except Exception as e:
+                errors.append({
+                    "contact_id": contact_id,
+                    "error": str(e)
+                })
+        
+        print(f"=== BATCH COMPLETE: {len(results)} success, {len(errors)} errors ===")
+        
+        return jsonify({
+            "status": "complete",
+            "total": len(contact_ids),
+            "success": len(results),
+            "errors": len(errors),
+            "results": results,
+            "error_details": errors
+        }), 200
+        
+    except Exception as e:
+        print(f"Batch re-scoring error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/cache/<contact_id>', methods=['GET'])
+def view_cache(contact_id):
+    """View cached analysis data for a profile"""
+    try:
+        from tasks import load_analysis_cache
+        
+        cache_data = load_analysis_cache(contact_id)
+        
+        # Return summary info (not full content analyses to keep response small)
+        return jsonify({
+            "status": "found",
+            "contact_id": contact_id,
+            "cached_at": cache_data.get('timestamp'),
+            "profile_url": cache_data.get('profile_url'),
+            "bio": cache_data.get('bio', '')[:100] + '...' if len(cache_data.get('bio', '')) > 100 else cache_data.get('bio', ''),
+            "follower_count": cache_data.get('follower_count'),
+            "items_analyzed": cache_data.get('items_analyzed'),
+            "has_travel_experience": cache_data.get('has_travel_experience'),
+            "creator_profile": cache_data.get('creator_profile'),
+            "content_count": len(cache_data.get('content_analyses', []))
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            "status": "not_found",
+            "contact_id": contact_id,
+            "error": str(e)
+        }), 404
+
+
+@app.route('/cache/list', methods=['GET'])
+def list_cached_profiles():
+    """List all cached profiles in R2"""
+    try:
+        from tasks import r2_client, R2_BUCKET_NAME
+        
+        if not r2_client:
+            return jsonify({"error": "R2 client not available"}), 500
+        
+        # List objects in analysis-cache/ prefix
+        response = r2_client.list_objects_v2(
+            Bucket=R2_BUCKET_NAME,
+            Prefix='analysis-cache/'
+        )
+        
+        cached_profiles = []
+        if 'Contents' in response:
+            for obj in response['Contents']:
+                # Extract contact_id from key (analysis-cache/123456.json)
+                key = obj['Key']
+                contact_id = key.replace('analysis-cache/', '').replace('.json', '')
+                
+                cached_profiles.append({
+                    'contact_id': contact_id,
+                    'last_modified': obj['LastModified'].isoformat(),
+                    'size_bytes': obj['Size']
+                })
+        
+        return jsonify({
+            "status": "success",
+            "total_cached": len(cached_profiles),
+            "profiles": cached_profiles
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            "error": "Failed to list cached profiles",
+            "message": str(e)
+        }), 500
+
+
 @app.route('/webhook/status/<task_id>', methods=['GET'])
 def check_task_status(task_id):
     """Check status of a queued task"""
