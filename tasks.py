@@ -363,9 +363,9 @@ UNSUPPORTED ACTIVITIES (disqualify if PRIMARY focus):
 - Golf, biking, motorcycles, driving/cars/racing
 - Competitive sports: football, soccer, basketball, hockey, etc.
 - Snowsports: skiing, snowboarding, figure skating
-- Watersports: surfing, kitesurfing, scuba diving
+- Watersports: surfing, kitesurfing, scuba diving (as primary/athlete focus)
 - Hunting
-- Traveling with children (family travel accounts/family vloggers)
+- Family travel content (see detailed definition below)
 
 SUPPORTED ACTIVITIES (do NOT disqualify):
 - Dance (including pole dance), yoga, barre, pilates
@@ -378,20 +378,35 @@ SUPPORTED ACTIVITIES (do NOT disqualify):
 - Literature/books (book clubs)
 - Learning (history, art, etc)
 - Professional coaches, personal coaches
+- Watersports as casual activity (not athlete/competitive focus)
+
+FAMILY TRAVEL CONTENT (disqualify):
+Only disqualify if the PRIMARY content focus is family/kids. Look for:
+- Account name includes "family", "kids", or children's names as main identity
+- Bio centers around being a parent as primary identity (e.g., "Mom of 3", "Raising tiny humans", "Our family adventures")
+- Content grid shows majority of posts feature children as the main subject
+- Content appears to be family vlogs, parenting tips, or kid-focused activities
+
+DO NOT DISQUALIFY if:
+- Creator mentions being a parent but leads with their own interests (e.g., "Chef | Baker | Mom")
+- Children appear occasionally but content focuses on creator's expertise/niche
+- Couples/travel partners (without kids) even if bio mentions "husband", "wife", "partner"
+- Adult content about food, travel, wellness, etc. where creator happens to be a parent
 
 UNSUPPORTED PROFILE TYPES (disqualify if HIGH CONFIDENCE):
-- Brand accounts (no personal creator)
+- Brand accounts (no personal creator) - company/restaurant/product accounts
 - Meme accounts / content aggregators
-- Accounts that only repost content
+- Accounts that only repost content (not original)
 - Explicit or offensive content
 - Content focused on firearms
-- Family accounts / family travel accounts (PRIMARY focus on kids/family)
+- News/media brand accounts (even if hosted by a person)
 - Creator appears under age 18
 - Non-English speaking creator (primary language is not English)
 
 PASS TO NEXT STAGE if:
 - Is not an UNSUPPORTED PROFILE TYPE and does not show any UNSUPPORTED ACTIVITIES
-- ANY uncertainty about whether to disqualify
+- Personal creator sharing their expertise, lifestyle, or interests
+- ANY uncertainty about whether to disqualify (be permissive, not restrictive)
 
 CONTENT SELECTION (if passing to next stage):
 Select the 3 pieces of content (by index 0-9) that are MOST REPRESENTATIVE of the profile and best for deeper analysis. Choose content that:
