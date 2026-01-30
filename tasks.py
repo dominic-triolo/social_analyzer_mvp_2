@@ -342,7 +342,7 @@ def check_for_travel_experience(bio: str, content_items: List[Dict[str, Any]]) -
 def pre_screen_profile(snapshot_image: Image.Image, profile_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Pre-screen profile using snapshot to identify obvious bad fits
-    Returns: {"decision": "reject"/"continue", "reasoning": "...", "selected_content_indices": [0,2,5]}
+    Returns: {"decision": "reject"/"continue", "reasoning": "...", "selected_content_indices": [0,2,5], "face_forward_ratio": 0.6, "face_count": 6}
     """
     # Convert image to base64
     buffered = BytesIO()
@@ -363,9 +363,9 @@ UNSUPPORTED ACTIVITIES (disqualify if PRIMARY focus):
 - Golf, biking, motorcycles, driving/cars/racing
 - Competitive sports: football, soccer, basketball, hockey, etc.
 - Snowsports: skiing, snowboarding, figure skating
-- Watersports: surfing, kitesurfing, scuba diving
+- Watersports: surfing, kitesurfing, scuba diving (as primary/athlete focus)
 - Hunting
-- Traveling with children (family travel accounts/family vloggers)
+- Family travel content (see detailed definition below)
 
 SUPPORTED ACTIVITIES (do NOT disqualify):
 - Dance (including pole dance), yoga, barre, pilates
@@ -378,20 +378,35 @@ SUPPORTED ACTIVITIES (do NOT disqualify):
 - Literature/books (book clubs)
 - Learning (history, art, etc)
 - Professional coaches, personal coaches
+- Watersports as casual activity (not athlete/competitive focus)
+
+FAMILY TRAVEL CONTENT (disqualify):
+Only disqualify if the PRIMARY content focus is family/kids. Look for:
+- Account name includes "family", "kids", or children's names as main identity
+- Bio centers around being a parent as primary identity (e.g., "Mom of 3", "Raising tiny humans", "Our family adventures")
+- Content grid shows majority of posts feature children as the main subject
+- Content appears to be family vlogs, parenting tips, or kid-focused activities
+
+DO NOT DISQUALIFY if:
+- Creator mentions being a parent but leads with their own interests (e.g., "Chef | Baker | Mom")
+- Children appear occasionally but content focuses on creator's expertise/niche
+- Couples/travel partners (without kids) even if bio mentions "husband", "wife", "partner"
+- Adult content about food, travel, wellness, etc. where creator happens to be a parent
 
 UNSUPPORTED PROFILE TYPES (disqualify if HIGH CONFIDENCE):
-- Brand accounts (no personal creator)
+- Brand accounts (no personal creator) - company/restaurant/product accounts
 - Meme accounts / content aggregators
-- Accounts that only repost content
+- Accounts that only repost content (not original)
 - Explicit or offensive content
 - Content focused on firearms
-- Family accounts / family travel accounts (PRIMARY focus on kids/family)
+- News/media brand accounts (even if hosted by a person)
 - Creator appears under age 18
 - Non-English speaking creator (primary language is not English)
 
 PASS TO NEXT STAGE if:
 - Is not an UNSUPPORTED PROFILE TYPE and does not show any UNSUPPORTED ACTIVITIES
-- ANY uncertainty about whether to disqualify
+- Personal creator sharing their expertise, lifestyle, or interests
+- ANY uncertainty about whether to disqualify (be permissive, not restrictive)
 
 CONTENT SELECTION (if passing to next stage):
 Select the 3 pieces of content (by index 0-9) that are MOST REPRESENTATIVE of the profile and best for deeper analysis. Choose content that:
@@ -400,16 +415,25 @@ Select the 3 pieces of content (by index 0-9) that are MOST REPRESENTATIVE of th
 - Shows face-forward engagement (if available)
 - Avoid purely aesthetic/sponsored content if possible
 
+FACE-FORWARD ANALYSIS (CRITICAL - always include):
+Count how many of the 10 content thumbnails clearly show the creator's face or recognizable presence:
+- COUNT: Thumbnails where you can see the creator (face, full body, or clearly identifiable presence)
+- DO NOT COUNT: Hands-only shots, aesthetic shots without creator, food/product close-ups, landscape/scenery without creator
+- If unsure whether someone in a thumbnail is the creator, estimate conservatively
+- Return both 'face_count' (integer 0-10) and 'face_forward_ratio' (decimal 0.0-1.0)
+
 Respond ONLY with JSON:
 {
   "decision": "reject" or "continue",
   "reasoning": "1-2 sentences explaining why",
-  "selected_content_indices": [0, 3, 7]  // ONLY if decision is "continue", otherwise empty array
+  "selected_content_indices": [0, 3, 7],
+  "face_count": 6,
+  "face_forward_ratio": 0.6
 }"""
         }, {
             "role": "user",
             "content": [
-                {"type": "text", "text": f"Profile: @{username}\n\nShould we continue analyzing this profile? If yes, which 3 pieces of content (by grid position 0-9, top-left to bottom-right) should we analyze?"},
+                {"type": "text", "text": f"Profile: @{username}\n\nAnalyze this profile:\n1. Should we continue analyzing? (decision + reasoning)\n2. If yes, which 3 thumbnails (0-9) are most representative?\n3. How many thumbnails (0-10) show the creator's face/presence? (face_count + face_forward_ratio)"},
                 {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_base64}", "detail": "high"}}
             ]
         }],
@@ -418,7 +442,16 @@ Respond ONLY with JSON:
     )
     
     result = json.loads(response.choices[0].message.content)
+    
+    # Ensure face data is present
+    if 'face_count' not in result:
+        result['face_count'] = 5  # Default to middle value if not provided
+    if 'face_forward_ratio' not in result:
+        result['face_forward_ratio'] = result['face_count'] / 10.0
+    
     print(f"Pre-screen result: {result}")
+    print(f"Face-forward analysis: {result['face_count']}/10 thumbnails ({result['face_forward_ratio']:.1%})")
+    
     return result
 
 
@@ -560,13 +593,14 @@ JSON format with those 6 fields as arrays/strings."""
     return json.loads(response.choices[0].message.content)
 
 
-def generate_lead_score(content_analyses: List[Dict[str, Any]], creator_profile: Dict[str, Any]) -> Dict[str, Any]:
-    """Generate TrovaTrip lead score based on ICP criteria - v1.1 (Production)"""
+def generate_lead_score(content_analyses: List[Dict[str, Any]], creator_profile: Dict[str, Any], face_count: int = 5, face_forward_ratio: float = 0.5) -> Dict[str, Any]:
+    """Generate TrovaTrip lead score based on ICP criteria - v1.1 (Production) with face-forward analysis"""
     summaries = [f"Content {idx} ({item['type']}): {item['summary']}" for idx, item in enumerate(content_analyses, 1)]
     combined = "\n\n".join(summaries)
     
     profile_context = f"""PROFILE:
 - Category: {creator_profile.get('content_category')}
+- Face-forward presence: {face_count}/10 thumbnails show creator ({face_forward_ratio:.0%})
 - Types: {creator_profile.get('content_types')}
 - Engagement: {creator_profile.get('audience_engagement')}
 - Presence: {creator_profile.get('creator_presence')}
@@ -603,8 +637,23 @@ Score these 5 sections (0.0 to 1.0):
    LOW scores (0.0-0.4): Generic content, pure performance/art fans, religious-primary content, very technical/specialized, or unclear who the audience is.
 
 2. **host_likeability_and_content_style** (0.0-1.0)
-   HIGH scores (0.7-1.0): Face-forward, appears regularly on camera, warm/conversational tone, shares experiences, content facilitates connection with audience through vulnerability and authenticity, genuine interest in knowing their audience and having their audience know them.
-   LOW scores (0.0-0.4): Behind-the-camera content, aesthetic-only, formal/sterile tone, doesn't show personality, pure expertise without relatability.
+   IMPORTANT: Consider the face-forward ratio above ({face_count}/10 thumbnails, {face_forward_ratio:.0%})
+   
+   HIGH scores (0.7-1.0): 
+   - Appears regularly on camera (6+ thumbnails show creator)
+   - Face-forward, warm/conversational tone
+   - Shares experiences, content facilitates connection with audience through vulnerability and authenticity
+   - Genuine interest in knowing their audience and having their audience know them
+   
+   MEDIUM scores (0.4-0.6):
+   - Moderate on-camera presence (3-5 thumbnails show creator)
+   - Mix of face-forward and behind-camera content
+   - Some personality shown but not consistently
+   
+   LOW scores (0.0-0.3):
+   - Rarely on camera (<3 thumbnails show creator)
+   - Behind-the-camera content, aesthetic-only, formal/sterile tone
+   - Doesn't show personality, pure expertise without relatability
 
 3. **monetization_and_business_mindset** (0.0-1.0)
    HIGH scores (0.7-1.0): Already selling something (coaching, courses, products, Patreon, brand deals, services). Audience pays for access. Comfortable with sales/launches.
@@ -930,6 +979,10 @@ def process_creator_profile(self, contact_id: str, profile_url: str, bio: str = 
         self.update_state(state='PROGRESS', meta={'stage': 'Generating creator profile'})
         creator_profile = generate_creator_profile(content_analyses)
         
+        # Extract face-forward data from pre-screen
+        face_count = pre_screen_result.get('face_count', 5)
+        face_forward_ratio = pre_screen_result.get('face_forward_ratio', 0.5)
+        
         # Step 7.5: Cache analysis results for future re-scoring
         cache_data = {
             'contact_id': contact_id,
@@ -939,6 +992,8 @@ def process_creator_profile(self, contact_id: str, profile_url: str, bio: str = 
             'content_analyses': content_analyses,
             'creator_profile': creator_profile,
             'has_travel_experience': has_travel_experience,
+            'face_count': face_count,
+            'face_forward_ratio': face_forward_ratio,
             'timestamp': datetime.now().isoformat(),
             'items_analyzed': len(content_analyses)
         }
@@ -946,7 +1001,7 @@ def process_creator_profile(self, contact_id: str, profile_url: str, bio: str = 
         
         # Step 8: Calculate lead score
         self.update_state(state='PROGRESS', meta={'stage': 'Calculating lead score'})
-        lead_analysis = generate_lead_score(content_analyses, creator_profile)
+        lead_analysis = generate_lead_score(content_analyses, creator_profile, face_count, face_forward_ratio)
         
         # Step 8.5: Boost score if travel experience detected
         # Ensures creators with group travel experience make it to manual review
