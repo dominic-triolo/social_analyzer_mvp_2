@@ -640,18 +640,18 @@ Score these 5 sections (0.0 to 1.0):
    IMPORTANT: Consider the face-forward ratio above ({face_count}/10 thumbnails, {face_forward_ratio:.0%})
    
    HIGH scores (0.7-1.0): 
-   - Appears regularly on camera (5+ thumbnails show creator)
+   - Appears regularly on camera (6+ thumbnails show creator)
    - Face-forward, warm/conversational tone
    - Shares experiences, content facilitates connection with audience through vulnerability and authenticity
    - Genuine interest in knowing their audience and having their audience know them
    
    MEDIUM scores (0.4-0.6):
-   - Moderate on-camera presence (2-4 thumbnails show creator)
+   - Moderate on-camera presence (3-5 thumbnails show creator)
    - Mix of face-forward and behind-camera content
    - Some personality shown but not consistently
    
    LOW scores (0.0-0.3):
-   - Rarely on camera (<2 thumbnails show creator)
+   - Rarely on camera (<3 thumbnails show creator)
    - Behind-the-camera content, aesthetic-only, formal/sterile tone
    - Doesn't show personality, pure expertise without relatability
 
