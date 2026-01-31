@@ -620,12 +620,8 @@ def rescore_profile(contact_id):
         
         print(f"Loaded cache: {len(content_analyses)} content analyses")
         
-        # Extract face-forward data from cache (with defaults for old caches)
-        face_count = cache_data.get('face_count', 5)
-        face_forward_ratio = cache_data.get('face_forward_ratio', 0.5)
-        
         # Re-run scoring with current prompt
-        lead_analysis = generate_lead_score(content_analyses, creator_profile, face_count, face_forward_ratio)
+        lead_analysis = generate_lead_score(content_analyses, creator_profile)
         
         # Apply travel experience boost if applicable
         if has_travel_experience and lead_analysis['lead_score'] < 0.50:
@@ -694,11 +690,9 @@ def rescore_batch():
                 content_analyses = cache_data.get('content_analyses', [])
                 creator_profile = cache_data.get('creator_profile', {})
                 has_travel_experience = cache_data.get('has_travel_experience', False)
-                face_count = cache_data.get('face_count', 5)
-                face_forward_ratio = cache_data.get('face_forward_ratio', 0.5)
                 
                 # Re-score
-                lead_analysis = generate_lead_score(content_analyses, creator_profile, face_count, face_forward_ratio)
+                lead_analysis = generate_lead_score(content_analyses, creator_profile)
                 
                 # Apply travel boost
                 if has_travel_experience and lead_analysis['lead_score'] < 0.50:

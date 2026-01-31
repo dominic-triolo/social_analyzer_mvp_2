@@ -342,7 +342,7 @@ def check_for_travel_experience(bio: str, content_items: List[Dict[str, Any]]) -
 def pre_screen_profile(snapshot_image: Image.Image, profile_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Pre-screen profile using snapshot to identify obvious bad fits
-    Returns: {"decision": "reject"/"continue", "reasoning": "...", "selected_content_indices": [0,2,5], "face_forward_ratio": 0.6, "face_count": 6}
+    Returns: {"decision": "reject"/"continue", "reasoning": "...", "selected_content_indices": [0,2,5]}
     """
     # Convert image to base64
     buffered = BytesIO()
@@ -415,25 +415,16 @@ Select the 3 pieces of content (by index 0-9) that are MOST REPRESENTATIVE of th
 - Shows face-forward engagement (if available)
 - Avoid purely aesthetic/sponsored content if possible
 
-FACE-FORWARD ANALYSIS (CRITICAL - always include):
-Count how many of the 10 content thumbnails clearly show the creator's face or recognizable presence:
-- COUNT: Thumbnails where you can see the creator (face, full body, or clearly identifiable presence)
-- DO NOT COUNT: Hands-only shots, aesthetic shots without creator, food/product close-ups, landscape/scenery without creator
-- If unsure whether someone in a thumbnail is the creator, estimate conservatively
-- Return both 'face_count' (integer 0-10) and 'face_forward_ratio' (decimal 0.0-1.0)
-
 Respond ONLY with JSON:
 {
   "decision": "reject" or "continue",
   "reasoning": "1-2 sentences explaining why",
-  "selected_content_indices": [0, 3, 7],
-  "face_count": 6,
-  "face_forward_ratio": 0.6
+  "selected_content_indices": [0, 3, 7]
 }"""
         }, {
             "role": "user",
             "content": [
-                {"type": "text", "text": f"Profile: @{username}\n\nAnalyze this profile:\n1. Should we continue analyzing? (decision + reasoning)\n2. If yes, which 3 thumbnails (0-9) are most representative?\n3. How many thumbnails (0-10) show the creator's face/presence? (face_count + face_forward_ratio)"},
+                {"type": "text", "text": f"Profile: @{username}\n\nShould we continue analyzing this profile? If yes, which 3 pieces of content (by grid position 0-9, top-left to bottom-right) should we analyze?"},
                 {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_base64}", "detail": "high"}}
             ]
         }],
@@ -442,16 +433,7 @@ Respond ONLY with JSON:
     )
     
     result = json.loads(response.choices[0].message.content)
-    
-    # Ensure face data is present
-    if 'face_count' not in result:
-        result['face_count'] = 5  # Default to middle value if not provided
-    if 'face_forward_ratio' not in result:
-        result['face_forward_ratio'] = result['face_count'] / 10.0
-    
     print(f"Pre-screen result: {result}")
-    print(f"Face-forward analysis: {result['face_count']}/10 thumbnails ({result['face_forward_ratio']:.1%})")
-    
     return result
 
 
@@ -593,14 +575,13 @@ JSON format with those 6 fields as arrays/strings."""
     return json.loads(response.choices[0].message.content)
 
 
-def generate_lead_score(content_analyses: List[Dict[str, Any]], creator_profile: Dict[str, Any], face_count: int = 5, face_forward_ratio: float = 0.5) -> Dict[str, Any]:
-    """Generate TrovaTrip lead score based on ICP criteria - v1.1 (Production) with face-forward analysis"""
+def generate_lead_score(content_analyses: List[Dict[str, Any]], creator_profile: Dict[str, Any]) -> Dict[str, Any]:
+    """Generate TrovaTrip lead score based on ICP criteria - v1.1 (Production)"""
     summaries = [f"Content {idx} ({item['type']}): {item['summary']}" for idx, item in enumerate(content_analyses, 1)]
     combined = "\n\n".join(summaries)
     
     profile_context = f"""PROFILE:
 - Category: {creator_profile.get('content_category')}
-- Face-forward presence: {face_count}/10 thumbnails show creator ({face_forward_ratio:.0%})
 - Types: {creator_profile.get('content_types')}
 - Engagement: {creator_profile.get('audience_engagement')}
 - Presence: {creator_profile.get('creator_presence')}
@@ -637,23 +618,8 @@ Score these 5 sections (0.0 to 1.0):
    LOW scores (0.0-0.4): Generic and/or transactional content that is not centered around a specific interest. Unclear who the intended audience is. Pure performance/art fans, religious-primary content, very technical/specialized.
 
 2. **host_likeability_and_content_style** (0.0-1.0)
-   IMPORTANT: Consider the face-forward ratio above ({face_count}/10 thumbnails, {face_forward_ratio:.0%})
-   
-   HIGH scores (0.7-1.0): 
-   - Appears regularly on camera (6+ thumbnails show creator)
-   - Face-forward, warm/conversational tone
-   - Shares experiences, content facilitates connection with audience through vulnerability and authenticity
-   - Genuine interest in knowing their audience and having their audience know them
-   
-   MEDIUM scores (0.4-0.6):
-   - Moderate on-camera presence (3-5 thumbnails show creator)
-   - Mix of face-forward and behind-camera content
-   - Some personality shown but not consistently
-   
-   LOW scores (0.0-0.3):
-   - Rarely on camera (<3 thumbnails show creator)
-   - Behind-the-camera content, aesthetic-only, formal/sterile tone
-   - Doesn't show personality, pure expertise without relatability
+   HIGH scores (0.7-1.0): Face-forward, appears regularly on camera, warm/conversational tone, shares experiences, content facilitates connection with audience through vulnerability and authenticity, genuine interest in knowing their audience and having their audience know them.
+   LOW scores (0.0-0.4): Behind-the-camera content, aesthetic-only, formal/sterile tone, doesn't show personality, pure expertise without relatability.
 
 3. **monetization_and_business_mindset** (0.0-1.0)
    HIGH scores (0.7-1.0): Already selling something (coaching, courses, products, etc). Comfortable with monetizing their audience.
@@ -979,10 +945,6 @@ def process_creator_profile(self, contact_id: str, profile_url: str, bio: str = 
         self.update_state(state='PROGRESS', meta={'stage': 'Generating creator profile'})
         creator_profile = generate_creator_profile(content_analyses)
         
-        # Extract face-forward data from pre-screen
-        face_count = pre_screen_result.get('face_count', 5)
-        face_forward_ratio = pre_screen_result.get('face_forward_ratio', 0.5)
-        
         # Step 7.5: Cache analysis results for future re-scoring
         cache_data = {
             'contact_id': contact_id,
@@ -992,8 +954,6 @@ def process_creator_profile(self, contact_id: str, profile_url: str, bio: str = 
             'content_analyses': content_analyses,
             'creator_profile': creator_profile,
             'has_travel_experience': has_travel_experience,
-            'face_count': face_count,
-            'face_forward_ratio': face_forward_ratio,
             'timestamp': datetime.now().isoformat(),
             'items_analyzed': len(content_analyses)
         }
@@ -1001,7 +961,7 @@ def process_creator_profile(self, contact_id: str, profile_url: str, bio: str = 
         
         # Step 8: Calculate lead score
         self.update_state(state='PROGRESS', meta={'stage': 'Calculating lead score'})
-        lead_analysis = generate_lead_score(content_analyses, creator_profile, face_count, face_forward_ratio)
+        lead_analysis = generate_lead_score(content_analyses, creator_profile)
         
         # Step 8.5: Boost score if travel experience detected
         # Ensures creators with group travel experience make it to manual review
