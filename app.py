@@ -371,179 +371,6 @@ Respond in JSON format:
     return result
 
 
-def generate_lead_analysis(content_analyses: List[Dict[str, Any]], creator_profile: Dict[str, Any]) -> Dict[str, Any]:
-    """Combine all content summaries and creator profile to generate a TrovaTrip-specific lead score"""
-    
-    # Extract all the individual summaries AND descriptions
-    summaries = []
-    for idx, item in enumerate(content_analyses, 1):
-        # Include both the AI-generated summary and the original description
-        summary_text = f"Content {idx} ({item['type']}): {item['summary']}"
-        
-        # Add the description if it exists and is not empty
-        if item.get('description'):
-            summary_text += f"\nOriginal Post Description: {item['description']}"
-        
-        summaries.append(summary_text)
-    
-    combined_summaries = "\n\n".join(summaries)
-    
-    # Format creator profile for context
-    profile_context = f"""CREATOR PROFILE:
-- Content Category: {creator_profile.get('content_category', 'Unknown')}
-- Content Types: {', '.join(creator_profile.get('content_types', []))}
-- Audience Engagement: {creator_profile.get('audience_engagement', 'Unknown')}
-- Creator Presence: {creator_profile.get('creator_presence', 'Unknown')}
-- Monetization: {creator_profile.get('monetization', 'Unknown')}
-- Community Building: {creator_profile.get('community_building', 'Unknown')}"""
-    
-    # TrovaTrip-specific scoring
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {
-                "role": "system",
-                "content": """You are a social media lead scoring analyst and you score creators for TrovaTrip.
-
-COMPANY CONTEXT:
-TrovaTrip is a platform that allows content creators, community leaders, and entrepreneurs to "host" group travel experiences with their audience/community around the globe. The Host is responsible for generating the bookings for their trip by marketing it to their audience/community. The Host gets paid for each trip based on bookings sold and travels for free, attending the trip with their travelers.
-
-YOUR ROLE:
-You score creators based on the likelihood that they will be interested in hosting a trip with their audience/community and the likelihood that they will be successful selling a trip to their audience/community. i.e. the degree to which the creator's audience/community is likely to be interested in connecting with each other and the creator in real life.
-
-SCORING GUIDE:
-- 0.0-0.3: Low quality, poor engagement potential
-- 0.3-0.6: Moderate quality, some potential
-- 0.6-0.8: Good quality, strong potential
-- 0.8-1.0: Excellent quality, high-value lead"""
-            },
-            {
-                "role": "user",
-                "content": f"""Based on this creator's profile and content summaries, score them using the TrovaTrip rubric.
-
-{profile_context}
-
-CONTENT SUMMARIES:
-{combined_summaries}
-
-SCORING RUBRIC - Score each section 0.0 to 1.0:
-
-1. NICHE & AUDIENCE IDENTITY (0.0-1.0)
-- Clear, specific niche (e.g., history nerds, bookish romance readers, widows, queer women, nurses, DINKs, vanlife, interior design, outdoor science, dating/relationship)
-- Followers share a recognizable identity or interest that could shape a trip: "my widows community," "queer girls," "book club," "DINK finance/lifestyle," "royal gossip/history nerds"
-- People know exactly what they go to the Host for
-
-2. HOST LIKEABILITY & CONTENT STYLE (0.0-1.0)
-- Face-forward: Host regularly appears on camera, talks directly to their audience
-- Warm, fun, safe, inclusive vibes → "I'd travel with them"
-- Tone is inclusive, warm, and conversational (not sterile or purely aesthetic)
-- Content already features experiences, trips, or "come with me" energy
-
-3. MONETIZATION & BUSINESS MINDSET (0.0-1.0)
-- Already monetizing in at least one way: Coaching/consults, interior design sessions, readings (tarot, astrology), courses/workshops, digital products, shop/Amazon storefront, merch, paid communities, Patreon, brand deals
-- Audience is conditioned to pay for access or expertise
-- Host is comfortable selling and running launches (deadlines, limited spots, bonuses, etc.)
-
-4. COMMUNITY INFRASTRUCTURE/OWNED CHANNELS (0.0-1.0)
-- Has at least one "depth" or owned channel: Email list, podcast, YouTube, FB group, Discord, Patreon, in-person groups, membership/sisterhood/book club, etc.
-- Can reach audience without relying solely on one social platform's algorithm
-- Ideally already communicates on a cadence (e.g., weekly newsletter or podcast)
-
-5. TRIP FIT & AUDIENCE TRAVELABILITY (0.0-1.0)
-- Niche naturally aligns with a trip concept (history in Europe, archaeology in Egypt, bookish tours in Ireland, vanlife/adventure trips, food & wine in Italy, grief/empowerment retreats, etc.)
-- Audience life stage and finances make group travel realistic: DINKs, mid-career professionals, older wellness audiences, nurses, etc.
-- Host already travels and shares it, or audience has expressed desire to travel with them
-
-Respond in JSON format:
-{{
-  "section_scores": {{
-    "niche_and_audience_identity": 0.0-1.0,
-    "host_likeability_and_content_style": 0.0-1.0,
-    "monetization_and_business_mindset": 0.0-1.0,
-    "community_infrastructure": 0.0-1.0,
-    "trip_fit_and_travelability": 0.0-1.0
-  }},
-  "combined_lead_score": 0.0-1.0,
-  "score_reasoning": "Brief explanation of the combined score based on the five sections"
-}}"""
-            }
-        ],
-        response_format={"type": "json_object"}
-    )
-    
-    result = json.loads(response.choices[0].message.content)
-    return {
-        "section_scores": result.get('section_scores', {}),
-        "lead_score": result.get('combined_lead_score', 0.0),
-        "score_reasoning": result.get('score_reasoning', '')
-    }
-
-
-def send_to_hubspot(contact_id: str, lead_score: float, section_scores: Dict[str, float], score_reasoning: str, creator_profile: Dict[str, Any], content_analyses: List[Dict[str, Any]]):
-    """Send results back to HubSpot via webhook"""
-    
-    # Extract personalization hooks from content
-    content_summaries_structured = []
-    
-    for idx, item in enumerate(content_analyses, 1):
-        content_summaries_structured.append(f"Content {idx} ({item['type']}): {item['summary']}")
-    
-    # Detect community platforms mentioned
-    community_text = creator_profile.get('community_building', '').lower()
-    community_platforms = []
-    platform_keywords = {
-        'email list': 'Email List',
-        'newsletter': 'Newsletter', 
-        'mailing list': 'Mailing List',
-        'patreon': 'Patreon',
-        'discord': 'Discord',
-        'substack': 'Substack',
-        'facebook group': 'Facebook Group',
-        'community': 'Community Platform'
-    }
-    
-    for keyword, platform_name in platform_keywords.items():
-        if keyword in community_text:
-            if platform_name not in community_platforms:
-                community_platforms.append(platform_name)
-    
-    has_community_platform = len(community_platforms) > 0
-    
-    payload = {
-        "contact_id": contact_id,
-        "lead_score": lead_score,
-        "score_reasoning": score_reasoning,
-        
-        # Section scores
-        "score_niche_and_audience": section_scores.get('niche_and_audience_identity', 0.0),
-        "score_host_likeability": section_scores.get('host_likeability_and_content_style', 0.0),
-        "score_monetization": section_scores.get('monetization_and_business_mindset', 0.0),
-        "score_community_infrastructure": section_scores.get('community_infrastructure', 0.0),
-        "score_trip_fit": section_scores.get('trip_fit_and_travelability', 0.0),
-        
-        # Structured content summaries
-        "content_summary_structured": "\n\n".join(content_summaries_structured),
-        
-        # Flattened creator profile for easy access
-        "profile_category": creator_profile.get('content_category'),
-        "profile_content_types": ", ".join(creator_profile.get('content_types', [])),
-        "profile_tone": creator_profile.get('audience_engagement', ''),
-        "profile_engagement": creator_profile.get('audience_engagement', ''),
-        "profile_presence": creator_profile.get('creator_presence', ''),
-        "profile_monetization": creator_profile.get('monetization', ''),
-        "profile_community_building": creator_profile.get('community_building', ''),
-        
-        # Community platform detection
-        "has_community_platform": has_community_platform,
-        "community_platforms_detected": ", ".join(community_platforms) if community_platforms else "None detected",
-        
-        "analyzed_at": datetime.now().isoformat()
-    }
-    
-    response = requests.post(HUBSPOT_WEBHOOK_URL, json=payload)
-    response.raise_for_status()
-    
-    return response.json()
 
 
 from tasks import process_creator_profile
@@ -840,165 +667,390 @@ def check_task_status(task_id):
     return jsonify(response)
 
 
-@app.route('/webhook', methods=['POST'])
-def handle_webhook():
-    """Main webhook handler"""
+
+# OLD SYNCHRONOUS WEBHOOK - DEPRECATED (use /webhook/async instead)
+# @app.route('/webhook', methods=['POST'])
+# def handle_webhook():
+#     ... (commented out - uses old generate_lead_analysis function)
+
+
+@app.route('/')
+def dashboard():
+    """Simple dashboard showing queue status and processing stats"""
+    return '''
+<!DOCTYPE html>
+<html>
+<head>
+    <title>TrovaTrip Enrichment Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+        
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: transform 0.2s;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .stat-label {
+            font-size: 0.9em;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+        
+        .stat-value {
+            font-size: 2.5em;
+            font-weight: 700;
+            color: #333;
+        }
+        
+        .stat-icon {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+        
+        .queue { color: #667eea; }
+        .processing { color: #f093fb; }
+        .success { color: #4facfe; }
+        .rejected { color: #fa709a; }
+        .error { color: #ff6b6b; }
+        
+        .breakdown-section {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+        
+        .breakdown-section h2 {
+            font-size: 1.5em;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        
+        .breakdown-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        
+        .breakdown-item {
+            padding: 15px;
+            border-radius: 8px;
+            background: #f8f9fa;
+            border-left: 4px solid;
+        }
+        
+        .breakdown-item.frequency { border-color: #feca57; }
+        .breakdown-item.prescreen { border-color: #ff6b6b; }
+        .breakdown-item.enriched { border-color: #48dbfb; }
+        .breakdown-item.error { border-color: #ff9ff3; }
+        
+        .breakdown-label {
+            font-size: 0.85em;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        
+        .breakdown-value {
+            font-size: 1.8em;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .refresh-info {
+            text-align: center;
+            color: white;
+            margin-top: 20px;
+            opacity: 0.8;
+        }
+        
+        .loading {
+            text-align: center;
+            color: white;
+            font-size: 1.2em;
+            margin: 50px 0;
+        }
+        
+        .progress-bar {
+            background: rgba(255,255,255,0.3);
+            height: 8px;
+            border-radius: 4px;
+            margin-top: 15px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            background: white;
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+        
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.8em;
+            }
+            .stat-value {
+                font-size: 2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 TrovaTrip Enrichment Dashboard</h1>
+            <p>Real-time profile processing status</p>
+        </div>
+        
+        <div id="loading" class="loading">
+            <p>Loading stats...</p>
+        </div>
+        
+        <div id="dashboard" style="display: none;">
+            <!-- Main Stats Grid -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon queue">⏳</div>
+                    <div class="stat-label">In Queue</div>
+                    <div class="stat-value" id="queue-count">-</div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-icon processing">⚙️</div>
+                    <div class="stat-label">Processing</div>
+                    <div class="stat-value" id="processing-count">-</div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-icon success">✅</div>
+                    <div class="stat-label">Total Completed</div>
+                    <div class="stat-value" id="total-completed">-</div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-icon error">❌</div>
+                    <div class="stat-label">Total Errors</div>
+                    <div class="stat-value" id="total-errors">-</div>
+                </div>
+            </div>
+            
+            <!-- Breakdown Section -->
+            <div class="breakdown-section">
+                <h2>📊 Processing Breakdown</h2>
+                <div class="breakdown-grid">
+                    <div class="breakdown-item frequency">
+                        <div class="breakdown-label">Post Frequency</div>
+                        <div class="breakdown-value" id="frequency-count">-</div>
+                    </div>
+                    
+                    <div class="breakdown-item prescreen">
+                        <div class="breakdown-label">Pre-screened Out</div>
+                        <div class="breakdown-value" id="prescreen-count">-</div>
+                    </div>
+                    
+                    <div class="breakdown-item enriched">
+                        <div class="breakdown-label">Enriched & Scored</div>
+                        <div class="breakdown-value" id="enriched-count">-</div>
+                    </div>
+                    
+                    <div class="breakdown-item error">
+                        <div class="breakdown-label">Errors</div>
+                        <div class="breakdown-value" id="error-count">-</div>
+                    </div>
+                </div>
+                
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-bar" style="width: 0%"></div>
+                </div>
+            </div>
+            
+            <div class="refresh-info">
+                <p>🔄 Auto-refreshing every 5 seconds</p>
+                <p style="font-size: 0.9em; margin-top: 5px;">Last updated: <span id="last-update">-</span></p>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        async function fetchStats() {
+            try {
+                const response = await fetch('/api/stats');
+                const data = await response.json();
+                
+                // Update main stats
+                document.getElementById('queue-count').textContent = data.queue_size || 0;
+                document.getElementById('processing-count').textContent = data.active_workers || 0;
+                document.getElementById('total-completed').textContent = data.total_completed || 0;
+                document.getElementById('total-errors').textContent = data.total_errors || 0;
+                
+                // Update breakdown
+                document.getElementById('frequency-count').textContent = data.breakdown.post_frequency || 0;
+                document.getElementById('prescreen-count').textContent = data.breakdown.pre_screened || 0;
+                document.getElementById('enriched-count').textContent = data.breakdown.enriched || 0;
+                document.getElementById('error-count').textContent = data.breakdown.errors || 0;
+                
+                // Update progress bar
+                const total = data.total_completed + data.total_errors;
+                const progress = total > 0 ? (total / (total + data.queue_size)) * 100 : 0;
+                document.getElementById('progress-bar').style.width = progress + '%';
+                
+                // Update timestamp
+                document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+                
+                // Show dashboard
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('dashboard').style.display = 'block';
+                
+            } catch (error) {
+                console.error('Error fetching stats:', error);
+                document.getElementById('loading').innerHTML = '<p>⚠️ Error loading stats. Retrying...</p>';
+            }
+        }
+        
+        // Initial fetch
+        fetchStats();
+        
+        // Auto-refresh every 5 seconds
+        setInterval(fetchStats, 5000);
+    </script>
+</body>
+</html>
+    '''
+
+
+@app.route('/api/stats')
+def get_stats():
+    """API endpoint for dashboard stats"""
     try:
-        print("=== WEBHOOK RECEIVED ===")
+        import redis
+        redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+        r = redis.from_url(redis_url, decode_responses=True)
         
-        # Parse incoming webhook
-        data = request.get_json()
-        print(f"Received data: {data}")
+        # Get queue size
+        queue_size = r.llen('celery') or 0
         
-        contact_id = data.get('contact_id')
-        profile_url = data.get('profile_url')
+        # Get active workers (approximate)
+        active_workers = min(queue_size, 8) if queue_size > 0 else 0
         
-        if not all([contact_id, profile_url]):
-            return jsonify({"error": "Missing required fields: contact_id, profile_url"}), 400
+        # Get result type counts from Redis
+        result_counts = r.hgetall('trovastats:results') or {}
         
-        print(f"Processing: contact_id={contact_id}, profile_url={profile_url}")
+        post_frequency = int(result_counts.get('post_frequency', 0))
+        pre_screened = int(result_counts.get('pre_screened', 0))
+        enriched = int(result_counts.get('enriched', 0))
+        errors = int(result_counts.get('error', 0))
         
-        # Step 1: Fetch social content
-        print(f"STEP 1: Fetching content from InsightIQ...")
-        social_data = fetch_social_content(profile_url)
-        print(f"STEP 1 COMPLETE: Received data from InsightIQ")
-        
-        # Debug: Log the response structure
-        print(f"InsightIQ Response Type: {type(social_data)}")
-        print(f"InsightIQ Response Keys: {social_data.keys() if isinstance(social_data, dict) else 'Not a dict'}")
-        print(f"InsightIQ Full Response: {json.dumps(social_data, indent=2)[:1000]}...")  # First 1000 chars
-        
-        # Step 2: Process each piece of content
-        content_analyses = []
-        
-        # Assuming the API returns content in a 'content' or 'posts' array
-        content_items = social_data.get('content', social_data.get('posts', social_data.get('contents', social_data.get('data', []))))
-        
-        print(f"STEP 2: Found {len(content_items) if content_items else 0} content items to process")
-        
-        if not content_items:
-            print(f"ERROR: No content items found. Available keys: {list(social_data.keys()) if isinstance(social_data, dict) else 'N/A'}")
-            return jsonify({"error": "No content found in InsightIQ response", "response_keys": list(social_data.keys()) if isinstance(social_data, dict) else []}), 404
-        
-        for idx, item in enumerate(content_items[:5], 1):  # Process up to 5 items for MVP
-            print(f"STEP 2.{idx}: Processing content item {idx}/{min(5, len(content_items))}")
-            
-            # Extract content type and format
-            content_format = item.get('format')  # VIDEO, COLLECTION, etc.
-            content_type = item.get('type')  # REELS, FEED, etc.
-            description = item.get('description', '')
-            
-            print(f"STEP 2.{idx}: Format={content_format}, Type={content_type}")
-            
-            # Determine media URL based on format
-            media_url = None
-            media_format = None
-            
-            if content_format == 'VIDEO':
-                # For videos, use media_url
-                media_url = item.get('media_url')
-                media_format = 'VIDEO'
-                print(f"STEP 2.{idx}: VIDEO - Using media_url")
-            elif content_format == 'COLLECTION':
-                # For collections, get the first image from content_group_media
-                content_group_media = item.get('content_group_media', [])
-                print(f"STEP 2.{idx}: COLLECTION - Found {len(content_group_media)} items in content_group_media")
-                
-                if content_group_media and len(content_group_media) > 0:
-                    media_url = content_group_media[0].get('media_url')
-                    print(f"STEP 2.{idx}: Using first media from collection")
-                else:
-                    # Fallback to thumbnail_url
-                    media_url = item.get('thumbnail_url')
-                    print(f"STEP 2.{idx}: No content_group_media, using thumbnail_url")
-                
-                media_format = 'IMAGE'
-            else:
-                # Fallback for other formats
-                media_url = item.get('media_url') or item.get('thumbnail_url')
-                print(f"STEP 2.{idx}: Other format, using media_url or thumbnail")
-                if media_url:
-                    media_format = determine_media_format(media_url)
-            
-            # Clean up the URL - remove trailing periods
-            if media_url:
-                media_url = media_url.rstrip('.')
-            
-            if not media_url:
-                print(f"STEP 2.{idx}: No media URL found, skipping")
-                continue
-            
-            # Re-host media on R2
-            print(f"STEP 2.{idx}: Original URL: {media_url[:100]}...")
-            rehosted_url = rehost_media_on_r2(media_url, contact_id, media_format)
-            print(f"STEP 2.{idx}: Re-hosted URL: {rehosted_url[:100]}...")
-            
-            try:
-                print(f"STEP 2.{idx}: Analyzing {media_format}...")
-                analysis = analyze_content_item(rehosted_url, media_format)
-                
-                # Add the description from InsightIQ to the analysis
-                analysis['description'] = description
-                
-                content_analyses.append(analysis)
-                print(f"STEP 2.{idx}: Analysis complete")
-                
-            except Exception as e:
-                print(f"STEP 2.{idx} ERROR: {str(e)}")
-                import traceback
-                print(f"Traceback: {traceback.format_exc()}")
-                continue
-        
-        # Step 3: Check if we have content to analyze
-        print(f"STEP 3: Completed processing. Analyzed {len(content_analyses)} items")
-        
-        if not content_analyses:
-            return jsonify({"error": "No content found to analyze"}), 404
-        
-        # Step 4: Generate creator profile
-        print(f"STEP 4: Generating creator profile...")
-        creator_profile = generate_creator_profile(content_analyses)
-        print(f"STEP 4 COMPLETE: Creator profile generated")
-        print(f"  - Category: {creator_profile.get('content_category')}")
-        print(f"  - Monetization: {creator_profile.get('monetization')}")
-        
-        # Step 5: Generate lead score using creator profile and content summaries
-        print(f"STEP 5: Generating TrovaTrip lead analysis...")
-        lead_analysis = generate_lead_analysis(content_analyses, creator_profile)
-        print(f"STEP 5 COMPLETE: Lead score: {lead_analysis['lead_score']}")
-        print(f"  - Section scores: {lead_analysis.get('section_scores', {})}")
-        
-        # Step 6: Send to HubSpot
-        print(f"STEP 6: Sending results to HubSpot...")
-        send_to_hubspot(
-            contact_id,
-            lead_analysis['lead_score'],
-            lead_analysis.get('section_scores', {}),
-            lead_analysis.get('score_reasoning', ''),
-            creator_profile,
-            content_analyses
-        )
-        print(f"STEP 6 COMPLETE: Results sent to HubSpot")
-        
-        print("=== WEBHOOK COMPLETE ===")
+        total_completed = post_frequency + pre_screened + enriched
+        total_errors = errors
         
         return jsonify({
-            "status": "success",
-            "contact_id": contact_id,
-            "items_processed": len(content_analyses),
-            "lead_score": lead_analysis['lead_score'],
-            "section_scores": lead_analysis.get('section_scores', {}),
-            "score_reasoning": lead_analysis.get('score_reasoning', ''),
-            "creator_profile": creator_profile
-        }), 200
+            'queue_size': queue_size,
+            'active_workers': active_workers,
+            'total_completed': total_completed,
+            'total_errors': total_errors,
+            'breakdown': {
+                'post_frequency': post_frequency,
+                'pre_screened': pre_screened,
+                'enriched': enriched,
+                'errors': errors
+            }
+        })
         
     except Exception as e:
-        print(f"=== WEBHOOK ERROR ===")
-        print(f"Error type: {type(e).__name__}")
-        print(f"Error message: {str(e)}")
+        print(f"Error generating stats: {e}")
         import traceback
-        print(f"Full traceback: {traceback.format_exc()}")
-        return jsonify({"error": str(e)}), 500
+        print(traceback.format_exc())
+        
+        # Return zeros if Redis isn't available
+        return jsonify({
+            'queue_size': 0,
+            'active_workers': 0,
+            'total_completed': 0,
+            'total_errors': 0,
+            'breakdown': {
+                'post_frequency': 0,
+                'pre_screened': 0,
+                'enriched': 0,
+                'errors': 0
+            }
+        }), 200
+
+
+
+
+@app.route('/api/stats/reset', methods=['POST'])
+def reset_stats():
+    """Reset dashboard stats (useful for starting a new batch)"""
+    try:
+        import redis
+        redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+        r = redis.from_url(redis_url, decode_responses=True)
+        
+        # Delete the stats hash
+        r.delete('trovastats:results')
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Stats reset successfully'
+        })
+        
+    except Exception as e:
+        print(f"Error resetting stats: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
 
 
 @app.route('/health', methods=['GET'])

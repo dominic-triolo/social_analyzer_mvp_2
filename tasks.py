@@ -309,7 +309,7 @@ def check_for_travel_experience(bio: str, content_items: List[Dict[str, Any]]) -
     travel_keywords = [
         'retreat', 'workshop', 'trip', 'tour', 'travel', 'getaway',
         'join me', 'join us', 'book now', 'spaces available', 'registration open',
-        'destination', 'journey', 'expedition',
+        'destination', 'experience', 'journey', 'expedition',
         'hosted', 'hosting', 'trips'
     ]
     
@@ -765,6 +765,27 @@ def send_to_hubspot(contact_id: str, lead_score: float, section_scores: Dict, sc
     if any(keyword in score_reasoning.lower() for keyword in error_keywords):
         enrichment_status = "warning" if enrichment_status == "success" else enrichment_status
         error_details.append("Error indicators found in reasoning")
+    
+    # Track result type in Redis for dashboard stats
+    try:
+        import redis
+        redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+        r = redis.from_url(redis_url, decode_responses=True)
+        
+        # Determine result type
+        result_type = 'enriched'  # Default
+        if 'post frequency check' in score_reasoning.lower():
+            result_type = 'post_frequency'
+        elif 'pre-screen rejected' in score_reasoning.lower():
+            result_type = 'pre_screened'
+        elif enrichment_status == 'error':
+            result_type = 'error'
+        
+        # Increment counter
+        r.hincrby('trovastats:results', result_type, 1)
+        
+    except Exception as e:
+        print(f"Error tracking stats in Redis: {e}")
     
     payload = {
         "contact_id": contact_id,
