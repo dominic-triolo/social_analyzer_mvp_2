@@ -307,10 +307,10 @@ def check_for_travel_experience(bio: str, content_items: List[Dict[str, Any]]) -
     """
     # Keywords that indicate group travel hosting
     travel_keywords = [
-        'retreat', 'workshop', 'trip', 'tour', 'travel', 'getaway', 'adventure',
+        'retreat', 'workshop', 'trip', 'tour', 'travel', 'getaway',
         'join me', 'join us', 'book now', 'spaces available', 'registration open',
-        'destination', 'experience', 'journey', 'expedition', 'immersion',
-        'hosted', 'hosting', 'leading', 'guiding'
+        'destination', 'experience', 'journey', 'expedition',
+        'hosted', 'hosting', 'trips'
     ]
     
     # Check bio for travel indicators
@@ -560,19 +560,59 @@ def generate_creator_profile(content_analyses: List[Dict[str, Any]]) -> Dict[str
         model="gpt-4o",
         messages=[{
             "role": "system",
-            "content": "You analyze creators to profile their content strategy, audience engagement, and monetization."
+            "content": """You analyze creators to profile their content strategy, audience engagement, and monetization.
+
+Additionally, classify the creator into ONE primary category:
+- Empowerment: Personal development, coaching, motivation, empowerment
+- Entertainment: Performing arts, comedy, music, entertainment
+- Fitness & sport: Fitness, yoga, pilates, dance, sports (non-competitive focus)
+- Health & wellness: Mental health, wellness, spirituality, holistic health
+- Learning: Education, history, book clubs, teaching, academic content
+- Lifestyle: General lifestyle, fashion, beauty, home, parenting (non-family-travel)
+- Art & Design: Visual art, design, photography, creative arts
+- Exploration: Travel, adventure travel, cultural exploration
+- Food & Drink: Food, cooking, culinary, wine, restaurants, nutrition
+- Outdoor & Adventure: Hiking, camping, van life, outdoor activities
+
+Choose the SINGLE category that best represents the creator's primary content focus."""
         }, {
             "role": "user",
             "content": f"""Create structured creator profile covering: content category, content types, audience engagement, creator presence, monetization, community building.
 
 CONTENT: {combined}
 
-JSON format with those 6 fields as arrays/strings."""
+Return JSON with these fields:
+- content_category: Brief description of content themes
+- primary_category: ONE category from the list above (e.g., "Food & Drink", "Exploration", "Empowerment")
+- content_types: Types of content they create
+- audience_engagement: How they engage with audience
+- creator_presence: On-screen presence and personality
+- monetization: Evidence of monetization or business mindset
+- community_building: Community infrastructure and engagement
+
+Example format:
+{{
+  "content_category": "Wellness and mindfulness content",
+  "primary_category": "Health & wellness",
+  "content_types": "Educational videos, meditation guides",
+  "audience_engagement": "High engagement through comments",
+  "creator_presence": "Calm and authentic on-camera presence",
+  "monetization": "Offers paid courses and memberships",
+  "community_building": "Active Discord community and email list"
+}}"""
         }],
         response_format={"type": "json_object"}
     )
     
-    return json.loads(response.choices[0].message.content)
+    result = json.loads(response.choices[0].message.content)
+    
+    # Ensure primary_category is present (fallback to Lifestyle if not provided)
+    if 'primary_category' not in result:
+        result['primary_category'] = 'Lifestyle'
+        print("Warning: primary_category not provided by AI, defaulting to 'Lifestyle'")
+    
+    print(f"Creator Profile: {json.dumps(result, indent=2)}")
+    return result
 
 
 def generate_lead_score(content_analyses: List[Dict[str, Any]], creator_profile: Dict[str, Any]) -> Dict[str, Any]:
@@ -634,7 +674,7 @@ Score these 5 sections (0.0 to 1.0):
    LOW scores (0.0-0.4): No natural trip concept, very young/broke audience, content doesn't translate to group experiences, highly specialized/technical focus.
 
 Also provide:
-- **combined_lead_score**: Weighted average: (niche × 0.25) + (likeability × 0.20) + (monetization × 0.25) + (community × 0.15) + (trip_fit × 0.15)
+- **combined_lead_score**: Weighted average: (niche × 0.05) + (likeability × 0.4) + (monetization × 0.05) + (community × 0.3) + (trip_fit × 0.2)
 - **score_reasoning**: 2-3 sentences on fit for group travel with their community.
 
 RESPOND ONLY with JSON:
@@ -726,6 +766,27 @@ def send_to_hubspot(contact_id: str, lead_score: float, section_scores: Dict, sc
         enrichment_status = "warning" if enrichment_status == "success" else enrichment_status
         error_details.append("Error indicators found in reasoning")
     
+    # Track result type in Redis for dashboard stats
+    try:
+        import redis
+        redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+        r = redis.from_url(redis_url, decode_responses=True)
+        
+        # Determine result type
+        result_type = 'enriched'  # Default
+        if 'post frequency check' in score_reasoning.lower():
+            result_type = 'post_frequency'
+        elif 'pre-screen rejected' in score_reasoning.lower():
+            result_type = 'pre_screened'
+        elif enrichment_status == 'error':
+            result_type = 'error'
+        
+        # Increment counter
+        r.hincrby('trovastats:results', result_type, 1)
+        
+    except Exception as e:
+        print(f"Error tracking stats in Redis: {e}")
+    
     payload = {
         "contact_id": contact_id,
         "lead_score": lead_score,
@@ -737,6 +798,7 @@ def send_to_hubspot(contact_id: str, lead_score: float, section_scores: Dict, sc
         "score_trip_fit": section_scores.get('trip_fit_and_travelability', 0.0),
         "content_summary_structured": "\n\n".join(content_summaries),
         "profile_category": safe_str(creator_profile.get('content_category')),
+        "primary_category": safe_str(creator_profile.get('primary_category', 'Lifestyle')),
         "profile_content_types": safe_str(creator_profile.get('content_types')),
         "profile_engagement": safe_str(creator_profile.get('audience_engagement')),
         "profile_presence": safe_str(creator_profile.get('creator_presence')),
