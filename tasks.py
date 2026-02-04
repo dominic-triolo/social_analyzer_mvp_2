@@ -379,6 +379,16 @@ SUPPORTED ACTIVITIES (do NOT disqualify):
 - Learning (history, art, etc)
 - Professional coaches, personal coaches
 - Watersports as casual activity (not athlete/competitive focus)
+- Podcasts (ALWAYS pass to next stage - NEVER reject podcasts)
+
+CRITICAL: If a niche or activity is NOT listed in UNSUPPORTED ACTIVITIES or UNSUPPORTED PROFILE TYPES, DO NOT REJECT IT.
+Examples of niches to PASS TO NEXT STAGE (not in unsupported list):
+- Board games, card games, tabletop gaming
+- Crafts, knitting, sewing, DIY
+- Technology, coding, software
+- Business, entrepreneurship, marketing
+- Photography, videography
+- Any hobby or interest not explicitly listed as unsupported
 
 FAMILY TRAVEL CONTENT (disqualify):
 Only disqualify if the PRIMARY content focus is family/kids. Look for:
@@ -406,6 +416,8 @@ UNSUPPORTED PROFILE TYPES (disqualify if HIGH CONFIDENCE):
 PASS TO NEXT STAGE if:
 - Is not an UNSUPPORTED PROFILE TYPE and does not show any UNSUPPORTED ACTIVITIES
 - Personal creator sharing their expertise, lifestyle, or interests
+- Podcast creator (ALWAYS pass podcasts regardless of topic)
+- ANY niche or activity not explicitly listed in unsupported categories
 - ANY uncertainty about whether to disqualify (be permissive, not restrictive)
 
 CONTENT SELECTION (if passing to next stage):
@@ -643,6 +655,18 @@ BAD FITS to avoid:
 - Politicians
 - Creators who do only post transactional content (no invitation/CTA for audience to contribute/comment)
 - Creators without clear monetization (not business-minded)
+- Comedians who ONLY post clips from live shows, skits, and/or promotions for shows (heavily penalize in niche & trip_fit)
+- Musical artists who ONLY post songs and/or promotions for live shows (heavily penalize in niche & trip_fit)
+
+PERFORMER CONTENT PENALTY:
+If the creator is a comedian or musician who ONLY posts performance content (show clips, skits, songs, show promotions):
+- Score niche_and_audience_identity: 0.2-0.4 maximum (they have fans, not a community)
+- Score trip_fit_and_travelability: 0.1-0.3 maximum (audience wants shows, not travel together)
+- Reason: Their audience is passive consumers, not an engaged community that wants to connect with each other
+
+If the creator is a comedian/musician who ALSO posts lifestyle, behind-the-scenes, community building, or educational content:
+- Score normally based on community engagement
+- They can still score well if they build real community beyond performances
 
 SCORING CRITERIA (0.0-1.0 each):"""
         }, {
@@ -654,15 +678,17 @@ CONTENT: {combined}
 Score these 5 sections (0.0 to 1.0):
 
 1. **niche_and_audience_identity** (0.0-1.0)
-   HIGH scores (0.7-1.0): Clear lifestyle niche where audience shares identity (including but not limited to: widows, DINKs, book lovers, history nerds, foodies, wellness seekers). The host fosters a sense of community with their audience through their content. Content provides value to the audience (including but not limited to: education, community building, motivation).
-   LOW scores (0.0-0.4): Generic and/or transactional content that is not centered around a specific interest. Unclear who the intended audience is. Pure performance/art fans, religious-primary content, very technical/specialized.
+   HIGH scores (0.7-1.0): Clear lifestyle niche where audience shares identity (including but not limited to: widows, DINKs, book lovers, history nerds, foodies, wellness seekers). People want to connect with EACH OTHER in addition to the host.
+   LOW scores (0.0-0.4): Generic content, pure performance/art fans (comedians/musicians posting ONLY show content), religious-primary content, very technical/specialized, or unclear who the audience is.
+   
+   CRITICAL: Comedians/musicians who ONLY post performance content (show clips, skits, songs) should score 0.2-0.4 maximum. They have fans, not community.
 
 2. **host_likeability_and_content_style** (0.0-1.0)
    HIGH scores (0.7-1.0): Face-forward, appears regularly on camera, warm/conversational tone, shares experiences, content facilitates connection with audience through vulnerability and authenticity, genuine interest in knowing their audience and having their audience know them.
    LOW scores (0.0-0.4): Behind-the-camera content, aesthetic-only, formal/sterile tone, doesn't show personality, pure expertise without relatability.
 
 3. **monetization_and_business_mindset** (0.0-1.0)
-   HIGH scores (0.7-1.0): Already selling something (coaching, courses, products, etc). Comfortable with monetizing their audience.
+   HIGH scores (0.7-1.0): Already selling something (coaching, courses, products, Patreon, brand deals, services). Audience pays for access. Comfortable with sales/launches.
    LOW scores (0.0-0.4): No monetization, only donations, free content only, or explicitly states "no monetization."
 
 4. **community_infrastructure** (0.0-1.0)
@@ -672,9 +698,11 @@ Score these 5 sections (0.0 to 1.0):
 5. **trip_fit_and_travelability** (0.0-1.0)
    HIGH scores (0.7-1.0): Content naturally fits a trip (including but not limited to food/wine tours, history tours, retreats of any kind, adventure travel, cultural experiences). Audience has money/time for travel (including but not limited to professionals, DINKs, older audiences). Already travels or audience asks to travel together.
    LOW scores (0.0-0.4): No natural trip concept, very young/broke audience, content doesn't translate to group experiences, highly specialized/technical focus.
+   
+   CRITICAL: Comedians/musicians who ONLY post performance content should score 0.1-0.3 maximum. Their audience wants shows, not group travel experiences.
 
 Also provide:
-- **combined_lead_score**: Weighted average: (niche × 0.05) + (likeability × 0.4) + (monetization × 0.05) + (community × 0.3) + (trip_fit × 0.2)
+- **combined_lead_score**: Weighted average: (niche × 0.25) + (likeability × 0.20) + (monetization × 0.25) + (community × 0.15) + (trip_fit × 0.15)
 - **score_reasoning**: 2-3 sentences on fit for group travel with their community.
 
 RESPOND ONLY with JSON:
