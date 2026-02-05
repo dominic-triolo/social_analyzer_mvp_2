@@ -123,13 +123,6 @@ def format_category_examples(category: str) -> str:
     return good_text + bad_text + pattern_text
 
 
-
-        client = OpenAI(api_key=OPENAI_API_KEY)
-        print("OpenAI client initialized successfully")
-    except Exception as e:
-        print(f"ERROR initializing OpenAI client: {e}")
-
-
 def save_analysis_cache(contact_id: str, cache_data: dict) -> bool:
     """Save analysis results to R2 for later re-scoring"""
     if not r2_client:
