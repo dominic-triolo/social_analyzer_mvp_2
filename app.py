@@ -531,11 +531,6 @@ def rescore_batch():
     except Exception as e:
         print(f"Error queuing batch re-score: {e}")
         return jsonify({"error": str(e)}), 500
-        }), 200
-        
-    except Exception as e:
-        print(f"Batch re-scoring error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/cache/<contact_id>', methods=['GET'])
@@ -1034,4 +1029,3 @@ def health_check():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.getenv('PORT', 8080)))
-
