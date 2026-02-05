@@ -1233,4 +1233,3 @@ def rescore_single_profile(self, contact_id: str):
         print(f"[RESCORE] Error re-scoring {contact_id}: {e}")
         # Retry after 60 seconds
         raise self.retry(exc=e, countdown=60, max_retries=2)
-
