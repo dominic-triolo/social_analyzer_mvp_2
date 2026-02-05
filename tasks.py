@@ -1178,13 +1178,21 @@ def process_creator_profile(self, contact_id: str, profile_url: str, bio: str = 
         }
 
 
-@celery_app.task(name='rescore_single_profile', bind=True, max_retries=2)
+@celery_app.task(name='rescore_single_profile', bind=True, max_retries=3)
 def rescore_single_profile(self, contact_id: str):
     """
     Re-score a single profile asynchronously (Celery background task)
+    Rate-limited to avoid OpenAI API limits
     """
+    import time
+    
     try:
         print(f"[RESCORE] Starting re-score for contact {contact_id}")
+        
+        # Rate limiting: Sleep 3 seconds before each re-score
+        # This prevents hitting OpenAI's 30K TPM limit
+        # With 2 workers, this allows ~40 requests/min = safe under limit
+        time.sleep(3)
         
         # Load cached analysis from R2
         cache_data = load_analysis_cache(contact_id)
@@ -1231,5 +1239,12 @@ def rescore_single_profile(self, contact_id: str):
         
     except Exception as e:
         print(f"[RESCORE] Error re-scoring {contact_id}: {e}")
-        # Retry after 60 seconds
-        raise self.retry(exc=e, countdown=60, max_retries=2)
+        
+        # If rate limit error, retry with longer delay
+        if "rate_limit" in str(e).lower() or "429" in str(e):
+            print(f"[RESCORE] Rate limit hit, retrying {contact_id} after 120s")
+            raise self.retry(exc=e, countdown=120, max_retries=3)
+        
+        # Other errors retry after 60s
+        raise self.retry(exc=e, countdown=60, max_retries=3)
+
