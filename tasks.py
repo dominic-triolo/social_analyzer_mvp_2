@@ -583,7 +583,7 @@ def transcribe_video_with_whisper(video_url: str) -> str:
 
 
 def analyze_content_item(media_url: str, media_format: str) -> Dict[str, Any]:
-    """Analyze a single content item"""
+    """Analyze a single content item - focus on POV, authenticity, vulnerability, engagement"""
     
     if media_format == 'IMAGE':
         response = client.chat.completions.create(
@@ -592,9 +592,26 @@ def analyze_content_item(media_url: str, media_format: str) -> Dict[str, Any]:
                 "role": "user",
                 "content": [{
                     "type": "text",
-                    "text": """Analyze this social media image covering: theme/topic, what creator shares, visual style, text/captions, creator visibility, monetization signs, CTAs, audience engagement style.
+                    "text": """Analyze this social media image for group travel host potential.
 
-Respond in JSON: {"summary": "3-4 sentence summary"}"""
+Focus on:
+1. NICHE/THEME: What specific content category/theme?
+2. CREATOR POV/PERSPECTIVE: Does the creator show their unique perspective, personality, or opinion (not just expertise)?
+3. AUTHENTICITY: Does creator share personal details about themselves?
+4. VULNERABILITY: Does creator show challenges, failures, or vulnerability?
+5. ENGAGEMENT FACILITATION: Does the content invite discourse or community connection?
+6. IN-PERSON EVENTS: Any visual signs of events, classes, retreats, trips?
+
+Respond in JSON:
+{
+  "summary": "3-4 sentence summary covering theme, creator's POV/personality, authenticity, and engagement",
+  "niche_theme": "specific category",
+  "shows_pov": true/false,
+  "shows_authenticity": true/false,
+  "shows_vulnerability": true/false,
+  "facilitates_engagement": true/false,
+  "event_promotion": true/false
+}"""
                 }, {
                     "type": "image_url",
                     "image_url": {"url": media_url}
@@ -604,7 +621,7 @@ Respond in JSON: {"summary": "3-4 sentence summary"}"""
         )
         
         result = json.loads(response.choices[0].message.content)
-        return {"type": "IMAGE", "url": media_url, "summary": result['summary']}
+        return {"type": "IMAGE", "url": media_url, **result}
     
     else:  # VIDEO
         transcript = transcribe_video_with_whisper(media_url)
@@ -613,17 +630,345 @@ Respond in JSON: {"summary": "3-4 sentence summary"}"""
             model="gpt-4o",
             messages=[{
                 "role": "user",
-                "content": f"""Based on this transcription, provide detailed summary covering: theme, what creator shares, how they address audience, monetization, CTAs, presence, tone.
+                "content": f"""Analyze this video transcript for group travel host potential.
 
 TRANSCRIPTION: {transcript}
 
-Respond in JSON: {{"summary": "3-4 sentence summary"}}"""
+Focus on:
+1. NICHE/THEME: What specific content category/theme?
+2. CREATOR POV/PERSPECTIVE: Does the creator show their unique perspective, personality, or opinion (not just expertise)?
+3. AUTHENTICITY: Does creator share personal details about themselves?
+4. VULNERABILITY: Does creator show challenges, failures, or vulnerability?
+5. ENGAGEMENT FACILITATION: Does the content invite discourse or community connection?
+6. IN-PERSON EVENTS: Any mentions of events, classes, retreats, trips?
+
+Respond in JSON:
+{{
+  "summary": "3-4 sentence summary covering theme, creator's POV/personality, authenticity, and engagement",
+  "niche_theme": "specific category",
+  "shows_pov": true/false,
+  "shows_authenticity": true/false,
+  "shows_vulnerability": true/false,
+  "facilitates_engagement": true/false,
+  "event_promotion": true/false
+}}"""
             }],
             response_format={"type": "json_object"}
         )
         
         result = json.loads(response.choices[0].message.content)
-        return {"type": "VIDEO", "url": media_url, "summary": result['summary']}
+        return {"type": "VIDEO", "url": media_url, **result}
+
+
+def analyze_bio_evidence(bio: str) -> Dict[str, Any]:
+    """
+    Extract structured evidence from Instagram bio
+    Focus: niche identity, in-person events, community platforms, monetization
+    """
+    if not bio or len(bio.strip()) < 10:
+        return {
+            "niche_signals": {"niche_identified": False, "niche_description": "", "confidence": 0.0},
+            "in_person_events": {"evidence_found": False, "event_types": [], "confidence": 0.0},
+            "community_platforms": {"evidence_found": False, "platforms": [], "confidence": 0.0},
+            "monetization": {"evidence_found": False, "types": [], "confidence": 0.0}
+        }
+    
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{
+            "role": "user",
+            "content": f"""Analyze this Instagram bio for group travel host potential.
+
+BIO: {bio}
+
+Extract evidence for:
+
+1. NICHE IDENTITY: Does the creator clearly identify their niche/content focus?
+   - Look for: travel, food, recipes, wellness, yoga, fitness, art, design, etc.
+   - Examples: "Food blogger", "Wellness coach", "Asian cuisine enthusiast"
+   
+2. IN-PERSON EVENTS: Signs of hosting in-person gatherings?
+   - Look for: classes, workshops, coaching, retreats, trips, tours, meetups
+   - These are HIGH VALUE signals for group travel potential
+   
+3. COMMUNITY PLATFORMS: Owned communication channels?
+   - Look for: podcast, Discord, email list, newsletter, Patreon, private group, membership
+   - Must be platforms where audience actively joins/subscribes
+   
+4. MONETIZATION: Signs of selling products/services?
+   - Look for: courses, coaching, products, merch, services, brand deals
+   - Does NOT include donations or "support me"
+
+Respond ONLY with JSON:
+{{
+  "niche_signals": {{
+    "niche_identified": true/false,
+    "niche_description": "Brief description of niche/focus",
+    "confidence": 0.0-1.0
+  }},
+  "in_person_events": {{
+    "evidence_found": true/false,
+    "event_types": ["list", "of", "event", "types"],
+    "confidence": 0.0-1.0
+  }},
+  "community_platforms": {{
+    "evidence_found": true/false,
+    "platforms": ["list", "of", "platforms"],
+    "confidence": 0.0-1.0
+  }},
+  "monetization": {{
+    "evidence_found": true/false,
+    "types": ["list", "of", "monetization", "types"],
+    "confidence": 0.0-1.0
+  }}
+}}"""
+        }],
+        response_format={"type": "json_object"}
+    )
+    
+    result = json.loads(response.choices[0].message.content)
+    print(f"Bio Evidence: {json.dumps(result, indent=2)}")
+    return result
+
+
+def analyze_caption_evidence(captions: List[str]) -> Dict[str, Any]:
+    """
+    Extract structured evidence from Instagram captions (up to 12 posts)
+    Focus: in-person events, community channels, audience questions, authenticity, vulnerability
+    """
+    if not captions:
+        return {
+            "in_person_events": {"evidence_found": False, "mention_count": 0, "confidence": 0.0},
+            "community_platforms": {"evidence_found": False, "mention_count": 0, "confidence": 0.0},
+            "audience_engagement": {"asks_questions": False, "question_count": 0, "confidence": 0.0},
+            "authenticity_vulnerability": {"shares_personal_details": False, "shows_vulnerability": False, "degree": 0.0, "post_count": 0}
+        }
+    
+    # Truncate captions to first 500 chars
+    truncated_captions = [cap[:500] if cap else "" for cap in captions]
+    captions_text = "\n\n---\n\n".join([f"CAPTION {i+1}: {cap}" for i, cap in enumerate(truncated_captions) if cap])
+    
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{
+            "role": "user",
+            "content": f"""Analyze these Instagram captions for group travel host potential.
+
+{captions_text}
+
+Extract evidence for:
+
+1. IN-PERSON EVENTS: Mentions of classes, workshops, coaching, retreats, trips, tours?
+   - Count how many captions mention these (HIGH VALUE signals)
+   
+2. COMMUNITY PLATFORMS: Mentions of private groups, Discord, podcast, email list?
+   - Count how many captions advertise these
+   
+3. AUDIENCE ENGAGEMENT: Does creator ask questions to their audience?
+   - Look for: "What do you think?", "Have you tried?", "Tell me about..."
+   - Count how many captions include questions
+   
+4. AUTHENTICITY & VULNERABILITY: Does creator share personal details or show vulnerability?
+   - Personal details: family, background, personal experiences, opinions
+   - Vulnerability: challenges, failures, fears, growth
+   - Rate DEGREE: How much do they open up across ALL captions? (0.0-1.0 scale)
+   - Count how many captions show this
+
+Respond ONLY with JSON:
+{{
+  "in_person_events": {{
+    "evidence_found": true/false,
+    "mention_count": 0-12,
+    "confidence": 0.0-1.0
+  }},
+  "community_platforms": {{
+    "evidence_found": true/false,
+    "mention_count": 0-12,
+    "confidence": 0.0-1.0
+  }},
+  "audience_engagement": {{
+    "asks_questions": true/false,
+    "question_count": 0-12,
+    "confidence": 0.0-1.0
+  }},
+  "authenticity_vulnerability": {{
+    "shares_personal_details": true/false,
+    "shows_vulnerability": true/false,
+    "degree": 0.0-1.0,
+    "post_count": 0-12
+  }}
+}}"""
+        }],
+        response_format={"type": "json_object"}
+    )
+    
+    result = json.loads(response.choices[0].message.content)
+    print(f"Caption Evidence: {json.dumps(result, indent=2)}")
+    return result
+
+
+def create_thumbnail_grid(thumbnail_urls: List[str], contact_id: str) -> str:
+    """
+    Create a 3x4 grid image from up to 12 thumbnails and upload to R2
+    Returns: R2 URL of the grid image
+    """
+    from PIL import Image
+    import io
+    
+    # Download thumbnails
+    images = []
+    for url in thumbnail_urls[:12]:  # Max 12
+        try:
+            response = requests.get(url, timeout=10)
+            img = Image.open(io.BytesIO(response.content))
+            # Resize to standard size (400x400)
+            img = img.resize((400, 400), Image.Resampling.LANCZOS)
+            images.append(img)
+        except Exception as e:
+            print(f"Error loading thumbnail {url}: {e}")
+            # Create blank placeholder
+            images.append(Image.new('RGB', (400, 400), color='gray'))
+    
+    # Pad to 12 if needed
+    while len(images) < 12:
+        images.append(Image.new('RGB', (400, 400), color='lightgray'))
+    
+    # Create 3x4 grid (3 columns, 4 rows)
+    grid_width = 400 * 3
+    grid_height = 400 * 4
+    grid = Image.new('RGB', (grid_width, grid_height))
+    
+    for idx, img in enumerate(images[:12]):
+        col = idx % 3
+        row = idx // 3
+        x = col * 400
+        y = row * 400
+        grid.paste(img, (x, y))
+    
+    # Upload to R2
+    buffer = io.BytesIO()
+    grid.save(buffer, format='JPEG', quality=85)
+    buffer.seek(0)
+    
+    key = f"thumbnail-grids/{contact_id}.jpg"
+    r2_client.put_object(
+        Bucket=R2_BUCKET_NAME,
+        Key=key,
+        Body=buffer.getvalue(),
+        ContentType='image/jpeg'
+    )
+    
+    grid_url = f"https://{R2_PUBLIC_DOMAIN}/{key}"
+    print(f"Thumbnail grid created: {grid_url}")
+    return grid_url
+
+
+def analyze_thumbnail_evidence(thumbnail_urls: List[str], engagement_data: List[Dict], contact_id: str) -> Dict[str, Any]:
+    """
+    Extract structured evidence from thumbnail grid (up to 12 posts)
+    Focus: creator visibility, niche consistency, engagement metrics, event promotion
+    """
+    if not thumbnail_urls:
+        return {
+            "creator_visibility": {"visible_in_content": False, "frequency": "none", "confidence": 0.0},
+            "niche_consistency": {"consistent_theme": False, "niche_description": "", "confidence": 0.0},
+            "event_promotion": {"evidence_found": False, "post_count": 0, "confidence": 0.0},
+            "engagement_metrics": {"posts_above_threshold": 0, "posts_below_threshold": 0, "posts_hidden": 0}
+        }
+    
+    # Create grid image
+    grid_url = create_thumbnail_grid(thumbnail_urls, contact_id)
+    
+    # Calculate engagement metrics
+    posts_above = 0
+    posts_below = 0
+    posts_hidden = 0
+    
+    for data in engagement_data:
+        if data.get('is_pinned', False):
+            continue  # Skip pinned posts
+        
+        if data.get('likes_and_views_disabled', False):
+            posts_hidden += 1
+        else:
+            eng = data.get('engagement', {})
+            likes = eng.get('like_count', 0) or 0
+            comments = eng.get('comment_count', 0) or 0
+            
+            if likes >= 150 and comments >= 15:
+                posts_above += 1
+            else:
+                posts_below += 1
+    
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{
+            "role": "user",
+            "content": [{
+                "type": "text",
+                "text": """Analyze this Instagram thumbnail grid (3x4 layout, 12 posts) for group travel host potential.
+
+Extract evidence for:
+
+1. CREATOR VISIBILITY: Is the creator visible as a person in the thumbnails?
+   - Look for: face, full body, recognizable person
+   - Frequency: "most" (8+ posts), "some" (4-7 posts), "rare" (1-3 posts), "none"
+   
+2. NICHE CONSISTENCY: Do thumbnails show a consistent content theme/category?
+   - Look for: repeated visual patterns, consistent subject matter
+   - Describe the niche if identifiable
+   
+3. EVENT PROMOTION: Visual signs of in-person events?
+   - Look for: text overlays mentioning events, retreat/trip photos, class/workshop imagery
+   - Count how many posts show this
+   
+4. AUDIENCE ENGAGEMENT CUES: Do visible text overlays suggest engagement?
+   - Look for text like: "do X with me", "come try X", "going to X", question marks
+   - Any calls to action or invitations visible?
+
+Respond ONLY with JSON:
+{
+  "creator_visibility": {
+    "visible_in_content": true/false,
+    "frequency": "most/some/rare/none",
+    "confidence": 0.0-1.0
+  },
+  "niche_consistency": {
+    "consistent_theme": true/false,
+    "niche_description": "Brief description of visual theme",
+    "confidence": 0.0-1.0
+  },
+  "event_promotion": {
+    "evidence_found": true/false,
+    "post_count": 0-12,
+    "confidence": 0.0-1.0
+  },
+  "audience_engagement_cues": {
+    "invitational_language": true/false,
+    "post_count": 0-12,
+    "confidence": 0.0-1.0
+  }
+}"""
+            }, {
+                "type": "image_url",
+                "image_url": {"url": grid_url}
+            }]
+        }],
+        response_format={"type": "json_object"}
+    )
+    
+    result = json.loads(response.choices[0].message.content)
+    
+    # Add engagement metrics
+    result['engagement_metrics'] = {
+        "posts_above_threshold": posts_above,
+        "posts_below_threshold": posts_below,
+        "posts_hidden": posts_hidden,
+        "posts_analyzed": len(engagement_data)
+    }
+    
+    print(f"Thumbnail Evidence: {json.dumps(result, indent=2)}")
+    return result
 
 
 def generate_creator_profile(content_analyses: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -755,170 +1100,235 @@ def calculate_engagement_penalties(content_analyses: List[Dict]) -> Dict[str, fl
     }
 
 
-def generate_lead_score(content_analyses: List[Dict[str, Any]], creator_profile: Dict[str, Any]) -> Dict[str, Any]:
-    """Generate TrovaTrip lead score based on ICP criteria - v2.1 (Category-Specific Examples)"""
-    summaries = [f"Content {idx} ({item['type']}): {item['summary']}" for idx, item in enumerate(content_analyses, 1)]
-    combined = "\n\n".join(summaries)
+# New evidence-based scoring function to replace generate_lead_score
+
+def generate_evidence_based_score(
+    bio_evidence: Dict[str, Any],
+    caption_evidence: Dict[str, Any],
+    thumbnail_evidence: Dict[str, Any],
+    content_analyses: List[Dict[str, Any]],
+    creator_profile: Dict[str, Any],
+    follower_count: int
+) -> Dict[str, Any]:
+    """
+    Generate TrovaTrip lead score using evidence-based approach - v3.0
     
-    # Get primary category for category-specific examples
+    Uses structured evidence from multiple sources to calculate 5 section scores,
+    then applies follower boost, engagement adjustments, and category penalty.
+    """
+    
+    # Get primary category and examples
     primary_category = creator_profile.get('primary_category', 'Lifestyle')
-    
-    # Format category-specific examples
     category_examples_text = format_category_examples(primary_category)
     
-    profile_context = f"""PROFILE:
-- Category: {creator_profile.get('content_category')}
-- Primary Category: {primary_category}
-- Types: {creator_profile.get('content_types')}
-- Engagement: {creator_profile.get('audience_engagement')}
-- Presence: {creator_profile.get('creator_presence')}
-- Monetization: {creator_profile.get('monetization')}
-- Community: {creator_profile.get('community_building')}"""
+    # Prepare content summaries
+    content_summaries = []
+    for idx, item in enumerate(content_analyses, 1):
+        summary_parts = [f"Content {idx} ({item['type']}): {item.get('summary', '')}"]
+        if item.get('shows_pov'):
+            summary_parts.append("Shows POV/perspective")
+        if item.get('shows_authenticity'):
+            summary_parts.append("Shows authenticity")
+        if item.get('shows_vulnerability'):
+            summary_parts.append("Shows vulnerability")
+        content_summaries.append(" | ".join(summary_parts))
     
+    combined_summaries = "\n\n".join(content_summaries)
+    
+    # Build evidence summary for GPT
+    evidence_summary = f"""
+=== EVIDENCE GATHERED ===
+
+BIO EVIDENCE:
+- Niche identified: {bio_evidence.get('niche_signals', {}).get('niche_identified', False)}
+  Description: {bio_evidence.get('niche_signals', {}).get('niche_description', 'N/A')}
+- In-person events: {bio_evidence.get('in_person_events', {}).get('evidence_found', False)}
+  Types: {', '.join(bio_evidence.get('in_person_events', {}).get('event_types', []))}
+- Community platforms: {bio_evidence.get('community_platforms', {}).get('evidence_found', False)}
+  Platforms: {', '.join(bio_evidence.get('community_platforms', {}).get('platforms', []))}
+- Monetization: {bio_evidence.get('monetization', {}).get('evidence_found', False)}
+  Types: {', '.join(bio_evidence.get('monetization', {}).get('types', []))}
+
+THUMBNAIL GRID EVIDENCE (12 posts):
+- Creator visibility: {thumbnail_evidence.get('creator_visibility', {}).get('frequency', 'none')}
+- Niche consistency: {thumbnail_evidence.get('niche_consistency', {}).get('consistent_theme', False)}
+  Theme: {thumbnail_evidence.get('niche_consistency', {}).get('niche_description', 'N/A')}
+- Event promotion posts: {thumbnail_evidence.get('event_promotion', {}).get('post_count', 0)}/12
+- Engagement cues: {thumbnail_evidence.get('audience_engagement_cues', {}).get('post_count', 0)}/12
+
+CAPTION EVIDENCE (12 posts):
+- In-person event mentions: {caption_evidence.get('in_person_events', {}).get('mention_count', 0)}/12 posts
+- Community platform mentions: {caption_evidence.get('community_platforms', {}).get('mention_count', 0)}/12 posts
+- Questions to audience: {caption_evidence.get('audience_engagement', {}).get('question_count', 0)}/12 posts
+- Authenticity/vulnerability degree: {caption_evidence.get('authenticity_vulnerability', {}).get('degree', 0.0):.2f}/1.0
+  Posts showing this: {caption_evidence.get('authenticity_vulnerability', {}).get('post_count', 0)}/12
+
+DEEP CONTENT ANALYSIS (3 posts):
+{combined_summaries}
+
+CREATOR PROFILE:
+- Primary Category: {primary_category}
+- Content Types: {creator_profile.get('content_types', 'N/A')}
+- Presence: {creator_profile.get('creator_presence', 'N/A')}
+"""
+    
+    # Call GPT for holistic scoring
     response = client.chat.completions.create(
         model="gpt-4o",
         messages=[{
             "role": "system",
             "content": f"""You score creators for TrovaTrip, a group travel platform where creators host trips with their communities.
 
-CRITICAL: A good fit is someone whose AUDIENCE wants to meet each other AND the host in real life. Examples: book clubs traveling to Ireland, widow communities on healing retreats, food bloggers doing culinary tours, wellness enthusiasts doing fitness / wellness retreats
-
-BAD FITS to avoid:
-- Pure artists/performers with fan bases (not communities)
-- Very niche specialists where audience doesn't want group travel
-- Religious fundamentalists or creators with bigoted content (automatic low score)
-- Inclusive religious creators are acceptable if they build genuine community
-- Politicians
-- Creators who do only post transactional content (no invitation/CTA for audience to contribute/comment)
-- Creators without clear monetization (not business-minded)
-- Comedians who ONLY post clips from live shows, skits, and/or promotions for shows (heavily penalize in niche & trip_fit)
-- Musical artists who ONLY post songs and/or promotions for live shows (heavily penalize in niche & trip_fit)
-
-PERFORMER CONTENT PENALTY:
-If the creator is a comedian or musician who ONLY posts performance content (show clips, skits, songs, show promotions):
-- Score niche_and_audience_identity: 0.2-0.4 maximum (they have fans, not a community)
-- Score trip_fit_and_travelability: 0.1-0.3 maximum (audience wants shows, not travel together)
-- Reason: Their audience is passive consumers, not an engaged community that wants to connect with each other
-
-If the creator is a comedian/musician who ALSO posts lifestyle, behind-the-scenes, community building, or educational content:
-- Score normally based on community engagement
-- They can still score well if they build real community beyond performances
-
 {category_examples_text}
 
-SCORING CRITERIA (0.0-1.0 each):"""
-        }, {
-            "role": "user",
-            "content": f"""{profile_context}
+CRITICAL SCORING PRINCIPLES:
+1. A good fit is someone whose AUDIENCE wants to meet EACH OTHER and the host
+2. In-person events (classes, retreats, trips) are HIGH VALUE signals
+3. Weight evidence by frequency and confidence across multiple sources
+4. Entertainment profiles should be scored more harshly
 
-CONTENT: {combined}
+BAD FITS:
+- Pure performers with fan bases (not communities)
+- Religious fundamentalists with bigoted content
+- Comedians/musicians who ONLY post performance content
+- No monetization or business mindset
+- No clear niche or community identity
 
-Use the {primary_category} examples above to calibrate your scoring. Compare this profile to the GOOD FIT patterns and BAD FIT patterns shown.
-
-Score these 5 sections (0.0 to 1.0):
+SECTION DEFINITIONS:
 
 1. **niche_and_audience_identity** (0.0-1.0)
-   HIGH scores (0.7-1.0): Clear lifestyle niche where audience shares identity (including but not limited to: widows, DINKs, book lovers, history nerds, foodies, wellness seekers). People want to connect with EACH OTHER in addition to the host.
-   LOW scores (0.0-0.4): Generic content, pure performance/art fans (comedians/musicians posting ONLY show content), religious-primary content, very technical/specialized, or unclear who the audience is.
-   
-   CRITICAL: Comedians/musicians who ONLY post performance content (show clips, skits, songs) should score 0.2-0.4 maximum. They have fans, not community.
+   Weight evidence:
+   - Niche clearly identified across bio/thumbnails/content: 40%
+   - Niche consistency (same theme repeated): 20%
+   - Specific sub-category vs generic: 20%
+   - Audience identity implied by niche: 20%
 
-2. **host_likeability_and_content_style** (0.0-1.0)
-   HIGH scores (0.7-1.0): Face-forward, appears regularly on camera, warm/conversational tone, shares experiences, content facilitates connection with audience through vulnerability and authenticity, genuine interest in knowing their audience and having their audience know them.
-   LOW scores (0.0-0.4): Behind-the-camera content, aesthetic-only, formal/sterile tone, doesn't show personality, pure expertise without relatability.
+2. **creator_authenticity_and_presence** (0.0-1.0)
+   Weight evidence:
+   - Creator visible in content (frequency matters): 30%
+   - Shares personal details (count mentions): 25%
+   - Shows vulnerability (degree scale): 25%
+   - POV/perspective evident: 20%
 
 3. **monetization_and_business_mindset** (0.0-1.0)
-   HIGH scores (0.7-1.0): Already selling something (coaching, courses, products, Patreon, brand deals, services). Audience pays for access. Comfortable with sales/launches.
-   LOW scores (0.0-0.4): No monetization, only donations, free content only, or explicitly states "no monetization."
+   Weight evidence:
+   - Monetization (products, services, courses): 60%
+   - **IN-PERSON EVENTS (HEAVILY WEIGHTED)**: 40%
 
 4. **community_infrastructure** (0.0-1.0)
-   HIGH scores (0.7-1.0): Has owned channels (email list, podcast, YouTube, Patreon, Discord, membership, in-person groups, private Facebook group). Can reach audience directly.
-   LOW scores (0.0-0.4): Only social media presence, no owned channels mentioned, purely algorithm-dependent.
+   Weight evidence:
+   - Owned channels (podcast, email, Patreon, Discord): 50%
+   - **IN-PERSON EVENTS/COMMUNITY**: 30%
+   - Community platform mentions: 20%
 
-5. **trip_fit_and_travelability** (0.0-1.0)
-   HIGH scores (0.7-1.0): Content naturally fits a trip (including but not limited to food/wine tours, history tours, retreats of any kind, adventure travel, cultural experiences). Audience has money/time for travel (including but not limited to professionals, DINKs, older audiences). Already travels or audience asks to travel together.
-   LOW scores (0.0-0.4): No natural trip concept, very young/broke audience, content doesn't translate to group experiences, highly specialized/technical focus.
-   
-   CRITICAL: Comedians/musicians who ONLY post performance content should score 0.1-0.3 maximum. Their audience wants shows, not group travel experiences.
+5. **engagement_and_connection** (0.0-1.0)
+   Weight evidence:
+   - Asks questions / prompts discourse (frequency): 30%
+   - Degree of audience connection facilitated: 40%
+   - Content facilitates engagement: 30%
 
-Also provide:
-- **combined_lead_score**: Weighted average: (niche × 0.25) + (likeability × 0.20) + (monetization × 0.25) + (community × 0.15) + (trip_fit × 0.15)
-- **score_reasoning**: 2-3 sentences on fit for group travel with their community. Reference similarities to GOOD FIT or BAD FIT examples if relevant.
+For each section, assess TO WHAT DEGREE the creator demonstrates these qualities.
+Use the FREQUENCY and CONFIDENCE of signals across ALL evidence sources.
 
-RESPOND ONLY with JSON:
+RESPOND ONLY with JSON (no preamble):
 {{
-  "niche_and_audience_identity": 0.0,
-  "host_likeability_and_content_style": 0.0,
-  "monetization_and_business_mindset": 0.0,
-  "community_infrastructure": 0.0,
-  "trip_fit_and_travelability": 0.0,
-  "combined_lead_score": 0.0,
-  "score_reasoning": "..."
+  "niche_and_audience_identity": 0.0-1.0,
+  "creator_authenticity_and_presence": 0.0-1.0,
+  "monetization_and_business_mindset": 0.0-1.0,
+  "community_infrastructure": 0.0-1.0,
+  "engagement_and_connection": 0.0-1.0,
+  "score_reasoning": "2-3 sentences explaining fit for group travel. Reference evidence frequency and confidence."
 }}"""
+        }, {
+            "role": "user",
+            "content": evidence_summary
         }],
         response_format={"type": "json_object"}
     )
     
     result = json.loads(response.choices[0].message.content)
-    print(f"GPT Lead Score Response: {json.dumps(result, indent=2)}")
+    print(f"Evidence-Based Score Response: {json.dumps(result, indent=2)}")
     
-    # Calculate engagement penalties
-    engagement_penalties = calculate_engagement_penalties(content_analyses)
+    # Extract section scores
+    niche = result.get('niche_and_audience_identity', 0.0)
+    authenticity = result.get('creator_authenticity_and_presence', 0.0)
+    monetization = result.get('monetization_and_business_mindset', 0.0)
+    community = result.get('community_infrastructure', 0.0)
+    engagement = result.get('engagement_and_connection', 0.0)
     
-    # Extract section scores from GPT
-    niche_and_audience_score = result.get('niche_and_audience_identity', 0.0)
-    host_likeability_score = result.get('host_likeability_and_content_style', 0.0)
-    monetization_score = result.get('monetization_and_business_mindset', 0.0)
-    community_infrastructure_score = result.get('community_infrastructure', 0.0)
-    trip_fit_score = result.get('trip_fit_and_travelability', 0.0)
-    
-    # Apply engagement penalties to niche & audience score
-    if engagement_penalties['total_penalty'] > 0:
-        original_niche_score = niche_and_audience_score
-        niche_and_audience_score = max(0.0, niche_and_audience_score - engagement_penalties['total_penalty'])
-        
-        print(f"  Engagement penalties applied: -{engagement_penalties['total_penalty']:.3f}")
-        print(f"    Hidden engagement posts: {engagement_penalties['hidden_count']} (-{engagement_penalties['hidden_engagement_penalty']:.3f})")
-        print(f"    Low engagement posts: {engagement_penalties['low_engagement_count']} (-{engagement_penalties['low_engagement_penalty']:.3f})")
-        print(f"    Niche & Audience Score: {original_niche_score:.3f} → {niche_and_audience_score:.3f}")
-    
-    # Build section scores dict with penalized niche score
-    section_scores = {
-        "niche_and_audience_identity": niche_and_audience_score,
-        "host_likeability_and_content_style": host_likeability_score,
-        "monetization_and_business_mindset": monetization_score,
-        "community_infrastructure": community_infrastructure_score,
-        "trip_fit_and_travelability": trip_fit_score
-    }
-    
-    # Calculate combined score using UPDATED weights (V2.1)
-    combined_lead_score = (
-        (niche_and_audience_score * 0.30) +        # Updated from 0.25
-        (host_likeability_score * 0.25) +          # Updated from 0.20
-        (monetization_score * 0.25) +              # Same
-        (community_infrastructure_score * 0.10) +  # Updated from 0.15
-        (trip_fit_score * 0.10)                    # Updated from 0.15
+    # Calculate base combined score (V2.1 weights)
+    base_score = (
+        (niche * 0.30) +
+        (authenticity * 0.25) +
+        (monetization * 0.25) +
+        (community * 0.10) +
+        (engagement * 0.10)
     )
     
-    # Update score reasoning to mention penalties if applied
+    # Follower count boost (TIERED, not cumulative)
+    if follower_count >= 100000:
+        follower_boost = 0.15
+    elif follower_count >= 75000:
+        follower_boost = 0.10
+    elif follower_count >= 50000:
+        follower_boost = 0.05
+    else:
+        follower_boost = 0.0
+    
+    # Engagement metrics adjustment
+    eng_metrics = thumbnail_evidence.get('engagement_metrics', {})
+    posts_above = eng_metrics.get('posts_above_threshold', 0)
+    posts_below = eng_metrics.get('posts_below_threshold', 0)
+    posts_hidden = eng_metrics.get('posts_hidden', 0)
+    
+    engagement_adjustment = (
+        (posts_above * 0.03) -   # Boost for high engagement
+        (posts_below * 0.03) -   # Penalty for low engagement
+        (posts_hidden * 0.05)    # Penalty for hidden engagement
+    )
+    engagement_adjustment = max(-0.20, min(0.20, engagement_adjustment))  # Cap at ±0.20
+    
+    # Entertainment category penalty (ALL profiles)
+    category_penalty = -0.05 if primary_category == "Entertainment" else 0.0
+    
+    # Calculate final score
+    final_score = base_score + follower_boost + engagement_adjustment + category_penalty
+    final_score = max(0.0, min(1.0, final_score))  # Clamp to 0.0-1.0
+    
+    # Build detailed reasoning
     score_reasoning = result.get('score_reasoning', '')
-    if engagement_penalties['total_penalty'] > 0:
-        penalty_details = []
-        if engagement_penalties['hidden_count'] > 0:
-            penalty_details.append(f"{engagement_penalties['hidden_count']} hidden engagement posts")
-        if engagement_penalties['low_engagement_count'] > 0:
-            penalty_details.append(f"{engagement_penalties['low_engagement_count']} low engagement posts")
-        
-        penalty_note = f" | ENGAGEMENT PENALTIES: {', '.join(penalty_details)} (-{engagement_penalties['total_penalty']:.3f})"
-        score_reasoning = score_reasoning + penalty_note
+    
+    adjustments = []
+    if follower_boost > 0:
+        adjustments.append(f"Follower boost: +{follower_boost:.2f} ({follower_count:,} followers)")
+    if engagement_adjustment != 0:
+        adjustments.append(f"Engagement: {engagement_adjustment:+.2f} ({posts_above} above / {posts_below} below / {posts_hidden} hidden)")
+    if category_penalty != 0:
+        adjustments.append(f"Entertainment penalty: {category_penalty:.2f}")
+    
+    if adjustments:
+        score_reasoning += " | ADJUSTMENTS: " + "; ".join(adjustments)
+    
+    # Build section scores dict
+    section_scores = {
+        "niche_and_audience_identity": niche,
+        "creator_authenticity_and_presence": authenticity,
+        "monetization_and_business_mindset": monetization,
+        "community_infrastructure": community,
+        "engagement_and_connection": engagement
+    }
+    
+    print(f"  Base score: {base_score:.3f}")
+    print(f"  Follower boost: +{follower_boost:.3f}")
+    print(f"  Engagement adjustment: {engagement_adjustment:+.3f}")
+    print(f"  Category penalty: {category_penalty:+.3f}")
+    print(f"  FINAL SCORE: {final_score:.3f}")
     
     return {
         "section_scores": section_scores,
-        "lead_score": combined_lead_score,
+        "lead_score": final_score,
         "score_reasoning": score_reasoning
     }
-
-
 def send_to_hubspot(contact_id: str, lead_score: float, section_scores: Dict, score_reasoning: str, 
                     creator_profile: Dict, content_analyses: List[Dict]):
     """Send results to HubSpot with validation"""
@@ -1000,11 +1410,14 @@ def send_to_hubspot(contact_id: str, lead_score: float, section_scores: Dict, sc
         "contact_id": contact_id,
         "lead_score": lead_score,
         "score_reasoning": score_reasoning,
+        # Support both old (v2.1) and new (v3.0) section score names
         "score_niche_and_audience": section_scores.get('niche_and_audience_identity', 0.0),
-        "score_host_likeability": section_scores.get('host_likeability_and_content_style', 0.0),
+        "score_host_likeability": section_scores.get('creator_authenticity_and_presence', 
+                                                      section_scores.get('host_likeability_and_content_style', 0.0)),
         "score_monetization": section_scores.get('monetization_and_business_mindset', 0.0),
         "score_community_infrastructure": section_scores.get('community_infrastructure', 0.0),
-        "score_trip_fit": section_scores.get('trip_fit_and_travelability', 0.0),
+        "score_trip_fit": section_scores.get('engagement_and_connection',
+                                             section_scores.get('trip_fit_and_travelability', 0.0)),
         "content_summary_structured": "\n\n".join(content_summaries),
         "profile_category": safe_str(creator_profile.get('content_category')),
         "primary_category": safe_str(creator_profile.get('primary_category', 'Lifestyle')),
@@ -1113,10 +1526,10 @@ def process_creator_profile(self, contact_id: str, profile_url: str, bio: str = 
                 lead_score=0.20,
                 section_scores={
                     'niche_and_audience_identity': 0.20,
-                    'host_likeability_and_content_style': 0.20,
+                    'creator_authenticity_and_presence': 0.20,
                     'monetization_and_business_mindset': 0.20,
                     'community_infrastructure': 0.20,
-                    'trip_fit_and_travelability': 0.20
+                    'engagement_and_connection': 0.20
                 },
                 score_reasoning=f"Pre-screen rejected: {pre_screen_result.get('reasoning')}",
                 creator_profile={'content_category': 'Pre-screened out'},
@@ -1200,6 +1613,12 @@ def process_creator_profile(self, contact_id: str, profile_url: str, bio: str = 
                 rehosted_url = rehost_media_on_r2(media_url, contact_id, media_format)
                 analysis = analyze_content_item(rehosted_url, media_format)
                 analysis['description'] = item.get('description', '')
+                
+                # Add engagement metadata for penalty calculation
+                analysis['is_pinned'] = item.get('is_pinned', False)
+                analysis['likes_and_views_disabled'] = item.get('likes_and_views_disabled', False)
+                analysis['engagement'] = item.get('engagement', {})
+                
                 content_analyses.append(analysis)
                 print(f"Item {idx}: Successfully analyzed")
                 
@@ -1211,6 +1630,45 @@ def process_creator_profile(self, contact_id: str, profile_url: str, bio: str = 
             return {"status": "error", "message": "Could not analyze any selected content items"}
         
         print(f"Successfully analyzed {len(content_analyses)} items")
+        
+        # Step 6.5: Gather evidence from bio, captions, and thumbnails (all 12 posts)
+        self.update_state(state='PROGRESS', meta={'stage': 'Gathering profile evidence'})
+        
+        # Extract thumbnail URLs and captions from all 12 posts
+        thumbnail_urls = []
+        captions = []
+        engagement_data = []
+        
+        for item in filtered_items[:12]:  # Analyze up to 12 posts
+            # Get thumbnail
+            thumb_url = item.get('thumbnail_url')
+            if thumb_url:
+                thumbnail_urls.append(thumb_url)
+            
+            # Get caption (truncate to 500 chars)
+            caption = item.get('description', '') or item.get('title', '')
+            if caption:
+                captions.append(caption[:500])
+            
+            # Get engagement metadata
+            engagement_data.append({
+                'is_pinned': item.get('is_pinned', False),
+                'likes_and_views_disabled': item.get('likes_and_views_disabled', False),
+                'engagement': item.get('engagement', {})
+            })
+        
+        print(f"Gathering evidence from: {len(thumbnail_urls)} thumbnails, {len(captions)} captions")
+        
+        # Analyze bio
+        bio_evidence = analyze_bio_evidence(bio)
+        
+        # Analyze captions
+        caption_evidence = analyze_caption_evidence(captions)
+        
+        # Analyze thumbnail grid
+        thumbnail_evidence = analyze_thumbnail_evidence(thumbnail_urls, engagement_data, contact_id)
+        
+        print("Evidence gathering complete")
         
         # Step 7: Generate creator profile
         self.update_state(state='PROGRESS', meta={'stage': 'Generating creator profile'})
@@ -1224,15 +1682,25 @@ def process_creator_profile(self, contact_id: str, profile_url: str, bio: str = 
             'follower_count': follower_count,
             'content_analyses': content_analyses,
             'creator_profile': creator_profile,
+            'bio_evidence': bio_evidence,
+            'caption_evidence': caption_evidence,
+            'thumbnail_evidence': thumbnail_evidence,
             'has_travel_experience': has_travel_experience,
             'timestamp': datetime.now().isoformat(),
             'items_analyzed': len(content_analyses)
         }
         save_analysis_cache(contact_id, cache_data)
         
-        # Step 8: Calculate lead score
+        # Step 8: Calculate lead score using evidence-based approach
         self.update_state(state='PROGRESS', meta={'stage': 'Calculating lead score'})
-        lead_analysis = generate_lead_score(content_analyses, creator_profile)
+        lead_analysis = generate_evidence_based_score(
+            bio_evidence=bio_evidence,
+            caption_evidence=caption_evidence,
+            thumbnail_evidence=thumbnail_evidence,
+            content_analyses=content_analyses,
+            creator_profile=creator_profile,
+            follower_count=follower_count
+        )
         
         # Step 8.5: Boost score if travel experience detected
         # Ensures creators with group travel experience make it to manual review
@@ -1309,9 +1777,31 @@ def rescore_single_profile(self, contact_id: str):
         content_analyses = cache_data.get('content_analyses', [])
         creator_profile = cache_data.get('creator_profile', {})
         has_travel_experience = cache_data.get('has_travel_experience', False)
+        follower_count = cache_data.get('follower_count', 0)
         
-        # Re-score with V2.1 logic (category-specific examples)
-        lead_analysis = generate_lead_score(content_analyses, creator_profile)
+        # Get cached evidence (v3.0 profiles will have this)
+        bio_evidence = cache_data.get('bio_evidence')
+        caption_evidence = cache_data.get('caption_evidence')
+        thumbnail_evidence = cache_data.get('thumbnail_evidence')
+        
+        # Re-score with new evidence-based approach
+        if bio_evidence and caption_evidence and thumbnail_evidence:
+            print(f"[RESCORE] Using evidence-based scoring (v3.0)")
+            lead_analysis = generate_evidence_based_score(
+                bio_evidence=bio_evidence,
+                caption_evidence=caption_evidence,
+                thumbnail_evidence=thumbnail_evidence,
+                content_analyses=content_analyses,
+                creator_profile=creator_profile,
+                follower_count=follower_count
+            )
+        else:
+            print(f"[RESCORE] Missing evidence, profile needs full re-analysis")
+            return {
+                'status': 'error',
+                'contact_id': contact_id,
+                'reason': 'Profile analyzed with old version, needs full re-analysis'
+            }
         
         # Apply travel boost if applicable
         if has_travel_experience and lead_analysis['lead_score'] < 0.50:
