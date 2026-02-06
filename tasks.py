@@ -858,7 +858,8 @@ def create_thumbnail_grid(thumbnail_urls: List[str], contact_id: str) -> str:
         ContentType='image/jpeg'
     )
     
-    grid_url = f"https://{R2_PUBLIC_DOMAIN}/{key}"
+    # Use R2_PUBLIC_URL environment variable
+    grid_url = f"{R2_PUBLIC_URL}/{key}"
     print(f"Thumbnail grid created: {grid_url}")
     return grid_url
 
