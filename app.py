@@ -9,6 +9,7 @@ import base64
 import hashlib
 import boto3
 from botocore.client import Config
+from discovery_routes import *
 
 app = Flask(__name__)
 
