@@ -1010,8 +1010,104 @@ def health_check():
     return jsonify({"status": "healthy"}), 200
 
 
-# Import discovery routes at the END to avoid circular imports
-import discovery_routes
+# ============================================================================
+# DISCOVERY ROUTES
+# ============================================================================
+
+@app.route('/discovery')
+def discovery_page():
+    """Discovery UI page"""
+    return render_template('discovery.html')
+
+
+@app.route('/api/discovery/instagram', methods=['POST'])
+def start_instagram_discovery():
+    """Start Instagram discovery job"""
+    try:
+        from tasks import discover_instagram_profiles
+        
+        user_filters = request.json or {}
+        
+        # Validate max_results
+        max_results = user_filters.get('max_results', 500)
+        if not isinstance(max_results, int) or max_results < 1:
+            return jsonify({'error': 'max_results must be a positive integer'}), 400
+        if max_results > 4000:
+            return jsonify({'error': 'max_results cannot exceed 4000'}), 400
+        
+        # Validate follower count
+        follower_count = user_filters.get('follower_count', {})
+        if follower_count:
+            min_followers = follower_count.get('min')
+            max_followers = follower_count.get('max')
+            
+            if min_followers and not isinstance(min_followers, int):
+                return jsonify({'error': 'follower_count.min must be an integer'}), 400
+            if max_followers and not isinstance(max_followers, int):
+                return jsonify({'error': 'follower_count.max must be an integer'}), 400
+            
+            if min_followers and max_followers and min_followers >= max_followers:
+                return jsonify({'error': 'follower_count.min must be less than max'}), 400
+        
+        # Validate lookalike (mutually exclusive)
+        lookalike_type = user_filters.get('lookalike_type')
+        lookalike_username = user_filters.get('lookalike_username', '').strip()
+        
+        if lookalike_type and lookalike_type not in ('creator', 'audience'):
+            return jsonify({'error': 'lookalike_type must be "creator" or "audience"'}), 400
+        
+        if lookalike_type and not lookalike_username:
+            return jsonify({'error': 'lookalike_username required when lookalike_type is set'}), 400
+        
+        # Queue discovery task
+        task = discover_instagram_profiles.delay(user_filters=user_filters)
+        job_id = str(task.id)
+        
+        # Initialize job tracking in Redis
+        r.setex(
+            f'discovery_job:{job_id}',
+            86400,
+            json.dumps({
+                'job_id': job_id,
+                'platform': 'instagram',
+                'status': 'queued',
+                'started_at': datetime.now().isoformat(),
+                'filters': user_filters,
+                'profiles_found': 0,
+                'new_contacts_created': 0,
+                'duplicates_skipped': 0
+            })
+        )
+        
+        return jsonify({'job_id': job_id, 'status': 'queued'}), 202
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/discovery/jobs/<job_id>')
+def get_discovery_job(job_id):
+    """Get discovery job status"""
+    job_data = r.get(f'discovery_job:{job_id}')
+    if not job_data:
+        return jsonify({'error': 'Job not found'}), 404
+    return jsonify(json.loads(job_data))
+
+
+@app.route('/api/discovery/jobs')
+def list_discovery_jobs():
+    """List recent discovery jobs"""
+    job_keys = r.keys('discovery_job:*')
+    jobs = []
+    for key in job_keys:
+        job_data = r.get(key)
+        if job_data:
+            try:
+                jobs.append(json.loads(job_data))
+            except json.JSONDecodeError:
+                continue
+    jobs.sort(key=lambda x: x.get('started_at', ''), reverse=True)
+    return jsonify(jobs)
 
 
 if __name__ == '__main__':
