@@ -9,9 +9,13 @@ import base64
 import hashlib
 import boto3
 from botocore.client import Config
-from discovery_routes import *
 
 app = Flask(__name__)
+
+# Initialize Redis connection (needed by discovery_routes)
+import redis
+redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+r = redis.from_url(redis_url, decode_responses=True)
 
 # Configuration from environment variables
 INSIGHTIQ_USERNAME = os.getenv('INSIGHTIQ_USERNAME')
@@ -224,10 +228,13 @@ def transcribe_video_with_whisper(video_url: str) -> str:
 
 
 def analyze_content_item(media_url: str, media_format: str) -> Dict[str, Any]:
-    """Analyze a single content item and return a summary"""
+    """
+    Analyze a single content item (image or video)
+    Returns summary and metadata
+    """
     
     if media_format == 'IMAGE':
-        # Use GPT-4 Vision for images
+        # Analyze image with GPT-4 Vision
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
@@ -236,21 +243,17 @@ def analyze_content_item(media_url: str, media_format: str) -> Dict[str, Any]:
                     "content": [
                         {
                             "type": "text",
-                            "text": """Analyze this social media image and provide a detailed summary covering:
+                            "text": """Analyze this social media image. Cover these aspects:
+- Theme/topic of the content
+- What the creator is showcasing or sharing
+- Visual style and composition
+- Any visible text or captions
+- Creator's visibility and presence in the image
+- Any signs of monetization (product placement, sponsorships, etc.)
+- Call-to-action elements
+- How the creator engages with their audience through this content
 
-1. Content theme/topic (e.g., fitness, fashion, food, travel, lifestyle, etc.)
-2. What the creator is sharing (advice, personal update, product showcase, tutorial, entertainment, storytelling, etc.)
-3. Visual composition and style
-4. Any text, captions, or messaging visible
-5. Whether the creator is visible in the image (and if so, how prominently)
-6. Signs of monetization (product placements, brand mentions, sponsored content indicators)
-7. Any calls-to-action or community building efforts (subscribe, join, follow, link in bio, etc.)
-8. How the creator addresses the audience (directly speaking to viewers, casual tone, professional, etc.)
-
-Respond in JSON format:
-{
-  "summary": "comprehensive 3-4 sentence summary covering the points above"
-}"""
+Respond in JSON format with a single "summary" field containing a 3-4 sentence analysis."""
                         },
                         {
                             "type": "image_url",
@@ -268,39 +271,32 @@ Respond in JSON format:
         return {
             "type": "IMAGE",
             "url": media_url,
-            "summary": result['summary']
+            "summary": result.get('summary', 'No summary available')
         }
     
     else:  # VIDEO
-        # Step 1: Transcribe video with Whisper
-        print(f"Transcribing video: {media_url}")
+        # First, transcribe the video
         transcript = transcribe_video_with_whisper(media_url)
         
-        # Step 2: Summarize the video using the transcription
-        print(f"Summarizing video based on transcription")
+        # Then analyze the transcript
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
                 {
                     "role": "user",
                     "content": f"""Based on this video transcription, provide a detailed summary covering:
-
-1. Content theme/topic (e.g., fitness advice, personal vlog, product review, tutorial, storytelling, etc.)
-2. What the creator is sharing (advice/expertise, personal experience, entertainment, education, product promotion, etc.)
-3. Main points and key messages
-4. How the creator addresses the audience (speaking directly to camera, using "you", asking questions, casual vs professional tone, etc.)
-5. Signs of monetization (mentions of sponsors, products, affiliate links, paid partnerships, etc.)
-6. Any calls-to-action or community building (subscribe, join mailing list/Patreon/Discord, visit website, etc.)
-7. The creator's presence and on-camera style
-8. Overall tone and approach
+- Theme and main topic
+- What the creator is sharing or teaching
+- How the creator addresses their audience
+- Any monetization elements (products, services, sponsorships)
+- Calls-to-action
+- Creator's on-camera presence and personality
+- Overall tone and style
 
 TRANSCRIPTION:
 {transcript}
 
-Respond in JSON format:
-{{
-  "summary": "comprehensive 3-4 sentence summary covering the points above"
-}}"""
+Respond in JSON format with a single "summary" field containing a 3-4 sentence analysis."""
                 }
             ],
             response_format={"type": "json_object"}
@@ -310,349 +306,176 @@ Respond in JSON format:
         return {
             "type": "VIDEO",
             "url": media_url,
-            "summary": result['summary']
+            "summary": result.get('summary', 'No summary available'),
+            "transcript": transcript
         }
 
 
 def generate_creator_profile(content_analyses: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Generate a structured creator profile based on content summaries"""
-    
-    # Extract all the individual summaries AND descriptions
+    """
+    Generate comprehensive creator profile from content summaries
+    Returns structured profile data
+    """
+    # Combine all content summaries
     summaries = []
     for idx, item in enumerate(content_analyses, 1):
         summary_text = f"Content {idx} ({item['type']}): {item['summary']}"
         if item.get('description'):
-            summary_text += f"\nOriginal Post Description: {item['description']}"
+            summary_text += f"\nOriginal caption: {item['description']}"
         summaries.append(summary_text)
     
     combined_summaries = "\n\n".join(summaries)
     
-    # Generate structured creator profile
+    # Generate profile with GPT-4
     response = client.chat.completions.create(
         model="gpt-4o",
         messages=[
             {
                 "role": "system",
-                "content": """You are a social media analyst who creates detailed creator profiles. Analyze the content summaries to understand the creator's content strategy, audience engagement, and monetization approach."""
+                "content": "You are an expert at analyzing social media creators to understand their content strategy, audience engagement approach, and monetization."
             },
             {
                 "role": "user",
-                "content": f"""Based on these content summaries, create a structured creator profile covering these aspects:
-
-1. Content Category/Theme: What is the primary category or theme of content this creator posts? (e.g., hiking/backpacking, fitness, fashion/beauty, books/literature, food/cooking, travel, technology, etc.)
-
-2. Content Types: What types of things does the creator share in their content? (e.g., advice/expertise, personal updates, entertaining content, educational content, product reviews, tutorials, storytelling, etc.)
-
-3. Audience Engagement: To what degree does the creator address their audience directly or invite them to join the discourse? (e.g., frequently speaks directly to camera, uses second-person language in captions, asks questions, encourages comments, rarely addresses audience directly, etc.)
-
-4. Creator Presence: How frequently is the creator in front of the camera or present in their content? (e.g., always visible, frequently visible, occasionally visible, rarely visible, never visible)
-
-5. Monetization: Does the creator monetize their audience by advertising products or services in their content? (e.g., yes with frequent ads, yes with occasional sponsorships, subtle product placements, no visible monetization)
-
-6. Community Building: Does the creator invite their audience to join a mailing list, Patreon, Discord, Substack, Facebook group, or other community platform in their content? (e.g., yes with specific calls-to-action, mentions community platforms, no community building efforts visible)
+                "content": f"""Based on these content summaries, create a structured creator profile covering:
+1. Content category (main niche/topic)
+2. Content types (formats they use)
+3. Audience engagement style
+4. Creator presence (on-camera personality)
+5. Monetization approach
+6. Community building methods
 
 CONTENT SUMMARIES:
 {combined_summaries}
 
-Respond in JSON format:
-{{
-  "content_category": "primary category/theme",
-  "content_types": ["type1", "type2", "type3"],
-  "audience_engagement": "description of how they engage audience",
-  "creator_presence": "description of their on-camera presence",
-  "monetization": "description of monetization approach",
-  "community_building": "description of community building efforts"
-}}"""
+Respond in JSON format with those 6 fields. Make each field descriptive but concise."""
+            }
+        ],
+        response_format={"type": "json_object"}
+    )
+    
+    return json.loads(response.choices[0].message.content)
+
+
+def generate_lead_score(content_analyses: List[Dict[str, Any]], creator_profile: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Generate TrovaTrip lead score based on content and profile
+    Returns section scores and combined score with reasoning
+    """
+    # Combine content summaries for scoring
+    summaries = [f"Content {idx} ({item['type']}): {item['summary']}" 
+                for idx, item in enumerate(content_analyses, 1)]
+    combined_summaries = "\n\n".join(summaries)
+    
+    # Format profile for scoring
+    profile_context = f"""CREATOR PROFILE:
+- Content Category: {creator_profile.get('content_category', 'Unknown')}
+- Content Types: {creator_profile.get('content_types', 'Unknown')}
+- Audience Engagement: {creator_profile.get('audience_engagement', 'Unknown')}
+- Creator Presence: {creator_profile.get('creator_presence', 'Unknown')}
+- Monetization: {creator_profile.get('monetization', 'Unknown')}
+- Community Building: {creator_profile.get('community_building', 'Unknown')}"""
+    
+    # Generate score with GPT-4
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {
+                "role": "system",
+                "content": """You are a TrovaTrip lead scorer. TrovaTrip is a group travel platform where creators host trips for their audiences.
+
+Score creators on 5 sections (each 0.0-1.0):
+1. niche_and_audience_identity: Clear niche, engaged audience, travel-compatible audience
+2. host_likeability_and_content_style: Authentic, personable, quality production
+3. monetization_and_business_mindset: Revenue streams, business-savvy, asks for money
+4. community_infrastructure: Email list, Patreon, Discord, ways to communicate
+5. trip_fit_and_travelability: Travel content, adventure-oriented, shows destinations
+
+Also provide a combined_lead_score (weighted average) and score_reasoning."""
+            },
+            {
+                "role": "user",
+                "content": f"""{profile_context}
+
+CONTENT SUMMARIES:
+{combined_summaries}
+
+Score each of the 5 TrovaTrip sections (0.0-1.0), provide combined score, and explain your reasoning.
+Respond in JSON with "section_scores" object, "combined_lead_score" number, and "score_reasoning" string."""
             }
         ],
         response_format={"type": "json_object"}
     )
     
     result = json.loads(response.choices[0].message.content)
-    return result
-
-
-
-
-from tasks import process_creator_profile
-
-@app.route('/webhook/async', methods=['POST'])
-def handle_webhook_async():
-    """Async webhook handler - returns immediately, processes in background"""
-    try:
-        data = request.get_json()
-        
-        contact_id = data.get('contact_id')
-        profile_url = data.get('profile_url')
-        bio = data.get('bio', '')
-        follower_count = data.get('follower_count', 0)
-        
-        if not all([contact_id, profile_url]):
-            return jsonify({"error": "Missing required fields: contact_id, profile_url"}), 400
-        
-        print(f"=== QUEUEING: {contact_id} ===")
-        if bio:
-            print(f"Bio: {bio[:100]}...")
-        if follower_count:
-            print(f"Follower count: {follower_count:,}")
-        
-        # Queue the task with profile data
-        task = process_creator_profile.delay(contact_id, profile_url, bio, follower_count)
-        
-        print(f"=== QUEUED: {contact_id} - Task ID: {task.id} ===")
-        
-        return jsonify({
-            "status": "queued",
-            "contact_id": contact_id,
-            "task_id": task.id,
-            "message": "Profile queued for processing"
-        }), 202
-        
-    except Exception as e:
-        print(f"Error queuing task: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/rescore/<contact_id>', methods=['POST'])
-def rescore_profile(contact_id):
-    """
-    Re-score a profile using cached analysis data
-    This allows iterating on scoring without re-running expensive API calls
-    """
-    try:
-        print(f"=== RE-SCORING: {contact_id} ===")
-        
-        # Import here to avoid circular imports
-        from tasks import load_analysis_cache, generate_lead_score, send_to_hubspot
-        
-        # Load cached analysis data
-        try:
-            cache_data = load_analysis_cache(contact_id)
-        except Exception as e:
-            return jsonify({
-                "error": "Cache not found",
-                "message": f"No cached analysis found for contact {contact_id}. Profile must be analyzed first.",
-                "details": str(e)
-            }), 404
-        
-        # Extract cached data
-        content_analyses = cache_data.get('content_analyses', [])
-        creator_profile = cache_data.get('creator_profile', {})
-        has_travel_experience = cache_data.get('has_travel_experience', False)
-        
-        if not content_analyses or not creator_profile:
-            return jsonify({
-                "error": "Invalid cache data",
-                "message": "Cached data is missing required fields"
-            }), 400
-        
-        print(f"Loaded cache: {len(content_analyses)} content analyses")
-        
-        # Re-run scoring with current prompt
-        lead_analysis = generate_lead_score(content_analyses, creator_profile)
-        
-        # Apply travel experience boost if applicable
-        if has_travel_experience and lead_analysis['lead_score'] < 0.50:
-            original_score = lead_analysis['lead_score']
-            lead_analysis['lead_score'] = 0.50
-            lead_analysis['score_reasoning'] = f"{lead_analysis.get('score_reasoning', '')} | TRAVEL EXPERIENCE BOOST: Creator has hosted or marketed group travel experiences (original score: {original_score:.2f}, boosted to 0.50 for manual review)"
-            print(f"SCORE BOOSTED: {original_score:.2f} → 0.50 (travel experience detected)")
-        
-        # Send updated score to HubSpot
-        send_to_hubspot(
-            contact_id,
-            lead_analysis['lead_score'],
-            lead_analysis.get('section_scores', {}),
-            lead_analysis.get('score_reasoning', ''),
-            creator_profile,
-            content_analyses
-        )
-        
-        print(f"=== RE-SCORE COMPLETE: {contact_id} - New Score: {lead_analysis['lead_score']} ===")
-        
-        return jsonify({
-            "status": "success",
-            "contact_id": contact_id,
-            "lead_score": lead_analysis['lead_score'],
-            "section_scores": lead_analysis.get('section_scores', {}),
-            "score_reasoning": lead_analysis.get('score_reasoning', ''),
-            "cached_from": cache_data.get('timestamp'),
-            "items_analyzed": len(content_analyses),
-            "message": "Profile re-scored successfully using cached analysis"
-        }), 200
-        
-    except Exception as e:
-        print(f"Error re-scoring {contact_id}: {str(e)}")
-        import traceback
-        print(f"Traceback: {traceback.format_exc()}")
-        return jsonify({
-            "error": "Re-scoring failed",
-            "message": str(e)
-        }), 500
-
-
-@app.route('/rescore/batch', methods=['POST'])
-def rescore_batch():
-    """
-    Queue multiple profiles for async re-scoring
-    Accepts: {"contact_ids": ["123", "456", "789"]}
-    Returns immediately with task info - processing happens in background
-    """
-    try:
-        data = request.get_json()
-        contact_ids = data.get('contact_ids', [])
-        
-        if not contact_ids:
-            return jsonify({"error": "contact_ids array is required"}), 400
-        
-        # Convert to strings
-        contact_ids = [str(cid) for cid in contact_ids]
-        
-        print(f"=== QUEUING BATCH RE-SCORE: {len(contact_ids)} profiles ===")
-        
-        # Import the Celery task
-        from tasks import rescore_single_profile
-        
-        # Queue all profiles as async Celery tasks
-        task_ids = []
-        for contact_id in contact_ids:
-            task = rescore_single_profile.delay(contact_id)
-            task_ids.append(str(task.id))
-        
-        print(f"=== QUEUED {len(task_ids)} RE-SCORE TASKS ===")
-        
-        return jsonify({
-            "status": "queued",
-            "message": f"Queued {len(contact_ids)} profiles for re-scoring",
-            "total": len(contact_ids),
-            "task_ids_sample": task_ids[:10],  # First 10 for reference
-            "note": "Re-scoring is happening in background. Check Railway worker logs to monitor progress."
-        }), 202  # 202 Accepted
-        
-    except Exception as e:
-        print(f"Error queuing batch re-score: {e}")
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/cache/<contact_id>', methods=['GET'])
-def view_cache(contact_id):
-    """View cached analysis data for a profile"""
-    try:
-        from tasks import load_analysis_cache
-        
-        cache_data = load_analysis_cache(contact_id)
-        
-        # Return summary info (not full content analyses to keep response small)
-        return jsonify({
-            "status": "found",
-            "contact_id": contact_id,
-            "cached_at": cache_data.get('timestamp'),
-            "profile_url": cache_data.get('profile_url'),
-            "bio": cache_data.get('bio', '')[:100] + '...' if len(cache_data.get('bio', '')) > 100 else cache_data.get('bio', ''),
-            "follower_count": cache_data.get('follower_count'),
-            "items_analyzed": cache_data.get('items_analyzed'),
-            "has_travel_experience": cache_data.get('has_travel_experience'),
-            "creator_profile": cache_data.get('creator_profile'),
-            "content_count": len(cache_data.get('content_analyses', []))
-        }), 200
-        
-    except Exception as e:
-        return jsonify({
-            "status": "not_found",
-            "contact_id": contact_id,
-            "error": str(e)
-        }), 404
-
-
-@app.route('/cache/list', methods=['GET'])
-def list_cached_profiles():
-    """List all cached profiles in R2"""
-    try:
-        from tasks import r2_client, R2_BUCKET_NAME
-        
-        if not r2_client:
-            return jsonify({"error": "R2 client not available"}), 500
-        
-        # List objects in analysis-cache/ prefix
-        response = r2_client.list_objects_v2(
-            Bucket=R2_BUCKET_NAME,
-            Prefix='analysis-cache/'
-        )
-        
-        cached_profiles = []
-        if 'Contents' in response:
-            for obj in response['Contents']:
-                # Extract contact_id from key (analysis-cache/123456.json)
-                key = obj['Key']
-                contact_id = key.replace('analysis-cache/', '').replace('.json', '')
-                
-                cached_profiles.append({
-                    'contact_id': contact_id,
-                    'last_modified': obj['LastModified'].isoformat(),
-                    'size_bytes': obj['Size']
-                })
-        
-        return jsonify({
-            "status": "success",
-            "total_cached": len(cached_profiles),
-            "profiles": cached_profiles
-        }), 200
-        
-    except Exception as e:
-        return jsonify({
-            "error": "Failed to list cached profiles",
-            "message": str(e)
-        }), 500
-
-
-@app.route('/webhook/status/<task_id>', methods=['GET'])
-def check_task_status(task_id):
-    """Check status of a queued task"""
-    from celery.result import AsyncResult
     
-    task = AsyncResult(task_id, app=process_creator_profile.app)
+    return {
+        "section_scores": result.get('section_scores', {}),
+        "lead_score": result.get('combined_lead_score', 0.0),
+        "score_reasoning": result.get('score_reasoning', '')
+    }
+
+
+def send_to_hubspot(contact_id: str, lead_score: float, section_scores: Dict, score_reasoning: str, 
+                    creator_profile: Dict, content_analyses: List[Dict]):
+    """Send enrichment results to HubSpot via webhook"""
+    # Format content summaries
+    content_summaries = [f"Content {idx} ({item['type']}): {item['summary']}" 
+                        for idx, item in enumerate(content_analyses, 1)]
     
-    if task.state == 'PENDING':
-        response = {
-            'state': task.state,
-            'status': 'Task is waiting in queue...'
-        }
-    elif task.state == 'PROGRESS':
-        response = {
-            'state': task.state,
-            'status': task.info.get('stage', 'Processing...'),
-        }
-    elif task.state == 'SUCCESS':
-        response = {
-            'state': task.state,
-            'result': task.result
-        }
-    else:  # FAILURE or other
-        response = {
-            'state': task.state,
-            'status': str(task.info),
-        }
+    # Extract community platforms from profile
+    community_text = creator_profile.get('community_building', '').lower()
+    platforms = []
+    platform_keywords = [
+        ('email', 'Email List'),
+        ('patreon', 'Patreon'),
+        ('discord', 'Discord'),
+        ('substack', 'Substack')
+    ]
     
-    return jsonify(response)
-
-
-
-# OLD SYNCHRONOUS WEBHOOK - DEPRECATED (use /webhook/async instead)
-# @app.route('/webhook', methods=['POST'])
-# def handle_webhook():
-#     ... (commented out - uses old generate_lead_analysis function)
+    for keyword, platform_name in platform_keywords:
+        if keyword in community_text and platform_name not in platforms:
+            platforms.append(platform_name)
+    
+    # Build payload
+    payload = {
+        "contact_id": contact_id,
+        "lead_score": lead_score,
+        "score_reasoning": score_reasoning,
+        "score_niche_and_audience": section_scores.get('niche_and_audience_identity', 0.0),
+        "score_host_likeability": section_scores.get('host_likeability_and_content_style', 0.0),
+        "score_monetization": section_scores.get('monetization_and_business_mindset', 0.0),
+        "score_community_infrastructure": section_scores.get('community_infrastructure', 0.0),
+        "score_trip_fit": section_scores.get('trip_fit_and_travelability', 0.0),
+        "content_summary_structured": "\n\n".join(content_summaries),
+        "profile_category": creator_profile.get('content_category'),
+        "profile_content_types": ", ".join(creator_profile.get('content_types', [])) if isinstance(creator_profile.get('content_types'), list) else creator_profile.get('content_types', ''),
+        "profile_engagement": creator_profile.get('audience_engagement', ''),
+        "profile_presence": creator_profile.get('creator_presence', ''),
+        "profile_monetization": creator_profile.get('monetization', ''),
+        "profile_community_building": creator_profile.get('community_building', ''),
+        "has_community_platform": len(platforms) > 0,
+        "community_platforms_detected": ", ".join(platforms) if platforms else "None",
+        "analyzed_at": datetime.now().isoformat()
+    }
+    
+    # Send to HubSpot
+    try:
+        response = requests.post(HUBSPOT_WEBHOOK_URL, json=payload, timeout=10)
+        response.raise_for_status()
+        print(f"Successfully sent data to HubSpot for contact {contact_id}")
+    except Exception as e:
+        print(f"Error sending to HubSpot: {e}")
+        raise
 
 
 @app.route('/')
-def dashboard():
-    """Main dashboard page with batch quality metrics"""
+def index():
+    """Main dashboard"""
     return '''
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TrovaTrip Enrichment Dashboard</title>
+    <title>TrovaTrip Lead Enrichment Dashboard</title>
     <style>
         * {
             margin: 0;
@@ -661,326 +484,254 @@ def dashboard():
         }
         
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 20px;
         }
         
         .container {
-            max-width: 1400px;
+            max-width: 1200px;
             margin: 0 auto;
         }
         
         .header {
-            text-align: center;
-            color: white;
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
             margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
         }
         
         .header h1 {
-            font-size: 2.5em;
+            font-size: 32px;
+            color: #667eea;
             margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
         }
         
         .header p {
-            font-size: 1.2em;
-            opacity: 0.9;
+            color: #666;
+            font-size: 16px;
         }
         
-        .loading {
-            text-align: center;
-            color: white;
-            font-size: 1.5em;
-            margin-top: 100px;
-        }
-        
-        /* Top KPIs Grid */
-        .kpis-grid {
+        .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
             margin-bottom: 30px;
         }
         
-        .kpi-card {
+        .stat-card {
             background: white;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            text-align: center;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
             transition: transform 0.2s;
         }
         
-        .kpi-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+        .stat-card:hover {
+            transform: translateY(-5px);
         }
         
-        .kpi-label {
-            font-size: 0.9em;
-            color: #666;
-            margin-bottom: 8px;
-            font-weight: 500;
+        .stat-label {
+            color: #888;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
         }
         
-        .kpi-value {
-            font-size: 2.2em;
+        .stat-value {
+            font-size: 36px;
             font-weight: bold;
-            color: #333;
-        }
-        
-        .kpi-value.queue { color: #ff9800; }
-        .kpi-value.processing { color: #2196f3; }
-        .kpi-value.completed { color: #4caf50; }
-        .kpi-value.errors { color: #f44336; }
-        
-        /* Three Column Layout */
-        .sections-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 20px;
-            margin-bottom: 20px;
+            color: #667eea;
         }
         
         .section {
             background: white;
-            border-radius: 12px;
-            padding: 25px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
         }
         
-        .section-title {
-            font-size: 1.3em;
-            font-weight: bold;
-            color: #333;
+        .section h2 {
+            color: #667eea;
             margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 3px solid #667eea;
+            font-size: 24px;
         }
         
-        .metric-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 12px 0;
-            border-bottom: 1px solid #eee;
+        .breakdown-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
         }
         
-        .metric-row:last-child {
-            border-bottom: none;
+        .breakdown-item {
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
         }
         
-        .metric-label {
-            font-size: 0.95em;
+        .breakdown-label {
             color: #666;
-            font-weight: 500;
+            font-size: 13px;
+            margin-bottom: 5px;
         }
         
-        .metric-value {
-            font-size: 1.3em;
+        .breakdown-value {
+            font-size: 24px;
             font-weight: bold;
             color: #333;
         }
         
-        .metric-value.primary { color: #667eea; }
-        .metric-value.success { color: #4caf50; }
-        .metric-value.warning { color: #ff9800; }
-        .metric-value.danger { color: #f44336; }
-        
-        .tier-badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 0.85em;
-            font-weight: 600;
-            margin-right: 8px;
-        }
-        
-        .tier-badge.auto { background: #e8f5e9; color: #2e7d32; }
-        .tier-badge.high { background: #e3f2fd; color: #1565c0; }
-        .tier-badge.standard { background: #fff3e0; color: #e65100; }
-        .tier-badge.low { background: #fce4ec; color: #c2185b; }
-        
-        .refresh-info {
+        .timestamp {
             text-align: center;
             color: white;
-            font-size: 0.9em;
             margin-top: 20px;
-            opacity: 0.9;
+            font-size: 14px;
         }
         
-        @media (max-width: 1200px) {
-            .sections-grid {
-                grid-template-columns: 1fr;
-            }
+        #loading {
+            text-align: center;
+            padding: 40px;
+            color: white;
+            font-size: 18px;
         }
         
-        @media (max-width: 768px) {
-            .kpis-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-            .header h1 {
-                font-size: 1.8em;
-            }
-            .kpi-value {
-                font-size: 1.8em;
-            }
+        .progress-bar {
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 10px;
+            margin-top: 15px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <h1>🚀 TrovaTrip Enrichment Dashboard</h1>
-            <p>Real-time profile processing & batch quality metrics</p>
-        </div>
-        
-        <div id="loading" class="loading">
-            <p>Loading stats...</p>
+        <div id="loading">
+            <h2>⏳ Loading Dashboard...</h2>
+            <p style="margin-top: 10px;">Fetching latest stats from Redis...</p>
         </div>
         
         <div id="dashboard" style="display: none;">
-            <!-- Top KPIs -->
-            <div class="kpis-grid">
-                <div class="kpi-card">
-                    <div class="kpi-label">In Queue</div>
-                    <div class="kpi-value queue" id="queue-count">-</div>
+            <div class="header">
+                <h1>🚀 TrovaTrip Lead Enrichment</h1>
+                <p>Real-time monitoring of creator profile processing and scoring</p>
+            </div>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Queue Size</div>
+                    <div class="stat-value" id="queue-size">0</div>
+                    <div class="stat-label" style="margin-top: 10px;">Active Workers: <span id="active-workers">0</span></div>
                 </div>
                 
-                <div class="kpi-card">
-                    <div class="kpi-label">Processing</div>
-                    <div class="kpi-value processing" id="processing-count">-</div>
+                <div class="stat-card">
+                    <div class="stat-label">Total Completed</div>
+                    <div class="stat-value" id="total-completed">0</div>
                 </div>
                 
-                <div class="kpi-card">
-                    <div class="kpi-label">Total Completed</div>
-                    <div class="kpi-value completed" id="total-completed">-</div>
+                <div class="stat-card">
+                    <div class="stat-label">Total Errors</div>
+                    <div class="stat-value" id="total-errors" style="color: #dc3545;">0</div>
                 </div>
                 
-                <div class="kpi-card">
-                    <div class="kpi-label">Total Errors</div>
-                    <div class="kpi-value errors" id="total-errors">-</div>
+                <div class="stat-card">
+                    <div class="stat-label">Avg Duration</div>
+                    <div class="stat-value" id="avg-duration">0</div>
+                    <div class="stat-label" style="margin-top: 5px;">seconds</div>
                 </div>
                 
-                <div class="kpi-card">
-                    <div class="kpi-label">Avg Duration (sec)</div>
-                    <div class="kpi-value" id="avg-duration">-</div>
-                </div>
-                
-                <div class="kpi-card">
-                    <div class="kpi-label">Est. Time Left (min)</div>
-                    <div class="kpi-value" id="est-time">-</div>
+                <div class="stat-card">
+                    <div class="stat-label">Est. Time Remaining</div>
+                    <div class="stat-value" id="est-time">0</div>
+                    <div class="stat-label" style="margin-top: 5px;">minutes</div>
                 </div>
             </div>
             
-            <!-- Three Column Sections -->
-            <div class="sections-grid">
-                <!-- Pre-screening Section -->
-                <div class="section">
-                    <div class="section-title">🔍 Pre-screening</div>
-                    
-                    <div class="metric-row">
-                        <div class="metric-label">Pre-screened Out</div>
-                        <div class="metric-value danger" id="total-prescreened">-</div>
+            <div class="section">
+                <h2>📊 Pre-Screening Results</h2>
+                <div class="breakdown-grid">
+                    <div class="breakdown-item" style="border-left-color: #dc3545;">
+                        <div class="breakdown-label">Low Post Frequency</div>
+                        <div class="breakdown-value" id="low-post-freq">0</div>
                     </div>
-                    
-                    <div class="metric-row">
-                        <div class="metric-label">↳ Low Post Frequency</div>
-                        <div class="metric-value warning" id="low-frequency">-</div>
+                    <div class="breakdown-item" style="border-left-color: #ffc107;">
+                        <div class="breakdown-label">Outside ICP</div>
+                        <div class="breakdown-value" id="outside-icp">0</div>
                     </div>
-                    
-                    <div class="metric-row">
-                        <div class="metric-label">↳ Outside ICP</div>
-                        <div class="metric-value warning" id="outside-icp">-</div>
+                    <div class="breakdown-item" style="border-left-color: #28a745;">
+                        <div class="breakdown-label">Passed to Enrichment</div>
+                        <div class="breakdown-value" id="passed-enrichment">0</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <h2>🎯 Priority Tiers (After Enrichment)</h2>
+                <div class="breakdown-grid">
+                    <div class="breakdown-item" style="border-left-color: #28a745;">
+                        <div class="breakdown-label">Auto-Enroll</div>
+                        <div class="breakdown-value" id="tier-auto">0</div>
+                    </div>
+                    <div class="breakdown-item" style="border-left-color: #17a2b8;">
+                        <div class="breakdown-label">High Priority Review</div>
+                        <div class="breakdown-value" id="tier-high">0</div>
+                    </div>
+                    <div class="breakdown-item" style="border-left-color: #ffc107;">
+                        <div class="breakdown-label">Standard Priority Review</div>
+                        <div class="breakdown-value" id="tier-standard">0</div>
+                    </div>
+                    <div class="breakdown-item" style="border-left-color: #6c757d;">
+                        <div class="breakdown-label">Low Priority Review</div>
+                        <div class="breakdown-value" id="tier-low">0</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <h2>✅ Batch Quality Metrics</h2>
+                <div class="breakdown-grid">
+                    <div class="breakdown-item" style="border-left-color: #28a745;">
+                        <div class="breakdown-label">Pass Rate (Pre-screen → Enrichment)</div>
+                        <div class="breakdown-value" id="pass-rate">0%</div>
                     </div>
                 </div>
                 
-                <!-- Enriched & Scored Section -->
-                <div class="section">
-                    <div class="section-title">✨ Enriched & Scored</div>
-                    
-                    <div class="metric-row">
-                        <div class="metric-label">Total Enriched & Scored</div>
-                        <div class="metric-value success" id="total-enriched">-</div>
-                    </div>
-                    
-                    <div class="metric-row">
-                        <div class="metric-label">
-                            <span class="tier-badge auto">●</span> Auto Enroll
+                <div style="margin-top: 20px;">
+                    <div class="breakdown-label">Tier Distribution (% of Enriched Leads)</div>
+                    <div class="breakdown-grid" style="margin-top: 10px;">
+                        <div class="breakdown-item" style="border-left-color: #28a745;">
+                            <div class="breakdown-label">Auto-Enroll</div>
+                            <div class="breakdown-value" style="font-size: 20px;" id="tier-pct-auto">0%</div>
                         </div>
-                        <div class="metric-value" id="tier-auto">-</div>
-                    </div>
-                    
-                    <div class="metric-row">
-                        <div class="metric-label">
-                            <span class="tier-badge high">●</span> High Priority
+                        <div class="breakdown-item" style="border-left-color: #17a2b8;">
+                            <div class="breakdown-label">High Priority</div>
+                            <div class="breakdown-value" style="font-size: 20px;" id="tier-pct-high">0%</div>
                         </div>
-                        <div class="metric-value" id="tier-high">-</div>
-                    </div>
-                    
-                    <div class="metric-row">
-                        <div class="metric-label">
-                            <span class="tier-badge standard">●</span> Standard Priority
+                        <div class="breakdown-item" style="border-left-color: #ffc107;">
+                            <div class="breakdown-label">Standard Priority</div>
+                            <div class="breakdown-value" style="font-size: 20px;" id="tier-pct-standard">0%</div>
                         </div>
-                        <div class="metric-value" id="tier-standard">-</div>
-                    </div>
-                    
-                    <div class="metric-row">
-                        <div class="metric-label">
-                            <span class="tier-badge low">●</span> Low Priority
-                        </div>
-                        <div class="metric-value" id="tier-low">-</div>
-                    </div>
-                </div>
-                
-                <!-- Batch Quality Section -->
-                <div class="section">
-                    <div class="section-title">📈 Batch Quality</div>
-                    
-                    <div class="metric-row">
-                        <div class="metric-label">Passed Pre-screening</div>
-                        <div class="metric-value success" id="pass-rate">-</div>
-                    </div>
-                    
-                    <div style="margin-top: 15px; padding-top: 15px; border-top: 2px solid #eee;">
-                        <div style="font-size: 0.85em; color: #999; margin-bottom: 10px; font-weight: 600;">TIER BREAKDOWN</div>
-                        
-                        <div class="metric-row">
-                            <div class="metric-label">
-                                <span class="tier-badge auto">●</span> Auto Enroll
-                            </div>
-                            <div class="metric-value" id="tier-pct-auto">-</div>
-                        </div>
-                        
-                        <div class="metric-row">
-                            <div class="metric-label">
-                                <span class="tier-badge high">●</span> High Priority
-                            </div>
-                            <div class="metric-value" id="tier-pct-high">-</div>
-                        </div>
-                        
-                        <div class="metric-row">
-                            <div class="metric-label">
-                                <span class="tier-badge standard">●</span> Standard
-                            </div>
-                            <div class="metric-value" id="tier-pct-standard">-</div>
-                        </div>
-                        
-                        <div class="metric-row">
-                            <div class="metric-label">
-                                <span class="tier-badge low">●</span> Low
-                            </div>
-                            <div class="metric-value" id="tier-pct-low">-</div>
+                        <div class="breakdown-item" style="border-left-color: #6c757d;">
+                            <div class="breakdown-label">Low Priority</div>
+                            <div class="breakdown-value" style="font-size: 20px;" id="tier-pct-low">0%</div>
                         </div>
                     </div>
                 </div>
             </div>
             
-            <div class="refresh-info">
-                <p>🔄 Auto-refreshing every 5 seconds</p>
-                <p style="font-size: 0.9em; margin-top: 5px;">Last updated: <span id="last-update">-</span></p>
+            <div class="timestamp">
+                Last updated: <span id="last-update">--:--:--</span>
             </div>
         </div>
     </div>
@@ -991,25 +742,24 @@ def dashboard():
                 const response = await fetch('/api/stats');
                 const data = await response.json();
                 
-                // Update top KPIs
-                document.getElementById('queue-count').textContent = data.queue_size || 0;
-                document.getElementById('processing-count').textContent = data.active_workers || 0;
-                document.getElementById('total-completed').textContent = data.total_completed || 0;
-                document.getElementById('total-errors').textContent = data.total_errors || 0;
-                document.getElementById('avg-duration').textContent = data.avg_duration || 0;
-                document.getElementById('est-time').textContent = data.est_time_remaining || 0;
+                // Update main stats
+                document.getElementById('queue-size').textContent = data.queue_size;
+                document.getElementById('active-workers').textContent = data.active_workers;
+                document.getElementById('total-completed').textContent = data.total_completed;
+                document.getElementById('total-errors').textContent = data.total_errors;
+                document.getElementById('avg-duration').textContent = data.avg_duration;
+                document.getElementById('est-time').textContent = data.est_time_remaining;
                 
                 // Update pre-screening
-                document.getElementById('total-prescreened').textContent = data.pre_screening.total_pre_screened || 0;
-                document.getElementById('low-frequency').textContent = data.pre_screening.low_post_frequency || 0;
-                document.getElementById('outside-icp').textContent = data.pre_screening.outside_icp || 0;
+                document.getElementById('low-post-freq').textContent = data.pre_screening.low_post_frequency;
+                document.getElementById('outside-icp').textContent = data.pre_screening.outside_icp;
+                document.getElementById('passed-enrichment').textContent = data.breakdown.enriched;
                 
-                // Update enriched & scored
-                document.getElementById('total-enriched').textContent = data.priority_tiers.total || 0;
-                document.getElementById('tier-auto').textContent = data.priority_tiers.auto_enroll || 0;
-                document.getElementById('tier-high').textContent = data.priority_tiers.high_priority_review || 0;
-                document.getElementById('tier-standard').textContent = data.priority_tiers.standard_priority_review || 0;
-                document.getElementById('tier-low').textContent = data.priority_tiers.low_priority_review || 0;
+                // Update priority tiers
+                document.getElementById('tier-auto').textContent = data.priority_tiers.auto_enroll;
+                document.getElementById('tier-high').textContent = data.priority_tiers.high_priority_review;
+                document.getElementById('tier-standard').textContent = data.priority_tiers.standard_priority_review;
+                document.getElementById('tier-low').textContent = data.priority_tiers.low_priority_review;
                 
                 // Update batch quality
                 document.getElementById('pass-rate').textContent = (data.batch_quality.pass_rate || 0) + '%';
@@ -1040,14 +790,57 @@ def dashboard():
 </body>
 </html>
     '''
+
+
+@app.route('/api/webhook/enrich', methods=['POST'])
+def enrich_webhook():
+    """
+    Webhook endpoint triggered by HubSpot workflow
+    Receives contact data and queues enrichment task
+    """
+    try:
+        data = request.json
+        print(f"=== WEBHOOK RECEIVED ===")
+        print(f"Data: {json.dumps(data, indent=2)}")
+        
+        # Extract contact data
+        contact_id = data.get('contact_id')
+        profile_url = data.get('profile_url')
+        
+        if not contact_id or not profile_url:
+            print("ERROR: Missing required fields (contact_id or profile_url)")
+            return jsonify({
+                'status': 'error',
+                'message': 'Missing contact_id or profile_url'
+            }), 400
+        
+        # Queue the enrichment task
+        from tasks import process_creator_profile
+        task = process_creator_profile.delay(contact_id, profile_url)
+        
+        print(f"✅ Task queued: {task.id}")
+        
+        return jsonify({
+            'status': 'success',
+            'task_id': task.id,
+            'message': f'Enrichment task queued for contact {contact_id}'
+        }), 200
+        
+    except Exception as e:
+        print(f"ERROR in webhook: {e}")
+        import traceback
+        print(traceback.format_exc())
+        
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
 @app.route('/api/stats')
 def get_stats():
     """API endpoint for dashboard stats"""
     try:
-        import redis
-        redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
-        r = redis.from_url(redis_url, decode_responses=True)
-        
         # Get queue size
         queue_size = r.llen('celery') or 0
         
@@ -1189,16 +982,10 @@ def get_stats():
         }), 200
 
 
-
-
 @app.route('/api/stats/reset', methods=['POST'])
 def reset_stats():
     """Reset dashboard stats (useful for starting a new batch)"""
     try:
-        import redis
-        redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
-        r = redis.from_url(redis_url, decode_responses=True)
-        
         # Delete all stats keys
         r.delete('trovastats:results')
         r.delete('trovastats:priority_tiers')
@@ -1221,6 +1008,10 @@ def reset_stats():
 def health_check():
     """Health check endpoint"""
     return jsonify({"status": "healthy"}), 200
+
+
+# Import discovery routes at the END to avoid circular imports
+import discovery_routes
 
 
 if __name__ == '__main__':
