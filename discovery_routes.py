@@ -11,8 +11,8 @@ from datetime import datetime
 # Import from your existing app
 # from app import app, r
 
-# Import the discovery task
-from discovery_tasks import discover_instagram_profiles
+# Import the discovery task from tasks.py (NOT discovery_tasks)
+from tasks import discover_instagram_profiles
 
 
 @app.route('/discovery')
@@ -215,22 +215,3 @@ def get_discovery_stats():
             continue
     
     return jsonify(stats)
-
-
-"""
-Example usage in your main app.py:
-
-from flask import Flask, render_template
-import redis
-
-app = Flask(__name__)
-r = redis.Redis(host='localhost', port=6379, decode_responses=True)
-
-# Add your existing routes here...
-
-# Import and add discovery routes
-from discovery_routes import *
-
-if __name__ == '__main__':
-    app.run(debug=True)
-"""
