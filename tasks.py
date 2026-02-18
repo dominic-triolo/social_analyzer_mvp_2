@@ -1335,11 +1335,11 @@ RESPOND ONLY with JSON (no preamble):
         priority_tier = "auto_enroll"
         expected_precision = 0.833
         tier_reasoning = "Manual score ≥0.65 (83% precision)"
-    elif full_score >= 0.50:
-        priority_tier = "high_priority_review"
+    elif full_score >= 0.8:
+        priority_tier = "auto_enroll"
         expected_precision = 0.705
-        tier_reasoning = "Full score ≥0.50 (70% precision)"
-    elif full_score >= 0.45:
+        tier_reasoning = "Full score ≥0.80 (70% precision)"
+    elif full_score >= 0.25:
         priority_tier = "standard_priority_review"
         expected_precision = 0.681
         tier_reasoning = "Full score ≥0.45 (68% precision)"
