@@ -2364,7 +2364,6 @@ def import_profiles_to_hubspot(profiles, job_id):
             
             # Discovery metadata
             'enrichment_status': 'pending',
-            'lifecycle_stage': 'lead'
         }
         
         # Remove None values (HubSpot API doesn't like them)
