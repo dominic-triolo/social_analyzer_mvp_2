@@ -250,33 +250,73 @@
     </div>
     
     <script>
-        // Enable/disable lookalike username input based on selection
+        // Platform switching
+        let selectedPlatform = 'instagram'; // Default
+        
+        document.getElementById('platform-instagram').addEventListener('click', function() {
+            selectedPlatform = 'instagram';
+            
+            // Update button styles
+            document.getElementById('platform-instagram').classList.add('platform-active', 'border-blue-500', 'bg-blue-50');
+            document.getElementById('platform-instagram').classList.remove('border-gray-300', 'bg-white');
+            document.getElementById('platform-patreon').classList.remove('platform-active', 'border-blue-500', 'bg-blue-50');
+            document.getElementById('platform-patreon').classList.add('border-gray-300', 'bg-white');
+            
+            // Show/hide filters
+            document.getElementById('instagram-filters').classList.remove('hidden');
+            document.getElementById('patreon-filters').classList.add('hidden');
+        });
+        
+        document.getElementById('platform-patreon').addEventListener('click', function() {
+            selectedPlatform = 'patreon';
+            
+            // Update button styles
+            document.getElementById('platform-patreon').classList.add('platform-active', 'border-blue-500', 'bg-blue-50');
+            document.getElementById('platform-patreon').classList.remove('border-gray-300', 'bg-white');
+            document.getElementById('platform-instagram').classList.remove('platform-active', 'border-blue-500', 'bg-blue-50');
+            document.getElementById('platform-instagram').classList.add('border-gray-300', 'bg-white');
+            
+            // Show/hide filters
+            document.getElementById('patreon-filters').classList.remove('hidden');
+            document.getElementById('instagram-filters').classList.add('hidden');
+        });
+        
+        // Lookalike username enable/disable
         document.querySelectorAll('input[name="lookalike-type"]').forEach(radio => {
-            radio.addEventListener('change', (e) => {
+            radio.addEventListener('change', function() {
                 const usernameInput = document.getElementById('lookalike-username');
-                usernameInput.disabled = e.target.value === 'none';
-                if (e.target.value === 'none') {
+                usernameInput.disabled = this.value === 'none';
+                if (this.value === 'none') {
                     usernameInput.value = '';
                 }
             });
         });
         
         // Form submission
-        document.getElementById('discovery-form').addEventListener('submit', async (e) => {
+        document.getElementById('discovery-form').addEventListener('submit', async function(e) {
             e.preventDefault();
             
-            // Validate lookalike
+            if (selectedPlatform === 'instagram') {
+                await submitInstagramDiscovery();
+            } else if (selectedPlatform === 'patreon') {
+                await submitPatreonDiscovery();
+            }
+        });
+        
+        async function submitInstagramDiscovery() {
+            // Get lookalike settings
             const lookalikeType = document.querySelector('input[name="lookalike-type"]:checked').value;
             const lookalikeUsername = document.getElementById('lookalike-username').value.trim();
             
+            // Validate lookalike
             if (lookalikeType !== 'none' && !lookalikeUsername) {
-                alert('Please enter a username for lookalike search, or select "No lookalike"');
+                alert('Please enter a username for lookalike search');
                 return;
             }
             
             // Build filters
             const filters = {
-                max_results: parseInt(document.getElementById('max-results').value),
+                max_results: parseInt(document.getElementById('instagram-max-results').value),
                 follower_count: {
                     min: parseInt(document.getElementById('min-followers').value),
                     max: parseInt(document.getElementById('max-followers').value)
@@ -287,6 +327,12 @@
             if (filters.follower_count.min >= filters.follower_count.max) {
                 alert('Minimum followers must be less than maximum followers');
                 return;
+            }
+            
+            // Add lookalike if selected
+            if (lookalikeType !== 'none') {
+                filters.lookalike_type = lookalikeType;
+                filters.lookalike_username = lookalikeUsername;
             }
             
             // Add creator interests if selected
@@ -320,10 +366,7 @@
                 const result = await response.json();
                 
                 if (response.ok) {
-                    // Show status section
                     document.getElementById('job-status').classList.remove('hidden');
-                    
-                    // Start polling
                     pollJobStatus(result.job_id);
                 } else {
                     alert('Error: ' + result.error);
@@ -331,9 +374,50 @@
             } catch (error) {
                 alert('Error starting discovery: ' + error.message);
             }
-        });
+        }
         
-        // Poll job status
+        async function submitPatreonDiscovery() {
+            // Get keywords
+            const keywords = document.getElementById('patreon-keywords').value.trim();
+            
+            if (!keywords) {
+                alert('Please enter at least one search keyword');
+                return;
+            }
+            
+            // Build filters
+            const filters = {
+                search_keywords: keywords.split(',').map(k => k.trim()).filter(Boolean),
+                max_results: parseInt(document.getElementById('patreon-max-results').value)
+            };
+            
+            if (filters.search_keywords.length === 0) {
+                alert('Please enter at least one search keyword');
+                return;
+            }
+            
+            // Start job
+            try {
+                const response = await fetch('/api/discovery/patreon', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(filters)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    document.getElementById('job-status').classList.remove('hidden');
+                    pollJobStatus(result.job_id);
+                } else {
+                    alert('Error: ' + result.error);
+                }
+            } catch (error) {
+                alert('Error starting discovery: ' + error.message);
+            }
+        }
+        
+        // Poll job status (works for both platforms)
         function pollJobStatus(jobId) {
             const interval = setInterval(async () => {
                 try {
@@ -343,30 +427,22 @@
                     // Update status badge
                     const statusBadge = document.getElementById('status-badge');
                     const statusText = job.status.toUpperCase();
+                    
                     statusBadge.textContent = statusText;
+                    statusBadge.className = 'px-3 py-1 rounded-full text-xs font-bold ';
                     
-                    const statusColors = {
-                        'COMPLETED': 'bg-green-100 text-green-800',
-                        'FAILED': 'bg-red-100 text-red-800',
-                        'DISCOVERING': 'bg-blue-100 text-blue-800',
-                        'IMPORTING': 'bg-purple-100 text-purple-800',
-                        'QUEUED': 'bg-yellow-100 text-yellow-800'
-                    };
-                    
-                    statusBadge.className = `px-3 py-1 rounded-full text-sm font-medium ${statusColors[statusText] || 'bg-gray-100 text-gray-800'}`;
-                    
-                    // Show/hide progress indicator
-                    const progressIndicator = document.getElementById('progress-indicator');
-                    const progressText = document.getElementById('progress-text');
-                    
-                    if (job.status === 'discovering') {
-                        progressIndicator.classList.remove('hidden');
-                        progressText.textContent = 'Searching InsightIQ database...';
+                    if (job.status === 'completed') {
+                        statusBadge.className += 'bg-green-100 text-green-800';
+                        clearInterval(interval);
+                    } else if (job.status === 'failed') {
+                        statusBadge.className += 'bg-red-100 text-red-800';
+                        clearInterval(interval);
+                    } else if (job.status === 'discovering') {
+                        statusBadge.className += 'bg-blue-100 text-blue-800';
                     } else if (job.status === 'importing') {
-                        progressIndicator.classList.remove('hidden');
-                        progressText.textContent = 'Importing to HubSpot...';
+                        statusBadge.className += 'bg-yellow-100 text-yellow-800';
                     } else {
-                        progressIndicator.classList.add('hidden');
+                        statusBadge.className += 'bg-gray-100 text-gray-800';
                     }
                     
                     // Update counts
@@ -374,73 +450,16 @@
                     document.getElementById('contacts-created').textContent = job.new_contacts_created || 0;
                     document.getElementById('duplicates-skipped').textContent = job.duplicates_skipped || 0;
                     
-                    // Stop polling when complete
-                    if (job.status === 'completed' || job.status === 'failed') {
-                        clearInterval(interval);
-                        loadRecentJobs();
-                        
-                        if (job.status === 'failed') {
-                            alert('Discovery failed: ' + (job.error || 'Unknown error'));
-                        } else {
-                            // Success notification
-                            if (job.new_contacts_created > 0) {
-                                alert(`✅ Discovery complete! Created ${job.new_contacts_created} new contacts. They will be enriched automatically.`);
-                            } else {
-                                alert('⚠️ Discovery complete, but no new contacts were created (all were duplicates).');
-                            }
-                        }
+                    // Show error if failed
+                    if (job.status === 'failed' && job.error) {
+                        alert('Discovery failed: ' + job.error);
                     }
+                    
                 } catch (error) {
-                    console.error('Error polling job status:', error);
+                    console.error('Error polling status:', error);
                 }
             }, 3000); // Poll every 3 seconds
         }
-        
-        // Load recent jobs
-        async function loadRecentJobs() {
-            try {
-                const response = await fetch('/api/discovery/jobs');
-                const jobs = await response.json();
-                
-                const container = document.getElementById('recent-jobs');
-                
-                if (jobs.length === 0) {
-                    container.innerHTML = '<p class="text-gray-500 text-sm">No recent jobs</p>';
-                    return;
-                }
-                
-                container.innerHTML = jobs.slice(0, 10).map(job => `
-                    <div class="border-b border-gray-200 py-4 last:border-b-0">
-                        <div class="flex justify-between items-start mb-2">
-                            <div>
-                                <span class="font-bold text-sm">Instagram Discovery</span>
-                                <span class="text-xs text-gray-500 ml-2">
-                                    ${new Date(job.started_at).toLocaleString()}
-                                </span>
-                            </div>
-                            <span class="px-2 py-1 rounded text-xs font-medium ${
-                                job.status === 'completed' ? 'bg-green-100 text-green-800' :
-                                job.status === 'failed' ? 'bg-red-100 text-red-800' :
-                                'bg-yellow-100 text-yellow-800'
-                            }">
-                                ${job.status}
-                            </span>
-                        </div>
-                        <div class="text-xs text-gray-600">
-                            Found: ${job.profiles_found || 0} | 
-                            Created: ${job.new_contacts_created || 0} | 
-                            Duplicates: ${job.duplicates_skipped || 0}
-                        </div>
-                    </div>
-                `).join('');
-            } catch (error) {
-                console.error('Error loading recent jobs:', error);
-            }
-        }
-        
-        // Load on page load
-        loadRecentJobs();
-        setInterval(loadRecentJobs, 30000); // Refresh every 30 seconds
     </script>
 </body>
 </html>
