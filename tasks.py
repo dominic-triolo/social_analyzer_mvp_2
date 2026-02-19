@@ -2089,7 +2089,7 @@ class InsightIQDiscovery:
         try:
             response = requests.post(url=url, headers=self.headers, json=parameters, timeout=30)
             
-            if response.status_code != 200:
+            if response.status_code not in (200, 202):
                 print(f"API error: {response.status_code} - {response.text}")
                 raise Exception(f"Failed to start job: {response.text}")
             
@@ -2302,7 +2302,9 @@ def discover_instagram_profiles(user_filters=None, job_id=None):
 def update_discovery_job_status(job_id, status, **kwargs):
     """Update discovery job status in Redis"""
     try:
-        from app import r
+        import redis
+        redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+        r = redis.from_url(redis_url, decode_responses=True)
         
         job_key = f'discovery_job:{job_id}'
         
