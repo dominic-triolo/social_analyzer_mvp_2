@@ -2395,34 +2395,24 @@ def standardize_patreon_profiles(raw_profiles):
     """
     Convert Apify scraper results to standardized format for HubSpot
     
-    Apify returns data like:
-    {
-        "name": "Creator Name",
-        "url": "https://www.patreon.com/creatorname",
-        "description": "Bio text...",
-        "patronCount": 1234,
-        "creationCount": 567,
-        "socialLinks": {
-            "twitter": "...",
-            "youtube": "...",
-            etc.
-        }
-    }
+    Automatically filters out NSFW profiles.
     """
     standardized = []
     
     for i, profile in enumerate(raw_profiles):
         try:
+            # Skip NSFW profiles
+            if profile.get('is_nsfw', 0) == 1:
+                print(f"Skipping NSFW profile: {profile.get('name', 'Unknown')}")
+                continue
+            
             # Extract name parts
-            full_name = profile.get('name', '')
+            full_name = profile.get('creator_name') or profile.get('name', '')
             name_parts = full_name.split() if full_name else []
             first_name = name_parts[0] if name_parts else ''
             last_name = ' '.join(name_parts[1:]) if len(name_parts) > 1 else ''
             
-            # Get social links
-            social_links = profile.get('socialLinks', {})
-            
-            # Patreon username from URL
+            # Patreon handle from URL
             patreon_url = profile.get('url', '')
             patreon_handle = patreon_url.split('/')[-1] if patreon_url else ''
             
@@ -2431,19 +2421,24 @@ def standardize_patreon_profiles(raw_profiles):
                 'first_and_last_name': full_name,
                 'flagship_social_platform_handle': patreon_handle,
                 'patreon_link': patreon_url,
-                'instagram_bio': profile.get('description', ''),  # Using bio field for description
+                
+                # Bio/Description
+                'patreon_description': profile.get('about', ''),
                 
                 # Patreon-specific metrics
-                'patreon_patron_count': profile.get('patronCount', 0),
-                'patreon_creation_count': profile.get('creationCount', 0),
+                'patreon_patron_count': profile.get('patron_count', 0),
+                'patreon_paid_members': profile.get('paid_members', 0),
+                'patreon_total_members': profile.get('total_members', 0),
+                'patreon_post_count': profile.get('post_count', 0),
+                'patreon_earnings_per_month': profile.get('earnings_per_month', 0),
+                'patreon_creation_name': profile.get('creation_name', ''),
                 
-                # Social links from profile
-                'email': profile.get('email'),  # If available
-                'instagram_handle': social_links.get('instagram'),
-                'youtube_profile_link': social_links.get('youtube'),
-                'tiktok_handle': social_links.get('tiktok'),
-                'facebook_profile_link': social_links.get('facebook'),
-                'twitter_handle': social_links.get('twitter'),
+                # Social links (URLs, not usernames)
+                'instagram_handle': profile.get('instagram'),  # Full URL
+                'youtube_profile_link': profile.get('youtube'),
+                'tiktok_handle': profile.get('tiktok'),  # Full URL
+                'facebook_profile_link': profile.get('facebook'),
+                'twitch_url': profile.get('twitch'),
                 
                 # Metadata
                 'platform': 'patreon',
@@ -2460,7 +2455,7 @@ def standardize_patreon_profiles(raw_profiles):
             print(f"Failed to process Patreon profile #{i+1}: {e}")
             continue
     
-    print(f"Successfully processed {len(standardized)} Patreon profiles")
+    print(f"Successfully processed {len(standardized)} Patreon profiles (NSFW profiles excluded)")
     return standardized
 
 def update_discovery_job_status(job_id, status, **kwargs):
