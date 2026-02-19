@@ -2160,7 +2160,7 @@ class InsightIQDiscovery:
         print(f"Fetch complete: {len(all_results)} total profiles")
         return all_results
     
-   def _standardize_results(self, raw_results, platform):
+    def _standardize_results(self, raw_results, platform):
         """Convert raw API results to standardized format for HubSpot"""
         standardized = []
         
