@@ -2303,6 +2303,10 @@ def discover_patreon_profiles(user_filters=None, job_id=None):
     """
     Run Patreon profile discovery via Apify scraper
     
+    NOW INCLUDES:
+    - Social graph building (crawl linked websites)
+    - Apollo.io email enrichment
+    
     Args:
         user_filters: dict with:
             - search_keywords: list of str (e.g., ["art", "gaming"])
@@ -2335,7 +2339,7 @@ def discover_patreon_profiles(user_filters=None, job_id=None):
         
         client = ApifyClient(APIFY_API_TOKEN)
         
-        # Prepare the Actor input
+        # Prepare the Actor input with slower, more reliable settings
         run_input = {
             "searchQueries": search_keywords,
             "maxRequestsPerCrawl": max_results,
@@ -2343,10 +2347,12 @@ def discover_patreon_profiles(user_filters=None, job_id=None):
                 "useApifyProxy": True,
                 "apifyProxyGroups": ["RESIDENTIAL"],
             },
+            "maxConcurrency": 1,  # Slower but less likely to get blocked
+            "maxRequestRetries": 5,  # Retry more times
+            "requestHandlerTimeoutSecs": 180,  # Give more time per request
         }
         
-        print("Starting Apify scraper...")
-        # Run the Actor and wait for it to finish
+        print("Starting Apify scraper (this may take a few minutes)...")
         run = client.actor("mJiXU9PT4eLHuY0pi").call(run_input=run_input)
         
         print(f"Apify run complete: {run['id']}")
@@ -2354,15 +2360,41 @@ def discover_patreon_profiles(user_filters=None, job_id=None):
         # Fetch results from the dataset
         profiles = []
         for item in client.dataset(run["defaultDatasetId"]).iterate_items():
+            # Skip NSFW profiles
+            if item.get('is_nsfw', 0) == 1:
+                print(f"Skipping NSFW profile: {item.get('name', 'Unknown')}")
+                continue
             profiles.append(item)
         
-        print(f"Patreon discovery complete: {len(profiles)} profiles found")
+        # Handle case where no profiles found (all blocked)
+        if len(profiles) == 0:
+            print("Warning: No profiles found. Scraper may have been blocked.")
+            update_discovery_job_status(
+                job_id, 
+                status='completed', 
+                profiles_found=0,
+                new_contacts_created=0,
+                duplicates_skipped=0
+            )
+            return {
+                'status': 'completed',
+                'profiles_found': 0,
+                'new_contacts': 0,
+                'duplicates': 0,
+                'warning': 'No profiles found - scraper may have been blocked by Patreon'
+            }
+        
+        print(f"Patreon discovery complete: {len(profiles)} profiles found (NSFW excluded)")
         
         # Update status
-        update_discovery_job_status(job_id, status='importing', profiles_found=len(profiles))
+        update_discovery_job_status(job_id, status='enriching', profiles_found=len(profiles))
+        
+        # NEW: Enrich with social graph + Apollo
+        enriched_profiles = enrich_patreon_profiles(profiles, job_id)
         
         # Standardize and import to HubSpot
-        standardized_profiles = standardize_patreon_profiles(profiles)
+        update_discovery_job_status(job_id, status='importing')
+        standardized_profiles = standardize_patreon_profiles(enriched_profiles)
         import_results = import_profiles_to_hubspot(standardized_profiles, job_id)
         
         # Final status
@@ -2390,6 +2422,198 @@ def discover_patreon_profiles(user_filters=None, job_id=None):
         update_discovery_job_status(job_id, status='failed', error=str(e))
         raise
 
+
+# ============================================================================
+# ENHANCED PATREON ENRICHMENT
+# This extends the basic Patreon enrichment to actually crawl Patreon pages
+# ============================================================================
+
+def enrich_patreon_profiles_enhanced(raw_profiles: List[Dict], job_id: str) -> List[Dict]:
+    """
+    Enhanced Patreon enrichment that:
+    1. Crawls the actual Patreon page for linked websites
+    2. Follows those websites to build social graph
+    3. Uses Apollo.io with discovered website domains
+    
+    This is more thorough but slower (requires web scraping each Patreon page)
+    """
+    print(f"Enhanced enrichment for {len(raw_profiles)} Patreon profiles...")
+    
+    social_graph_builder = SocialGraphBuilder()
+    apollo_client = ApolloEnrichment(APOLLO_API_KEY) if APOLLO_API_KEY else None
+    
+    patreon_crawl_count = 0
+    social_graph_count = 0
+    apollo_count = 0
+    
+    for profile in raw_profiles:
+        try:
+            creator_name = profile.get('creator_name') or profile.get('name', '')
+            patreon_url = profile.get('url', '')
+            
+            if not patreon_url:
+                continue
+            
+            # Step 1: Crawl the Patreon page itself to find linked websites
+            print(f"[PATREON_CRAWL] Scraping {patreon_url}...")
+            
+            try:
+                response = requests.get(patreon_url, timeout=10, headers={
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                })
+                
+                if response.ok:
+                    soup = BeautifulSoup(response.text, 'html.parser')
+                    
+                    # Extract links from Patreon page
+                    links = soup.find_all('a', href=True)
+                    
+                    # Social media skip list
+                    skip_hosts = ['patreon.com', 'youtube.com', 'instagram.com', 
+                                 'twitter.com', 'x.com', 'facebook.com', 'tiktok.com',
+                                 'spotify.com', 'apple.com', 'google.com']
+                    
+                    personal_websites = []
+                    
+                    for link in links:
+                        href = link['href']
+                        
+                        # Look for personal websites (not social media)
+                        if href.startswith('http') and not any(skip in href.lower() for skip in skip_hosts):
+                            personal_websites.append(href)
+                    
+                    # Take first personal website found
+                    if personal_websites:
+                        website_url = personal_websites[0]
+                        print(f"[PATREON_CRAWL] Found personal website: {website_url}")
+                        profile['personal_website'] = website_url
+                        patreon_crawl_count += 1
+                        
+                        # Step 2: Build social graph from that website
+                        graph_data = social_graph_builder.build_graph(website_url, creator_name)
+                        
+                        # Add emails from social graph
+                        if graph_data['emails']:
+                            profile['social_graph_email'] = graph_data['emails'][0]
+                            social_graph_count += 1
+                            print(f"[SOCIAL_GRAPH] Found email for {creator_name}")
+                        
+                        # Merge social links
+                        profile['social_links'] = profile.get('social_links', {})
+                        for platform, url in graph_data['social_links'].items():
+                            if url and not profile['social_links'].get(platform):
+                                profile['social_links'][platform] = url
+                        
+                        # Step 3: Try Apollo with the website domain
+                        if apollo_client and not profile.get('social_graph_email'):
+                            domain = apollo_client.extract_domain(website_url)
+                            
+                            if domain and apollo_client.is_enrichable_domain(domain):
+                                apollo_data = apollo_client.person_match(
+                                    name=creator_name,
+                                    domain=domain
+                                )
+                                
+                                if apollo_data and apollo_data.get('email'):
+                                    profile['apollo_email'] = apollo_data['email']
+                                    profile['apollo_first_name'] = apollo_data.get('first_name')
+                                    profile['apollo_last_name'] = apollo_data.get('last_name')
+                                    profile['apollo_title'] = apollo_data.get('title')
+                                    profile['apollo_phone'] = apollo_data.get('phone')
+                                    profile['apollo_linkedin'] = apollo_data.get('linkedin')
+                                    apollo_count += 1
+                                    print(f"[APOLLO] Found email for {creator_name}")
+                        
+                        # Small delay to be respectful
+                        time.sleep(0.5)
+                
+            except Exception as e:
+                print(f"[PATREON_CRAWL] Error crawling {patreon_url}: {e}")
+        
+        except Exception as e:
+            print(f"Error in enhanced enrichment for {profile.get('name')}: {e}")
+            continue
+    
+    print(f"Enhanced enrichment complete:")
+    print(f"  - {patreon_crawl_count} personal websites found")
+    print(f"  - {social_graph_count} emails from social graph")
+    print(f"  - {apollo_count} emails from Apollo")
+    
+    return raw_profiles
+
+def standardize_patreon_profiles(raw_profiles: List[Dict]) -> List[Dict]:
+    """
+    Convert Apify scraper results to standardized format for HubSpot
+    
+    NOW INCLUDES social graph and Apollo data
+    """
+    standardized = []
+    
+    for i, profile in enumerate(raw_profiles):
+        try:
+            # Extract name parts
+            full_name = profile.get('creator_name') or profile.get('name', '')
+            
+            # Use Apollo name if available
+            if profile.get('apollo_first_name'):
+                full_name = f"{profile['apollo_first_name']} {profile.get('apollo_last_name', '')}".strip()
+            
+            # Patreon handle from URL
+            patreon_url = profile.get('url', '')
+            patreon_handle = patreon_url.split('/')[-1] if patreon_url else ''
+            
+            standardized_profile = {
+                # Core identity
+                'first_and_last_name': full_name,
+                'flagship_social_platform_handle': patreon_handle,
+                'patreon_link': patreon_url,
+                
+                # Bio/Description
+                'patreon_description': profile.get('about', ''),
+                
+                # Patreon-specific metrics
+                'patreon_patron_count': profile.get('patron_count', 0),
+                'patreon_paid_members': profile.get('paid_members', 0),
+                'patreon_total_members': profile.get('total_members', 0),
+                'patreon_post_count': profile.get('post_count', 0),
+                'patreon_earnings_per_month': profile.get('earnings_per_month', 0),
+                'patreon_creation_name': profile.get('creation_name', ''),
+                
+                # Email - prefer Apollo, fallback to social graph, fallback to Patreon scraper
+                'email': profile.get('apollo_email') or profile.get('social_graph_email') or profile.get('email'),
+                
+                # Phone - prefer Apollo
+                'phone': profile.get('apollo_phone') or profile.get('phone'),
+                
+                # Social links (URLs, not usernames) - from Patreon scraper
+                'instagram_handle': profile.get('instagram'),
+                'youtube_profile_link': profile.get('youtube'),
+                'tiktok_handle': profile.get('tiktok'),
+                'facebook_profile_link': profile.get('facebook'),
+                'twitch_url': profile.get('twitch'),
+                
+                # Apollo enrichment
+                'apollo_title': profile.get('apollo_title'),
+                'apollo_linkedin': profile.get('apollo_linkedin'),
+                'apollo_enriched': bool(profile.get('apollo_email')),
+                
+                # Metadata
+                'platform': 'patreon',
+                'discovery_source': 'apify_patreon_scraper'
+            }
+            
+            # Remove None/empty values
+            standardized_profile = {k: v for k, v in standardized_profile.items() 
+                                   if v is not None and v != '' and v != 0}
+            
+            standardized.append(standardized_profile)
+            
+        except Exception as e:
+            print(f"Failed to process Patreon profile #{i+1}: {e}")
+            continue
+    
+    print(f"Successfully processed {len(standardized)} Patreon profiles")
+    return standardized
 
 def standardize_patreon_profiles(raw_profiles):
     """
