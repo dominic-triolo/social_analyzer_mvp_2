@@ -1156,6 +1156,78 @@ def start_instagram_discovery():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/discovery/facebook', methods=['POST'])
+def start_facebook_discovery():
+    """
+    Start Facebook Groups discovery job
+    
+    POST body:
+    {
+        "keywords": ["running", "fitness"],
+        "max_results": 100,
+        "min_members": 500,  # optional
+        "max_members": 50000  # optional
+    }
+    
+    Returns:
+        202 Accepted with job_id
+        400 Bad Request if validation fails
+    """
+    try:
+        from tasks import discover_facebook_groups
+        
+        user_filters = request.json or {}
+        
+        # Validate keywords
+        keywords = user_filters.get('keywords', [])
+        if not isinstance(keywords, list) or len(keywords) == 0:
+            return jsonify({'error': 'keywords must be a non-empty array'}), 400
+        
+        # Validate max_results
+        max_results = user_filters.get('max_results', 100)
+        if not isinstance(max_results, int) or max_results < 1:
+            return jsonify({'error': 'max_results must be a positive integer'}), 400
+        if max_results > 500:
+            return jsonify({'error': 'max_results cannot exceed 500'}), 400
+        
+        # Validate member counts (optional)
+        min_members = user_filters.get('min_members', 0)
+        max_members = user_filters.get('max_members', 0)
+        
+        if min_members and not isinstance(min_members, int):
+            return jsonify({'error': 'min_members must be an integer'}), 400
+        if max_members and not isinstance(max_members, int):
+            return jsonify({'error': 'max_members must be an integer'}), 400
+        if min_members and max_members and min_members >= max_members:
+            return jsonify({'error': 'min_members must be less than max_members'}), 400
+        
+        # Queue discovery task
+        task = discover_facebook_groups.delay(user_filters=user_filters)
+        job_id = str(task.id)
+        
+        # Initialize job tracking in Redis
+        r.setex(
+            f'discovery_job:{job_id}',
+            86400,  # 24 hour TTL
+            json.dumps({
+                'job_id': job_id,
+                'platform': 'facebook',
+                'status': 'queued',
+                'started_at': datetime.now().isoformat(),
+                'filters': user_filters,
+                'profiles_found': 0,
+                'new_contacts_created': 0,
+                'duplicates_skipped': 0
+            })
+        )
+        
+        return jsonify({
+            'job_id': job_id,
+            'status': 'queued'
+        }), 202
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/discovery/jobs/<job_id>')
 def get_discovery_job(job_id):
