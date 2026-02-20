@@ -1398,14 +1398,16 @@ RESPOND ONLY with JSON (no preamble):
         "expected_precision": expected_precision,
         "score_reasoning": score_reasoning
     }
-def extract_first_names_from_instagram_profile(username: str, full_name: str, bio: str) -> str:
+def extract_first_names_from_instagram_profile(username: str, full_name: str, bio: str, 
+                                               content_analyses: List[Dict] = None) -> str:
     """
     Use OpenAI to extract properly formatted first name(s) from Instagram profile
     
     Args:
-        username: Instagram handle (e.g., "johnsmith")
-        full_name: Full name from profile (e.g., "John Smith")
+        username: Instagram handle (e.g., "morgandrinkscoffee")
+        full_name: Full name from profile (e.g., "Morgan Smith")
         bio: Biography text
+        content_analyses: List of analyzed content (captions may mention names)
     
     Returns:
         str: Formatted first name(s)
@@ -1422,12 +1424,33 @@ def extract_first_names_from_instagram_profile(username: str, full_name: str, bi
     if not username and not full_name:
         return "there"
     
+    # Extract useful context from content analyses
+    content_context = ""
+    if content_analyses:
+        # Get first few captions/summaries for context
+        captions = []
+        for item in content_analyses[:5]:  # Use first 5 pieces of content
+            summary = item.get('summary', '')
+            caption = item.get('caption', '')
+            
+            if summary:
+                captions.append(summary[:200])  # First 200 chars
+            elif caption:
+                captions.append(caption[:200])
+        
+        if captions:
+            content_context = "\n".join(captions)
+    
     prompt = f"""Extract the first name(s) from this Instagram profile.
 
 Profile Information:
 - Username: @{username}
-- Full Name: {full_name}
+- Full Name Field: {full_name if full_name else 'Not provided'}
 - Bio: {bio[:300] if bio else 'Not provided'}
+
+{f'''Recent Content Context (may mention their name):
+{content_context[:800]}
+''' if content_context else ''}
 
 Rules:
 1. Determine if this is:
@@ -1441,11 +1464,18 @@ Rules:
    - For couples: "Name and Name" (no comma before "and")
    - For 3+: "Name, Name, and Name" (comma before final "and")
 
-3. Special cases:
+3. How to find the name:
+   - Check the username for clues (e.g., @morgandrinkscoffee → "Morgan")
+   - Check the full name field
+   - Check the bio for self-references
+   - Check content summaries for how they refer to themselves
+   - Look for patterns like "I'm [Name]" or "Hi, I'm [Name]"
+
+4. Special cases:
    - If brand/company (no people), return the brand name
    - If you cannot determine, return exactly: there
 
-4. Context clues:
+5. Context clues:
    - Look for "we", "couple", "married", "partners" → likely 2 people
    - Look for "friends", "squad", "crew", "trio" → likely 3+ people
    - "&" or "and" in name field → likely 2+ people
@@ -1454,19 +1484,22 @@ Rules:
 Return ONLY the name(s). No quotes, no explanation, just the name(s) or "there".
 
 Examples:
-Input: @johnsmith, "John Smith", "Travel blogger"
+Input: @johnsmith, "John Smith", "Travel blogger", Content: "I'm John and I love..."
 Output: John
 
-Input: @thejohnsons, "John & Sarah", "Married couple traveling"
+Input: @morgandrinkscoffee, "", "", Content: "Hey it's Morgan here with another coffee review"
+Output: Morgan
+
+Input: @thejohnsons, "John & Sarah", "Married couple", Content: "We're exploring..."
 Output: John and Sarah
 
-Input: @travelsquad, "The Squad", "We're Mike, Lisa, and Tom exploring"
+Input: @travelsquad, "The Squad", "Mike, Lisa, Tom", Content: "The three of us went to..."
 Output: Mike, Lisa, and Tom
 
-Input: @nikefitness, "Nike Fitness", "Official Nike account"
+Input: @nikefitness, "Nike Fitness", "Official account", Content: "New workout collection"
 Output: Nike Fitness
 
-Input: @randomuser123, "", ""
+Input: @randomuser123, "", "", Content: "Check out this cool thing"
 Output: there
 """
 
@@ -1493,7 +1526,7 @@ Output: there
         first_names = first_names.strip('"').strip("'")
         
         # If empty or just punctuation, use fallback
-        if not first_names or first_names in ['', 'none', 'unknown', 'N/A']:
+        if not first_names or first_names.lower() in ['', 'none', 'unknown', 'n/a', 'not provided']:
             first_names = "there"
         
         print(f"[FIRST_NAME] @{username} → '{first_names}'")
@@ -1696,7 +1729,8 @@ def process_creator_profile(self, contact_id: str, profile_url: str, bio: str = 
                 },
                 score_reasoning=f"Profile disqualified - post frequency check: {frequency_reason}",
                 creator_profile={'content_category': 'Inactive/Low frequency'},
-                content_analyses=[]
+                content_analyses=[],
+                first_name="there"
             )
             return {
                 "status": "success",
@@ -1709,17 +1743,6 @@ def process_creator_profile(self, contact_id: str, profile_url: str, bio: str = 
         # Step 4: Create profile snapshot
         self.update_state(state='PROGRESS', meta={'stage': 'Creating profile snapshot'})
 
-        # Step 4.5: Extract first name from profile
-        self.update_state(state='PROGRESS', meta={'stage': 'Extracting first name'})
-        
-        # Get profile data
-        ig_username = social_data.get('profile', {}).get('username', '')
-        ig_full_name = social_data.get('profile', {}).get('full_name', '')
-        ig_bio = bio if bio else social_data.get('profile', {}).get('biography', '')
-        
-        # Extract first name(s)
-        first_name = extract_first_names_from_instagram_profile(ig_username, ig_full_name, ig_bio)
-        print(f"[FIRST_NAME] Extracted: '{first_name}'")
         
         # Extract profile data for snapshot - use provided data first, fallback to InsightIQ
         profile_info = social_data.get('data', [{}])[0].get('profile', {})
@@ -1753,7 +1776,7 @@ def process_creator_profile(self, contact_id: str, profile_url: str, bio: str = 
                 score_reasoning=f"Pre-screen rejected: {pre_screen_result.get('reasoning')}",
                 creator_profile={'content_category': 'Pre-screened out'},
                 content_analyses=[],
-                first_name=first_name
+                first_name="there"
             )
             return {
                 "status": "success",
@@ -1921,6 +1944,21 @@ def process_creator_profile(self, contact_id: str, profile_url: str, bio: str = 
             creator_profile=creator_profile,
             follower_count=follower_count
         )
+         # Extract first name AFTER content analysis (so we have content context)
+        self.update_state(state='PROGRESS', meta={'stage': 'Extracting first name'})
+        
+        ig_username = social_data.get('profile', {}).get('username', '')
+        ig_full_name = social_data.get('profile', {}).get('full_name', '')
+        ig_bio = bio if bio else social_data.get('profile', {}).get('biography', '')
+        
+        # NOW we pass content_analyses to give more context
+        first_name = extract_first_names_from_instagram_profile(
+            ig_username, 
+            ig_full_name, 
+            ig_bio,
+            content_analyses  # <-- IMPORTANT: Pass the analyzed content
+        )
+        print(f"[FIRST_NAME] Extracted: '{first_name}'")
         
         # Step 8.5: Boost score if travel experience detected
         # Ensures creators with group travel experience make it to manual review
