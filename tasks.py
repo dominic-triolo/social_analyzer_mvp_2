@@ -1752,7 +1752,7 @@ def process_creator_profile(self, contact_id: str, profile_url: str, bio: str = 
                 },
                 score_reasoning=f"Pre-screen rejected: {pre_screen_result.get('reasoning')}",
                 creator_profile={'content_category': 'Pre-screened out'},
-                content_analyses=[]
+                content_analyses=[],
                 first_name=first_name
             )
             return {
@@ -1939,7 +1939,7 @@ def process_creator_profile(self, contact_id: str, profile_url: str, bio: str = 
             lead_analysis.get('score_reasoning', ''),
             creator_profile,
             content_analyses,
-            lead_analysis  # NEW: Pass full analysis for two-tier fields
+            lead_analysis,  # NEW: Pass full analysis for two-tier fields
             first_name=first_name
         )
         
@@ -2053,7 +2053,7 @@ def rescore_single_profile(self, contact_id: str):
             score_reasoning=lead_analysis.get('score_reasoning', ''),
             creator_profile=creator_profile,
             content_analyses=content_analyses,
-            lead_analysis=lead_analysis  # NEW: Pass full analysis
+            lead_analysis=lead_analysis,  # NEW: Pass full analysis
             first_name=first_name
         )
         
