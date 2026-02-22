@@ -2371,7 +2371,10 @@ class InsightIQDiscovery:
                     'audience_credibility': profile.get('audience_credibility_category'),
                     
                     # Discovery tracking
-                    'discovery_source': 'insightiq_discovery'
+                    'discovery_source': 'insightiq_discovery',
+
+                    # Triggers the HubSpot workflow → /api/webhook/enrich → AI scoring
+                    'enrichment_status': 'pending',
                 }
                 
                 standardized.append(standardized_profile)
