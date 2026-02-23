@@ -1426,10 +1426,17 @@ def extract_first_names_from_instagram_profile(username: str, full_name: str, bi
             - 3+ people: "John, Jane, and Bill"
             - Fallback: "there"
     """
-    if not client:
-        print("OpenAI client not initialized, using fallback")
+    def _full_name_fallback() -> str:
+        """Return first token of full_name, or 'there' if unavailable."""
+        if full_name and full_name.strip():
+            first = full_name.strip().split(' ')[0]
+            return first if first else "there"
         return "there"
-    
+
+    if not client:
+        print("OpenAI client not initialized, using full_name fallback")
+        return _full_name_fallback()
+
     # Quick validation
     if not username and not full_name:
         return "there"
@@ -1535,17 +1542,17 @@ Output: there
         # Remove any quotes that might have been added
         first_names = first_names.strip('"').strip("'")
         
-        # If empty or just punctuation, use fallback
-        if not first_names or first_names.lower() in ['', 'none', 'unknown', 'n/a', 'not provided']:
-            first_names = "there"
-        
+        # If empty or a known non-answer, fall back to full_name
+        if not first_names or first_names.lower() in ['', 'none', 'unknown', 'n/a', 'not provided', 'there']:
+            first_names = _full_name_fallback()
+
         print(f"[FIRST_NAME] @{username} → '{first_names}'")
-        
+
         return first_names
-        
+
     except Exception as e:
         print(f"[FIRST_NAME] Error for @{username}: {e}")
-        return "there"
+        return _full_name_fallback()
 
 def send_to_hubspot(contact_id: str, lead_score: float, section_scores: Dict, score_reasoning: str, 
                        creator_profile: Dict, content_analyses: List[Dict], lead_analysis: Dict = None,
@@ -1963,9 +1970,11 @@ def process_creator_profile(self, contact_id: str, profile_url: str, bio: str = 
          # Extract first name AFTER content analysis (so we have content context)
         self.update_state(state='PROGRESS', meta={'stage': 'Extracting first name'})
         
-        ig_username = social_data.get('profile', {}).get('username', '')
-        ig_full_name = social_data.get('profile', {}).get('full_name', '')
-        ig_bio = bio if bio else social_data.get('profile', {}).get('biography', '')
+        # Profile lives at data[0].profile (same structure used by create_profile_snapshot above)
+        _profile_info = social_data.get('data', [{}])[0].get('profile', {})
+        ig_username = _profile_info.get('platform_username', '') or profile_url.rstrip('/').split('/')[-1]
+        ig_full_name = _profile_info.get('full_name', '')
+        ig_bio = bio if bio else _profile_info.get('introduction', '')
         
         # NOW we pass content_analyses to give more context
         first_name = extract_first_names_from_instagram_profile(
