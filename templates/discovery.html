@@ -314,7 +314,50 @@
                     </div>
                 </div>
                 
-                <button type="submit" 
+                <!-- BDR Round Robin -->
+                <div class="border-t border-gray-200 pt-4">
+                    <label class="block text-sm font-bold text-gray-700 mb-2">
+                        🎯 BDR Round Robin Assignment
+                    </label>
+                    <p class="text-xs text-gray-500 mb-3">
+                        Leads will be distributed equally among selected BDRs in round-robin order. At least one must be selected.
+                    </p>
+                    <div class="grid grid-cols-2 gap-2" id="bdr-checkboxes">
+                        <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                            <input type="checkbox" class="bdr-checkbox" value="Miriam Plascencia" checked
+                                   class="rounded border-gray-300 text-blue-600">
+                            Miriam Plascencia
+                        </label>
+                        <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                            <input type="checkbox" class="bdr-checkbox" value="Majo Juarez" checked
+                                   class="rounded border-gray-300 text-blue-600">
+                            Majo Juarez
+                        </label>
+                        <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                            <input type="checkbox" class="bdr-checkbox" value="Nicole Roma" checked
+                                   class="rounded border-gray-300 text-blue-600">
+                            Nicole Roma
+                        </label>
+                        <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                            <input type="checkbox" class="bdr-checkbox" value="Salvatore Renteria" checked
+                                   class="rounded border-gray-300 text-blue-600">
+                            Salvatore Renteria
+                        </label>
+                        <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                            <input type="checkbox" class="bdr-checkbox" value="Sofia Gonzalez" checked
+                                   class="rounded border-gray-300 text-blue-600">
+                            Sofia Gonzalez
+                        </label>
+                        <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                            <input type="checkbox" class="bdr-checkbox" value="Tanya Pina" checked
+                                   class="rounded border-gray-300 text-blue-600">
+                            Tanya Pina
+                        </label>
+                    </div>
+                    <p id="bdr-error" class="text-xs text-red-600 mt-1 hidden">Please select at least one BDR.</p>
+                </div>
+
+                <button type="submit"
                         class="w-full bg-blue-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-blue-700 transition-colors focus:ring-4 focus:ring-blue-300">
                     🔍 Start Discovery
                 </button>
@@ -421,6 +464,18 @@
             document.getElementById('patreon-filters').classList.add('hidden');
         });
         
+        // BDR Round Robin: collect selected names, validate at least one
+        function getBdrNames() {
+            const checked = Array.from(document.querySelectorAll('.bdr-checkbox:checked')).map(cb => cb.value);
+            const errorEl = document.getElementById('bdr-error');
+            if (checked.length === 0) {
+                errorEl.classList.remove('hidden');
+                return null;
+            }
+            errorEl.classList.add('hidden');
+            return checked;
+        }
+
         // Lookalike username enable/disable
         document.querySelectorAll('input[name="lookalike-type"]').forEach(radio => {
             radio.addEventListener('change', function() {
@@ -496,7 +551,12 @@
             if (hashtags) {
                 filters.hashtags = hashtags.split(',').map(h => ({name: h.trim()})).filter(h => h.name);
             }
-            
+
+            // BDR round-robin
+            const bdrNames = getBdrNames();
+            if (!bdrNames) return;
+            filters.bdr_names = bdrNames;
+
             // Start job
             try {
                 const response = await fetch('/api/discovery/instagram', {
@@ -537,7 +597,12 @@
                 alert('Please enter at least one search keyword');
                 return;
             }
-            
+
+            // BDR round-robin
+            const bdrNames = getBdrNames();
+            if (!bdrNames) return;
+            filters.bdr_names = bdrNames;
+
             // Start job
             try {
                 const response = await fetch('/api/discovery/patreon', {
@@ -595,7 +660,12 @@
                 alert('Minimum members must be less than maximum members');
                 return;
             }
-            
+
+            // BDR round-robin
+            const bdrNames = getBdrNames();
+            if (!bdrNames) return;
+            filters.bdr_names = bdrNames;
+
             // Start job
             try {
                 const response = await fetch('/api/discovery/facebook', {
