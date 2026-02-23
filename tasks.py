@@ -3741,7 +3741,7 @@ def standardize_facebook_profiles(profiles: List[Dict]) -> List[Dict]:
                 'facebook_group_description': profile.get('description'),
 
                 # ── Metadata ─────────────────────────────────────────
-                'flagship_social_platform': 'facebook_groups',
+                'flagship_social_platform': 'facebook_group',
                 'email_validation_status':  profile.get('email_validation_status'),
             }
 
