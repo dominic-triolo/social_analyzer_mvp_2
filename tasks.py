@@ -30,6 +30,16 @@ HUBSPOT_API_KEY = os.getenv('HUBSPOT_API_KEY')
 APIFY_API_TOKEN = os.getenv('APIFY_API_TOKEN')
 APOLLO_API_KEY = os.getenv('APOLLO_API_KEY')
 
+# BDR Round-Robin assignment map  (name → HubSpot email value)
+BDR_EMAILS = {
+    'Miriam Plascencia':   'miriamp@trovatrip.com',
+    'Majo Juarez':         'mariaj@trovatrip.com',
+    'Nicole Roma':         'nicolem@trovatrip.com',
+    'Salvatore Renteria':  'salvatore@trovatrip.com',
+    'Sofia Gonzalez':      'almag@trovatrip.com',
+    'Tanya Pina':          'tanyap@trovatrip.com',
+}
+
 # R2 Configuration
 R2_ACCESS_KEY_ID = os.getenv('R2_ACCESS_KEY_ID')
 R2_SECRET_ACCESS_KEY = os.getenv('R2_SECRET_ACCESS_KEY')
@@ -1661,8 +1671,14 @@ def send_to_hubspot(contact_id: str, lead_score: float, section_scores: Dict, sc
         "analyzed_at": datetime.now().isoformat(),
         "enrichment_status": enrichment_status,
         "enrichment_error_details": "; ".join(error_details) if error_details else "",
-        "items_analyzed": len(content_analyses)
+        "items_analyzed": len(content_analyses),
     }
+
+    # BDR: auto_enroll contacts are handled directly and don't need a BDR owner.
+    # Clear the value that was pre-assigned at import time.
+    # standard/low_priority contacts keep their pre-assigned BDR (already on the contact).
+    if priority_tier == "auto_enroll":
+        payload["bdr_"] = ""
     
     print(f"Sending to HubSpot: {HUBSPOT_WEBHOOK_URL}")
     print(f"Enrichment Status: {enrichment_status}")
@@ -2403,6 +2419,34 @@ class InsightIQDiscovery:
         return contacts
 
 # ============================================================================
+# BDR Round-Robin Helper
+# ============================================================================
+
+def assign_bdr_round_robin(profiles: List[Dict], bdr_names: List[str]) -> List[Dict]:
+    """
+    Assign bdr_ (BDR email) to each profile in round-robin order.
+
+    Only names present in BDR_EMAILS are used; unrecognised names are silently
+    skipped so a bad frontend value can never crash the pipeline.
+
+    Args:
+        profiles:  List of profile dicts (modified in-place AND returned).
+        bdr_names: Ordered list of BDR display names selected by the user.
+
+    Returns:
+        The same profiles list with 'bdr_' set on every item.
+    """
+    emails = [BDR_EMAILS[n] for n in bdr_names if n in BDR_EMAILS]
+    if not emails:
+        print("[BDR] No valid BDR names supplied – skipping round-robin assignment")
+        return profiles
+    for i, profile in enumerate(profiles):
+        profile['bdr_'] = emails[i % len(emails)]
+    print(f"[BDR] Assigned {len(emails)} BDR(s) round-robin across {len(profiles)} profiles")
+    return profiles
+
+
+# ============================================================================
 # Discovery Tasks
 # ============================================================================
 
@@ -2437,9 +2481,14 @@ def discover_instagram_profiles(user_filters=None, job_id=None):
         profiles = discovery_client.search_profiles(platform='instagram', user_filters=user_filters)
         
         print(f"Discovery complete: {len(profiles)} profiles found")
-        
+
+        # BDR round-robin assignment (pre-assign before HubSpot import;
+        # send_to_hubspot clears bdr_ for auto_enroll contacts after scoring)
+        bdr_names = user_filters.get('bdr_names', list(BDR_EMAILS.keys()))
+        profiles = assign_bdr_round_robin(profiles, bdr_names)
+
         update_discovery_job_status(job_id, status='importing', profiles_found=len(profiles))
-        
+
         import_results = import_profiles_to_hubspot(profiles, job_id)
         
         update_discovery_job_status(
@@ -2569,9 +2618,11 @@ def discover_patreon_profiles(user_filters=None, job_id=None):
         # Full enrichment pipeline
         enriched = enrich_profiles_full_pipeline(profiles, job_id, platform='patreon')
 
-        # Standardise → HubSpot
+        # Standardise → BDR round-robin → HubSpot
         update_discovery_job_status(job_id, status='importing')
         standardized = standardize_patreon_profiles(enriched)
+        bdr_names = user_filters.get('bdr_names', list(BDR_EMAILS.keys()))
+        standardized = assign_bdr_round_robin(standardized, bdr_names)
         import_results = import_profiles_to_hubspot(standardized, job_id)
 
         update_discovery_job_status(
@@ -2716,11 +2767,13 @@ def discover_facebook_groups(user_filters=None, job_id=None):
         update_discovery_job_status(job_id, status='enriching', profiles_found=len(profiles))
 
         # Full enrichment pipeline
-        enriched = enrich_profiles_full_pipeline(profiles, job_id, platform='facebook_groups')
+        enriched = enrich_profiles_full_pipeline(profiles, job_id, platform='facebook_group')
 
-        # Standardise → HubSpot
+        # Standardise → BDR round-robin → HubSpot
         update_discovery_job_status(job_id, status='importing')
         standardized = standardize_facebook_profiles(enriched)
+        bdr_names = user_filters.get('bdr_names', list(BDR_EMAILS.keys()))
+        standardized = assign_bdr_round_robin(standardized, bdr_names)
         import_results = import_profiles_to_hubspot(standardized, job_id)
 
         update_discovery_job_status(
