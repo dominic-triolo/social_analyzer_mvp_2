@@ -354,7 +354,6 @@
                             Tanya Pina
                         </label>
                     </div>
-                    <p id="bdr-error" class="text-xs text-red-600 mt-1 hidden">Please select at least one BDR.</p>
                 </div>
 
                 <button type="submit"
@@ -466,14 +465,7 @@
         
         // BDR Round Robin: collect selected names, validate at least one
         function getBdrNames() {
-            const checked = Array.from(document.querySelectorAll('.bdr-checkbox:checked')).map(cb => cb.value);
-            const errorEl = document.getElementById('bdr-error');
-            if (checked.length === 0) {
-                errorEl.classList.remove('hidden');
-                return null;
-            }
-            errorEl.classList.add('hidden');
-            return checked;
+            return Array.from(document.querySelectorAll('.bdr-checkbox:checked')).map(cb => cb.value);
         }
 
         // Lookalike username enable/disable
@@ -554,7 +546,7 @@
 
             // BDR round-robin
             const bdrNames = getBdrNames();
-            if (!bdrNames) return;
+
             filters.bdr_names = bdrNames;
 
             // Start job
@@ -600,7 +592,7 @@
 
             // BDR round-robin
             const bdrNames = getBdrNames();
-            if (!bdrNames) return;
+
             filters.bdr_names = bdrNames;
 
             // Start job
@@ -663,7 +655,7 @@
 
             // BDR round-robin
             const bdrNames = getBdrNames();
-            if (!bdrNames) return;
+
             filters.bdr_names = bdrNames;
 
             // Start job
