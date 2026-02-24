@@ -2481,7 +2481,7 @@ def assign_bdr_round_robin(profiles: List[Dict], bdr_names: List[str]) -> List[D
 # Discovery Tasks
 # ============================================================================
 
-@celery_app.task(name='tasks.discover_instagram_profiles')
+@celery_app.task(name='tasks.discover_instagram_profiles', time_limit=7200, soft_time_limit=7100)
 def discover_instagram_profiles(user_filters=None, job_id=None):
     """Run Instagram profile discovery with fixed base parameters"""
     if job_id is None:
@@ -2557,7 +2557,7 @@ MILLIONVERIFIER_API_KEY = os.getenv('MILLIONVERIFIER_API_KEY')
 # DISCOVERY TASK: PATREON
 # ============================================================================
 
-@celery_app.task(name='tasks.discover_patreon_profiles')
+@celery_app.task(name='tasks.discover_patreon_profiles', time_limit=7200, soft_time_limit=7100)
 def discover_patreon_profiles(user_filters=None, job_id=None):
     """
     Run Patreon profile discovery via Apify scraper with full enrichment pipeline.
@@ -2720,7 +2720,7 @@ def discover_patreon_profiles(user_filters=None, job_id=None):
 # DISCOVERY TASK: FACEBOOK GROUPS
 # ============================================================================
 
-@celery_app.task(name='tasks.discover_facebook_groups')
+@celery_app.task(name='tasks.discover_facebook_groups', time_limit=7200, soft_time_limit=7100)
 def discover_facebook_groups(user_filters=None, job_id=None):
     """
     Discover Facebook Groups via Google Search Scraper (Apify) + full enrichment.
