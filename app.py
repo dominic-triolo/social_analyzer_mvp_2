@@ -480,326 +480,8 @@ def send_to_hubspot(contact_id: str, lead_score: float, section_scores: Dict, sc
 
 @app.route('/')
 def index():
-    """Main dashboard"""
-    return '''
-<!DOCTYPE html>
-<html>
-<head>
-    <title>TrovaTrip Lead Enrichment Dashboard</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-        
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        
-        .header {
-            background: white;
-            border-radius: 15px;
-            padding: 30px;
-            margin-bottom: 30px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-        }
-        
-        .header h1 {
-            font-size: 32px;
-            color: #667eea;
-            margin-bottom: 10px;
-        }
-        
-        .header p {
-            color: #666;
-            font-size: 16px;
-        }
-        
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-        
-        .stat-card {
-            background: white;
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            transition: transform 0.2s;
-        }
-        
-        .stat-card:hover {
-            transform: translateY(-5px);
-        }
-        
-        .stat-label {
-            color: #888;
-            font-size: 14px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 10px;
-        }
-        
-        .stat-value {
-            font-size: 36px;
-            font-weight: bold;
-            color: #667eea;
-        }
-        
-        .section {
-            background: white;
-            border-radius: 15px;
-            padding: 30px;
-            margin-bottom: 30px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-        }
-        
-        .section h2 {
-            color: #667eea;
-            margin-bottom: 20px;
-            font-size: 24px;
-        }
-        
-        .breakdown-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-        }
-        
-        .breakdown-item {
-            padding: 15px;
-            background: #f8f9fa;
-            border-radius: 10px;
-            border-left: 4px solid #667eea;
-        }
-        
-        .breakdown-label {
-            color: #666;
-            font-size: 13px;
-            margin-bottom: 5px;
-        }
-        
-        .breakdown-value {
-            font-size: 24px;
-            font-weight: bold;
-            color: #333;
-        }
-        
-        .timestamp {
-            text-align: center;
-            color: white;
-            margin-top: 20px;
-            font-size: 14px;
-        }
-        
-        #loading {
-            text-align: center;
-            padding: 40px;
-            color: white;
-            font-size: 18px;
-        }
-        
-        .progress-bar {
-            height: 8px;
-            background: #e0e0e0;
-            border-radius: 10px;
-            margin-top: 15px;
-            overflow: hidden;
-        }
-        
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-            transition: width 0.3s;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div id="loading">
-            <h2>⏳ Loading Dashboard...</h2>
-            <p style="margin-top: 10px;">Fetching latest stats from Redis...</p>
-        </div>
-        
-        <div id="dashboard" style="display: none;">
-            <div class="header">
-                <h1>🚀 TrovaTrip Lead Enrichment</h1>
-                <p>Real-time monitoring of creator profile processing and scoring</p>
-            </div>
-            
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-label">Queue Size</div>
-                    <div class="stat-value" id="queue-size">0</div>
-                    <div class="stat-label" style="margin-top: 10px;">Active Workers: <span id="active-workers">0</span></div>
-                </div>
-                
-                <div class="stat-card">
-                    <div class="stat-label">Total Completed</div>
-                    <div class="stat-value" id="total-completed">0</div>
-                </div>
-                
-                <div class="stat-card">
-                    <div class="stat-label">Total Errors</div>
-                    <div class="stat-value" id="total-errors" style="color: #dc3545;">0</div>
-                </div>
-                
-                <div class="stat-card">
-                    <div class="stat-label">Avg Duration</div>
-                    <div class="stat-value" id="avg-duration">0</div>
-                    <div class="stat-label" style="margin-top: 5px;">seconds</div>
-                </div>
-                
-                <div class="stat-card">
-                    <div class="stat-label">Est. Time Remaining</div>
-                    <div class="stat-value" id="est-time">0</div>
-                    <div class="stat-label" style="margin-top: 5px;">minutes</div>
-                </div>
-            </div>
-            
-            <div class="section">
-                <h2>📊 Pre-Screening Results</h2>
-                <div class="breakdown-grid">
-                    <div class="breakdown-item" style="border-left-color: #dc3545;">
-                        <div class="breakdown-label">Low Post Frequency</div>
-                        <div class="breakdown-value" id="low-post-freq">0</div>
-                    </div>
-                    <div class="breakdown-item" style="border-left-color: #ffc107;">
-                        <div class="breakdown-label">Outside ICP</div>
-                        <div class="breakdown-value" id="outside-icp">0</div>
-                    </div>
-                    <div class="breakdown-item" style="border-left-color: #28a745;">
-                        <div class="breakdown-label">Passed to Enrichment</div>
-                        <div class="breakdown-value" id="passed-enrichment">0</div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="section">
-                <h2>🎯 Priority Tiers (After Enrichment)</h2>
-                <div class="breakdown-grid">
-                    <div class="breakdown-item" style="border-left-color: #28a745;">
-                        <div class="breakdown-label">Auto-Enroll</div>
-                        <div class="breakdown-value" id="tier-auto">0</div>
-                    </div>
-                    <div class="breakdown-item" style="border-left-color: #17a2b8;">
-                        <div class="breakdown-label">High Priority Review</div>
-                        <div class="breakdown-value" id="tier-high">0</div>
-                    </div>
-                    <div class="breakdown-item" style="border-left-color: #ffc107;">
-                        <div class="breakdown-label">Standard Priority Review</div>
-                        <div class="breakdown-value" id="tier-standard">0</div>
-                    </div>
-                    <div class="breakdown-item" style="border-left-color: #6c757d;">
-                        <div class="breakdown-label">Low Priority Review</div>
-                        <div class="breakdown-value" id="tier-low">0</div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="section">
-                <h2>✅ Batch Quality Metrics</h2>
-                <div class="breakdown-grid">
-                    <div class="breakdown-item" style="border-left-color: #28a745;">
-                        <div class="breakdown-label">Pass Rate (Pre-screen → Enrichment)</div>
-                        <div class="breakdown-value" id="pass-rate">0%</div>
-                    </div>
-                </div>
-                
-                <div style="margin-top: 20px;">
-                    <div class="breakdown-label">Tier Distribution (% of Enriched Leads)</div>
-                    <div class="breakdown-grid" style="margin-top: 10px;">
-                        <div class="breakdown-item" style="border-left-color: #28a745;">
-                            <div class="breakdown-label">Auto-Enroll</div>
-                            <div class="breakdown-value" style="font-size: 20px;" id="tier-pct-auto">0%</div>
-                        </div>
-                        <div class="breakdown-item" style="border-left-color: #17a2b8;">
-                            <div class="breakdown-label">High Priority</div>
-                            <div class="breakdown-value" style="font-size: 20px;" id="tier-pct-high">0%</div>
-                        </div>
-                        <div class="breakdown-item" style="border-left-color: #ffc107;">
-                            <div class="breakdown-label">Standard Priority</div>
-                            <div class="breakdown-value" style="font-size: 20px;" id="tier-pct-standard">0%</div>
-                        </div>
-                        <div class="breakdown-item" style="border-left-color: #6c757d;">
-                            <div class="breakdown-label">Low Priority</div>
-                            <div class="breakdown-value" style="font-size: 20px;" id="tier-pct-low">0%</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="timestamp">
-                Last updated: <span id="last-update">--:--:--</span>
-            </div>
-        </div>
-    </div>
-    
-    <script>
-        async function fetchStats() {
-            try {
-                const response = await fetch('/api/stats');
-                const data = await response.json();
-                
-                // Update main stats
-                document.getElementById('queue-size').textContent = data.queue_size;
-                document.getElementById('active-workers').textContent = data.active_workers;
-                document.getElementById('total-completed').textContent = data.total_completed;
-                document.getElementById('total-errors').textContent = data.total_errors;
-                document.getElementById('avg-duration').textContent = data.avg_duration;
-                document.getElementById('est-time').textContent = data.est_time_remaining;
-                
-                // Update pre-screening
-                document.getElementById('low-post-freq').textContent = data.pre_screening.low_post_frequency;
-                document.getElementById('outside-icp').textContent = data.pre_screening.outside_icp;
-                document.getElementById('passed-enrichment').textContent = data.breakdown.enriched;
-                
-                // Update priority tiers
-                document.getElementById('tier-auto').textContent = data.priority_tiers.auto_enroll;
-                document.getElementById('tier-high').textContent = data.priority_tiers.high_priority_review;
-                document.getElementById('tier-standard').textContent = data.priority_tiers.standard_priority_review;
-                document.getElementById('tier-low').textContent = data.priority_tiers.low_priority_review;
-                
-                // Update batch quality
-                document.getElementById('pass-rate').textContent = (data.batch_quality.pass_rate || 0) + '%';
-                document.getElementById('tier-pct-auto').textContent = (data.batch_quality.tier_percentages.auto_enroll || 0) + '%';
-                document.getElementById('tier-pct-high').textContent = (data.batch_quality.tier_percentages.high_priority_review || 0) + '%';
-                document.getElementById('tier-pct-standard').textContent = (data.batch_quality.tier_percentages.standard_priority_review || 0) + '%';
-                document.getElementById('tier-pct-low').textContent = (data.batch_quality.tier_percentages.low_priority_review || 0) + '%';
-                
-                // Update timestamp
-                document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
-                
-                // Show dashboard
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('dashboard').style.display = 'block';
-                
-            } catch (error) {
-                console.error('Error fetching stats:', error);
-                document.getElementById('loading').innerHTML = '<p>⚠️ Error loading stats. Retrying...</p>';
-            }
-        }
-        
-        // Initial fetch
-        fetchStats();
-        
-        // Auto-refresh every 5 seconds
-        setInterval(fetchStats, 5000);
-    </script>
-</body>
-</html>
-    '''
+    """Home hub"""
+    return render_template('home.html')
 
 
 @app.route('/api/webhook/enrich', methods=['POST'])
@@ -1272,11 +954,15 @@ def start_facebook_discovery():
             })
         )
         
+        # Index job by platform for monitor pages
+        r.lpush('discovery_jobs:facebook', job_id)
+        r.ltrim('discovery_jobs:facebook', 0, 19)
+
         return jsonify({
             'job_id': job_id,
             'status': 'queued'
         }), 202
-        
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -1362,11 +1048,15 @@ def start_patreon_discovery():
             })
         )
         
+        # Index job by platform for monitor pages
+        r.lpush('discovery_jobs:patreon', job_id)
+        r.ltrim('discovery_jobs:patreon', 0, 19)
+
         return jsonify({
             'job_id': job_id,
             'status': 'queued'
         }), 202
-        
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -1392,6 +1082,41 @@ def list_discovery_jobs():
             except json.JSONDecodeError:
                 continue
     jobs.sort(key=lambda x: x.get('started_at', ''), reverse=True)
+    return jsonify(jobs)
+
+
+# ── New UI pages ──────────────────────────────────────────────────────────────
+
+@app.route('/monitor/instagram')
+def monitor_instagram():
+    return render_template('monitor_instagram.html')
+
+@app.route('/monitor/patreon')
+def monitor_patreon():
+    return render_template('monitor_patreon.html', platform='patreon',
+                           platform_label='Patreon', platform_icon='🎨')
+
+@app.route('/monitor/facebook')
+def monitor_facebook():
+    return render_template('monitor_patreon.html', platform='facebook',
+                           platform_label='Facebook Groups', platform_icon='👥')
+
+# ── Monitor API endpoints ─────────────────────────────────────────────────────
+
+@app.route('/api/monitor/jobs/<platform>')
+def get_platform_jobs(platform):
+    """Return up to 20 most recent discovery jobs for a given platform."""
+    if platform not in ('patreon', 'facebook'):
+        return jsonify({'error': 'Unknown platform'}), 400
+    job_ids = r.lrange(f'discovery_jobs:{platform}', 0, 19)
+    jobs = []
+    for jid in job_ids:
+        raw = r.get(f'discovery_job:{jid}')
+        if raw:
+            try:
+                jobs.append(json.loads(raw))
+            except json.JSONDecodeError:
+                continue
     return jsonify(jobs)
 
 
