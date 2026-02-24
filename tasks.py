@@ -2264,15 +2264,13 @@ class InsightIQDiscovery:
             parameters['hashtags'] = user_filters['hashtags']
             print(f"Hashtags: {parameters['hashtags']}")
 
-        # Bio phrase filtering (Instagram only)
+        # Bio phrase filtering (Instagram only) — API treats these as mutually exclusive:
+        # send bio_phrase_advanced if advanced clauses are present, otherwise bio_phrase.
         bio_phrase = (user_filters.get('bio_phrase') or '').strip()
-        if bio_phrase:
-            parameters['bio_phrase'] = bio_phrase
-            print(f"Bio phrase: {bio_phrase}")
-
         bio_phrase_advanced = user_filters.get('bio_phrase_advanced') or []
+
         if bio_phrase_advanced and isinstance(bio_phrase_advanced, list):
-            # Sanitise: keep only well-formed entries, cap at 14 (15 total incl. bio_phrase)
+            # Sanitise: keep only well-formed entries, cap at 14
             valid_actions = {'AND', 'OR', 'NOT'}
             cleaned = [
                 {'bio_phrase': str(e['bio_phrase']).strip(), 'action': e['action']}
@@ -2284,6 +2282,9 @@ class InsightIQDiscovery:
             if cleaned:
                 parameters['bio_phrase_advanced'] = cleaned
                 print(f"Bio phrase advanced: {len(cleaned)} clause(s)")
+        elif bio_phrase:
+            parameters['bio_phrase'] = bio_phrase
+            print(f"Bio phrase: {bio_phrase}")
 
         print(f"Starting {platform} discovery with fixed parameters...")
         
