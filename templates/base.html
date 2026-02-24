@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}TrovaTrip{% endblock %} — Lead Discovery</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        cream:    '#eeece1',
+                        teal:     '#00b2c9',
+                        'teal-dark': '#005c69',
+                        coral:    '#f65c4e',
+                        slate:    '#3c4858',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #eeece1; color: #3c4858; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        .nav-link { transition: all 0.15s; }
+        .nav-link:hover { background-color: rgba(0,178,201,0.15); }
+        .nav-link.active { background-color: rgba(0,178,201,0.2); border-left: 3px solid #00b2c9; }
+        .pulse-ring { animation: pulse-ring 1.8s cubic-bezier(0.215,0.61,0.355,1) infinite; }
+        @keyframes pulse-ring {
+            0%   { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0,178,201,0.5); }
+            70%  { transform: scale(1);    box-shadow: 0 0 0 8px rgba(0,178,201,0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0,178,201,0); }
+        }
+        .stage-line { width: 2px; background: #d1d5db; margin: 0 auto; }
+        .stage-line.done { background: #10b981; }
+        .stage-line.running { background: linear-gradient(to bottom, #10b981, #00b2c9); }
+        .card { background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
+    </style>
+    {% block head %}{% endblock %}
+</head>
+<body class="min-h-screen">
+
+<!-- Nav bar -->
+<nav style="background-color:#005c69;" class="sticky top-0 z-50 shadow-lg">
+    <div class="max-w-7xl mx-auto px-4 flex items-center h-14 gap-1">
+        <!-- Logo -->
+        <a href="/" class="flex items-center gap-2 mr-4 shrink-0">
+            <img src="/static/logo.png" alt="TrovaTrip" class="h-8 w-8 object-contain"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+            <div style="display:none;width:32px;height:32px;background:#00b2c9;border-radius:8px;align-items:center;justify-content:center;">
+                <span style="color:white;font-weight:700;font-size:14px;">T</span>
+            </div>
+            <span class="text-white font-semibold text-sm hidden sm:block">TrovaTrip</span>
+        </a>
+        <div class="h-5 w-px bg-teal-700 mr-3" style="background:rgba(255,255,255,0.2)"></div>
+        <!-- Nav links -->
+        <a href="/" class="nav-link {% if active_page == 'home' %}active{% endif %} text-white text-sm px-3 py-1.5 rounded-md flex items-center gap-1.5">🏠 <span class="hidden sm:inline">Home</span></a>
+        <a href="/discovery" class="nav-link {% if active_page == 'discovery' %}active{% endif %} text-white text-sm px-3 py-1.5 rounded-md flex items-center gap-1.5">🔍 <span class="hidden sm:inline">Discovery</span></a>
+        <div class="h-5 w-px mx-1" style="background:rgba(255,255,255,0.2)"></div>
+        <a href="/monitor/instagram" class="nav-link {% if active_page == 'instagram' %}active{% endif %} text-white text-sm px-3 py-1.5 rounded-md flex items-center gap-1.5">📸 <span class="hidden sm:inline">Instagram</span></a>
+        <a href="/monitor/patreon" class="nav-link {% if active_page == 'patreon' %}active{% endif %} text-white text-sm px-3 py-1.5 rounded-md flex items-center gap-1.5">🎨 <span class="hidden sm:inline">Patreon</span></a>
+        <a href="/monitor/facebook" class="nav-link {% if active_page == 'facebook' %}active{% endif %} text-white text-sm px-3 py-1.5 rounded-md flex items-center gap-1.5">👥 <span class="hidden sm:inline">Facebook</span></a>
+        <!-- Live indicator -->
+        <div class="ml-auto flex items-center gap-2">
+            <span id="live-dot" class="w-2 h-2 rounded-full bg-teal-400" style="background:#00b2c9"></span>
+            <span class="text-white text-xs opacity-70 hidden sm:inline">Live</span>
+        </div>
+    </div>
+</nav>
+
+<main class="max-w-7xl mx-auto px-4 py-6">
+    {% block content %}{% endblock %}
+</main>
+
+<script>
+    // Pulse the live dot
+    setInterval(() => {
+        const dot = document.getElementById('live-dot');
+        if (dot) { dot.style.opacity = dot.style.opacity === '0.3' ? '1' : '0.3'; }
+    }, 800);
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>
