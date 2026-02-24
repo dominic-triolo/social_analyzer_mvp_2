@@ -31,13 +31,13 @@ APIFY_API_TOKEN = os.getenv('APIFY_API_TOKEN')
 APOLLO_API_KEY = os.getenv('APOLLO_API_KEY')
 
 # BDR Round-Robin assignment map  (name → HubSpot email value)
-BDR_EMAILS = {
-    'Miriam Plascencia':   'miriamp@trovatrip.com',
-    'Majo Juarez':         'mariaj@trovatrip.com',
-    'Nicole Roma':         'nicolem@trovatrip.com',
-    'Salvatore Renteria':  'salvatore@trovatrip.com',
-    'Sofia Gonzalez':      'almag@trovatrip.com',
-    'Tanya Pina':          'tanyap@trovatrip.com',
+BDR_OWNER_IDS = {
+    'Miriam Plascencia':   '83266567',
+    'Majo Juarez':         '79029958',
+    'Nicole Roma':         '83266570',
+    'Salvatore Renteria':  '81500975',
+    'Sofia Gonzalez':      '79029956',
+    'Tanya Pina':          '83266565',
 }
 
 # R2 Configuration
@@ -2452,9 +2452,9 @@ class InsightIQDiscovery:
 
 def assign_bdr_round_robin(profiles: List[Dict], bdr_names: List[str]) -> List[Dict]:
     """
-    Assign bdr_ (BDR email) to each profile in round-robin order.
+    Assign bdr_ (HubSpot owner ID) to each profile in round-robin order.
 
-    Only names present in BDR_EMAILS are used; unrecognised names are silently
+    Only names present in BDR_OWNER_IDS are used; unrecognised names are silently
     skipped so a bad frontend value can never crash the pipeline.
 
     Args:
@@ -2464,12 +2464,12 @@ def assign_bdr_round_robin(profiles: List[Dict], bdr_names: List[str]) -> List[D
     Returns:
         The same profiles list with 'bdr_' set on every item.
     """
-    emails = [BDR_EMAILS[n] for n in bdr_names if n in BDR_EMAILS]
-    if not emails:
+    owner_ids = [BDR_OWNER_IDS[n] for n in bdr_names if n in BDR_OWNER_IDS]
+    if not owner_ids:
         print("[BDR] No valid BDR names supplied – skipping round-robin assignment")
         return profiles
     for i, profile in enumerate(profiles):
-        profile['bdr_'] = emails[i % len(emails)]
+        profile['bdr_'] = owner_ids[i % len(owner_ids)]
         # Mark for BDR review — cleared later for auto_enroll contacts by send_to_hubspot
         profile['lead_list_fit'] = 'Not_reviewed'
     print(f"[BDR] Assigned {len(emails)} BDR(s) round-robin across {len(profiles)} profiles")
@@ -2514,7 +2514,7 @@ def discover_instagram_profiles(user_filters=None, job_id=None):
 
         # BDR round-robin assignment (pre-assign before HubSpot import;
         # send_to_hubspot clears bdr_ for auto_enroll contacts after scoring)
-        bdr_names = user_filters.get('bdr_names', list(BDR_EMAILS.keys()))
+        bdr_names = user_filters.get('bdr_names', list(BDR_OWNER_IDS.keys()))
         profiles = assign_bdr_round_robin(profiles, bdr_names)
 
         update_discovery_job_status(job_id, status='importing', profiles_found=len(profiles))
@@ -2687,7 +2687,7 @@ def discover_patreon_profiles(user_filters=None, job_id=None):
         # Standardise → BDR round-robin → HubSpot
         update_discovery_job_status(job_id, status='importing')
         standardized = standardize_patreon_profiles(enriched)
-        bdr_names = user_filters.get('bdr_names', list(BDR_EMAILS.keys()))
+        bdr_names = user_filters.get('bdr_names', list(BDR_OWNER_IDS.keys()))
         standardized = assign_bdr_round_robin(standardized, bdr_names)
         import_results = import_profiles_to_hubspot(standardized, job_id)
 
@@ -2860,7 +2860,7 @@ def discover_facebook_groups(user_filters=None, job_id=None):
         # Standardise → BDR round-robin → HubSpot
         update_discovery_job_status(job_id, status='importing')
         standardized = standardize_facebook_profiles(enriched)
-        bdr_names = user_filters.get('bdr_names', list(BDR_EMAILS.keys()))
+        bdr_names = user_filters.get('bdr_names', list(BDR_OWNER_IDS.keys()))
         standardized = assign_bdr_round_robin(standardized, bdr_names)
         import_results = import_profiles_to_hubspot(standardized, job_id)
 
