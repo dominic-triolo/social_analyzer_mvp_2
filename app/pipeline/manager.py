@@ -45,14 +45,20 @@ def _get_queue():
 # ── Stage registry ────────────────────────────────────────────────────────────
 # Maps stage name → dict of platform → adapter class
 
-STAGE_REGISTRY: Dict[str, Dict[str, Type[StageAdapter]]] = {
-    'discovery':   discovery_mod.ADAPTERS,
-    'pre_screen':  prescreen_mod.ADAPTERS,
-    'enrichment':  enrichment_mod.ADAPTERS,
-    'analysis':    analysis_mod.ADAPTERS,
-    'scoring':     scoring_mod.ADAPTERS,
-    'crm_sync':    crm_mod.ADAPTERS,
-}
+import os
+if os.getenv('MOCK_PIPELINE'):
+    from app.pipeline.mock_adapters import MOCK_STAGE_REGISTRY
+    STAGE_REGISTRY = MOCK_STAGE_REGISTRY
+    print("[Pipeline] ⚠ MOCK_PIPELINE active — using fake adapters")
+else:
+    STAGE_REGISTRY: Dict[str, Dict[str, Type[StageAdapter]]] = {
+        'discovery':   discovery_mod.ADAPTERS,
+        'pre_screen':  prescreen_mod.ADAPTERS,
+        'enrichment':  enrichment_mod.ADAPTERS,
+        'analysis':    analysis_mod.ADAPTERS,
+        'scoring':     scoring_mod.ADAPTERS,
+        'crm_sync':    crm_mod.ADAPTERS,
+    }
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
