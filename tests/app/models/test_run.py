@@ -532,6 +532,7 @@ class TestFromDbRun:
             id='db-run-1',
             status='completed',
             platform='instagram',
+            current_stage='crm_sync',
             created_at=datetime(2026, 1, 15, 10, 0, 0),
             finished_at=datetime(2026, 1, 15, 10, 30, 0),
             filters={'max_results': 25},
@@ -628,9 +629,15 @@ class TestFromDbRun:
         run = Run._from_db_run(db_run)
         assert run.stage_progress == {}
 
-    def test_current_stage_always_empty(self):
+    def test_current_stage_from_db(self):
         from app.models.run import Run
         db_run = self._make_db_run()
+        run = Run._from_db_run(db_run)
+        assert run.current_stage == 'crm_sync'
+
+    def test_current_stage_none_defaults_to_empty(self):
+        from app.models.run import Run
+        db_run = self._make_db_run(current_stage=None)
         run = Run._from_db_run(db_run)
         assert run.current_stage == ''
 

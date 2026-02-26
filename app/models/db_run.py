@@ -13,6 +13,7 @@ class DbRun(Base):
     id = Column(Text, primary_key=True)
     platform = Column(Text, nullable=False)
     status = Column(Text, nullable=False, default='queued')
+    current_stage = Column(Text, default='')
     filters = Column(JSON, default=dict)
     bdr_assignment = Column(Text, default='')
     profiles_found = Column(Integer, default=0)

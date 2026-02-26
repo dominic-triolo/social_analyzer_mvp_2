@@ -25,8 +25,11 @@ def _build_stages(run_dict):
     for i, key in enumerate(STAGE_ORDER):
         if run_status == 'failed' and i == current_idx:
             s = 'failed'
-        elif run_status == 'completed':
+        elif run_status in ('completed', 'failed') and i <= current_idx:
             s = 'completed'
+        elif run_status == 'completed' and i > current_idx:
+            # Pipeline exited early — these stages never ran
+            s = 'skipped'
         elif i < current_idx:
             s = 'completed'
         elif i == current_idx:
@@ -52,7 +55,13 @@ def run_detail(run_id):
     run = Run.load(run_id)
     if not run:
         return render_template('runs_list.html', runs=[], error='Run not found'), 404
-    return render_template('run_detail.html', run=run.to_dict())
+    run_dict = run.to_dict()
+    stages = _build_stages(run_dict)
+    is_terminal = run_dict.get('status') in ('completed', 'failed')
+    initial_html = render_template('partials/run_detail_content.html',
+                                   run=run_dict, stages=stages, is_terminal=is_terminal)
+    return render_template('run_detail.html', run=run_dict,
+                           is_terminal=is_terminal, initial_html=initial_html)
 
 
 # ── Run API ──────────────────────────────────────────────────────────────────
@@ -199,7 +208,7 @@ def stream_run(run_id):
             if is_terminal:
                 break
 
-            time.sleep(2)
+            time.sleep(0.5)
 
     return Response(
         stream_with_context(generate()),

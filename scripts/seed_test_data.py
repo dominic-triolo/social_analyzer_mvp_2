@@ -167,6 +167,7 @@ def seed_successful_run(session):
     # Postgres
     db_run = DbRun(
         id=run_id, platform='instagram', status='completed',
+        current_stage='crm_sync',
         filters=run_data['filters'], bdr_assignment=run_data['bdr_assignment'],
         profiles_found=250, profiles_pre_screened=180, profiles_enriched=172,
         profiles_scored=172, contacts_synced=10, duplicates_skipped=38,
@@ -230,6 +231,7 @@ def seed_failed_run(session):
 
     db_run = DbRun(
         id=run_id, platform='instagram', status='failed',
+        current_stage='enrichment',
         filters=run_data['filters'], bdr_assignment='Nicole Roma',
         profiles_found=200, profiles_pre_screened=120, profiles_enriched=45,
         profiles_scored=0, contacts_synced=0, duplicates_skipped=15,
@@ -301,6 +303,7 @@ def seed_retried_run(session, parent_run_id):
 
     db_run = DbRun(
         id=run_id, platform='instagram', status='completed',
+        current_stage='crm_sync',
         filters=run_data['filters'], bdr_assignment='Nicole Roma',
         profiles_found=200, profiles_pre_screened=120, profiles_enriched=118,
         profiles_scored=118, contacts_synced=6, duplicates_skipped=15,
@@ -372,6 +375,7 @@ def seed_warning_run(session):
 
     db_run = DbRun(
         id=run_id, platform='instagram', status='completed',
+        current_stage='crm_sync',
         filters=run_data['filters'], bdr_assignment='Sofia Gonzalez',
         profiles_found=300, profiles_pre_screened=42, profiles_enriched=38,
         profiles_scored=38, contacts_synced=3, duplicates_skipped=22,
@@ -429,6 +433,7 @@ def seed_zero_results_run(session):
 
     db_run = DbRun(
         id=run_id, platform='instagram', status='completed',
+        current_stage='discovery',
         filters=run_data['filters'], bdr_assignment='Tanya Pina',
         profiles_found=0, profiles_pre_screened=0, profiles_enriched=0,
         profiles_scored=0, contacts_synced=0, duplicates_skipped=0,

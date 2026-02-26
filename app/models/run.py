@@ -140,7 +140,7 @@ class Run:
         run.platform = db_run.platform
         run.created_at = db_run.created_at.isoformat() if db_run.created_at else ''
         run.updated_at = (db_run.finished_at or db_run.created_at or '').isoformat() if db_run.created_at else ''
-        run.current_stage = ''
+        run.current_stage = db_run.current_stage or ''
         run.stage_progress = {}
         run.filters = db_run.filters or {}
         run.profiles_found = db_run.profiles_found or 0

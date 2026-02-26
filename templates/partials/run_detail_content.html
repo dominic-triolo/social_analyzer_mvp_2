@@ -22,9 +22,9 @@
 {% set X_SVG = '<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 4L12 12M12 4L4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>' %}
 
 {# ── Status color/bg/label helpers ─────────────────────────────────── #}
-{% set STATUS_COLOR = {'completed': '#10b981', 'running': '#00b2c9', 'failed': '#f65c4e', 'pending': '#d1d5db'} %}
-{% set STATUS_BG    = {'completed': '#d1fae5', 'running': '#e0f7fa', 'failed': '#fee2e2', 'pending': '#f9fafb'} %}
-{% set STATUS_LABEL = {'completed': 'Done', 'running': 'Running...', 'failed': 'Failed', 'pending': 'Pending'} %}
+{% set STATUS_COLOR = {'completed': '#10b981', 'running': '#00b2c9', 'failed': '#f65c4e', 'pending': '#d1d5db', 'skipped': '#94a3b8'} %}
+{% set STATUS_BG    = {'completed': '#d1fae5', 'running': '#e0f7fa', 'failed': '#fee2e2', 'pending': '#f9fafb', 'skipped': '#f1f5f9'} %}
+{% set STATUS_LABEL = {'completed': 'Done', 'running': 'Running...', 'failed': 'Failed', 'pending': 'Pending', 'skipped': 'Skipped'} %}
 
 {# ── OOB: Status badge in breadcrumb ──────────────────────────────── #}
 {% set badge_class = {'completed': 'badge-success', 'failed': 'badge-error', 'queued': 'badge-muted'} %}
@@ -37,7 +37,7 @@
 {% set retry_from = run.get('filters', {}).get('_retry_from') %}
 {% set parent_id = run.get('filters', {}).get('_parent_run_id') %}
 {% if retry_from %}
-<div class="card px-4 py-2 mb-4 flex items-center gap-2 animate-in" style="border-left:3px solid #00b2c9;">
+<div class="card px-4 py-2 mb-4 flex items-center gap-2" style="border-left:3px solid #00b2c9;">
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="color:#00b2c9;flex-shrink:0;">
         <path d="M2 8a6 6 0 0 1 10.2-4.3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
         <path d="M14 8a6 6 0 0 1-10.2 4.3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
@@ -52,7 +52,7 @@
 {% endif %}
 
 {% if run.summary %}
-<div class="card p-4 mb-4 animate-in" style="border-left:3px solid #10b981;">
+<div class="card p-4 mb-4" style="border-left:3px solid #10b981;">
     <div class="flex items-start gap-3">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" class="flex-shrink-0 mt-0.5" style="color:#10b981;">
             <path d="M2 3H14M2 7H10M2 11H12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
@@ -63,7 +63,7 @@
 {% endif %}
 
 {# ── KPI row ──────────────────────────────────────────────────────── #}
-<div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6 animate-in" style="animation-delay:0.04s;">
+<div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6" >
     <div class="card kpi-card">
         <div class="kpi-label">Found</div>
         <div class="kpi-value">{{ run.profiles_found or 0 }}</div>
@@ -89,7 +89,7 @@
 
 {# ── Cost info (if available) ─────────────────────────────────────── #}
 {% if run.estimated_cost or run.actual_cost %}
-<div class="flex gap-3 mb-4 animate-in" style="animation-delay:0.05s;">
+<div class="flex gap-3 mb-4" >
     {% if run.estimated_cost %}
     <div class="card px-4 py-2 flex items-center gap-2">
         <span class="text-xs font-medium" style="color:#3c4858;opacity:0.5;">Est. cost</span>
@@ -106,7 +106,7 @@
 {% endif %}
 
 {# ── Two-col: Pipeline + Tier distribution ────────────────────────── #}
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6 animate-in" style="animation-delay:0.08s;">
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6" >
 
     {# ── Pipeline stages (2/3 width) ─────────────────────────────── #}
     <div class="card p-6 lg:col-span-2">
@@ -156,7 +156,11 @@
                     {% set progress = run.get('stage_progress', {}).get(stage.key) if run.get('stage_progress') else None %}
                     {% if progress and (progress.get('completed', 0) > 0 or progress.get('total', 0) > 0) %}
                     <div class="flex flex-wrap gap-1 mt-1.5">
+                        {% if progress.get('total', 0) > 0 %}
                         <span class="badge badge-muted">{{ progress.completed }}/{{ progress.total }}</span>
+                        {% elif progress.get('completed', 0) > 0 %}
+                        <span class="badge badge-muted">{{ progress.completed }} found</span>
+                        {% endif %}
                         {% if progress.get('failed', 0) > 0 %}
                         <span class="badge badge-error">{{ progress.failed }} failed</span>
                         {% endif %}
@@ -228,7 +232,7 @@
 
 {# ── Error log ────────────────────────────────────────────────────── #}
 {% set errors = run.get('errors', []) or [] %}
-<div class="card p-5 animate-in" style="animation-delay:0.12s;">
+<div class="card p-5" >
     <h2 class="section-label mb-3">
         Error Log <span class="font-normal text-xs" style="opacity:0.4;">({{ errors | length }})</span>
     </h2>

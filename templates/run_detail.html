@@ -25,11 +25,18 @@
     </p>
 </div>
 
-<!-- SSE-powered live content -->
+<!-- Run detail content — SSE only for active runs -->
+{% if is_terminal %}
+<div id="run-detail-live">
+    {{ initial_html | safe }}
+</div>
+{% else %}
 <div id="run-detail-live"
-     hx-ext="sse"
+     hx-ext="sse, morph"
      sse-connect="/stream/run/{{ run.id }}"
      sse-swap="message"
-     hx-swap="innerHTML">
+     hx-swap="morph:innerHTML">
+    {{ initial_html | safe }}
 </div>
+{% endif %}
 {% endblock %}

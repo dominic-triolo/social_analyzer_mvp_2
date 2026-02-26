@@ -34,7 +34,7 @@ MOCK_CREATORS = [
 ]
 
 
-def _simulate_delay(min_s=0.1, max_s=0.4):
+def _simulate_delay(min_s=0.3, max_s=0.8):
     """Small delay to simulate API latency."""
     time.sleep(random.uniform(min_s, max_s))
 
@@ -55,15 +55,19 @@ class MockInstagramDiscovery(StageAdapter):
         count = min(max_results, len(MOCK_CREATORS))
         selected = random.sample(MOCK_CREATORS, count)
 
+        # Unique suffix per run to avoid dedup on repeated runs
+        run_suffix = uuid.uuid4().hex[:4]
+
         discovered = []
         for creator in selected:
             _simulate_delay()
+            username = f"{creator['username']}_{run_suffix}"
             profile = {
                 'contact_id': str(uuid.uuid4()),
                 'id': str(uuid.uuid4()),
-                'url': f"https://instagram.com/{creator['username']}",
-                'profile_url': f"https://instagram.com/{creator['username']}",
-                'platform_username': creator['username'],
+                'url': f"https://instagram.com/{username}",
+                'profile_url': f"https://instagram.com/{username}",
+                'platform_username': username,
                 'name': creator['name'],
                 'bio': creator['bio'],
                 'follower_count': creator['followers'],
@@ -71,7 +75,7 @@ class MockInstagramDiscovery(StageAdapter):
             }
             discovered.append(profile)
             run.increment_stage_progress('discovery', 'completed')
-            print(f"[Mock Discovery] Found @{creator['username']} ({creator['followers']:,} followers)")
+            print(f"[Mock Discovery] Found @{username} ({creator['followers']:,} followers)")
 
         return StageResult(
             profiles=discovered,

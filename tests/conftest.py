@@ -82,6 +82,7 @@ def make_run():
             id='run-test-001',
             platform='instagram',
             status='queued',
+            current_stage='',
             filters={'max_results': 10},
             bdr_assignment='Test BDR',
             estimated_cost=1.50,
