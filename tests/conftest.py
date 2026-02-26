@@ -34,9 +34,16 @@ def db_session(db_engine):
 
 @pytest.fixture(autouse=True)
 def patch_get_session(db_session):
-    """Route all get_session() calls to the test session."""
+    """Route all get_session() calls to the test session.
+
+    We disable close() so that route handlers calling session.close()
+    in their finally blocks don't invalidate the shared test session.
+    """
+    _real_close = db_session.close
+    db_session.close = lambda: None
     with patch('app.database.get_session', return_value=db_session):
         yield db_session
+    db_session.close = _real_close
 
 
 @pytest.fixture
