@@ -33,6 +33,24 @@
       hx-swap-oob="true">{{ run.status }}</span>
 
 {# ── Run summary card ────────────────────────────────────────────── #}
+{# ── Retry indicator (shown when this run was created via retry) ──── #}
+{% set retry_from = run.get('filters', {}).get('_retry_from') %}
+{% set parent_id = run.get('filters', {}).get('_parent_run_id') %}
+{% if retry_from %}
+<div class="card px-4 py-2 mb-4 flex items-center gap-2 animate-in" style="border-left:3px solid #00b2c9;">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="color:#00b2c9;flex-shrink:0;">
+        <path d="M2 8a6 6 0 0 1 10.2-4.3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="M14 8a6 6 0 0 1-10.2 4.3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="M12 1v3.5h-3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M4 15v-3.5h3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span class="text-xs" style="color:#3c4858;">
+        Retried from <strong>{{ retry_from | replace('_', ' ') | title }}</strong>
+        {% if parent_id %}&middot; <a href="/runs/{{ parent_id }}" class="link" style="color:#00b2c9;">parent run</a>{% endif %}
+    </span>
+</div>
+{% endif %}
+
 {% if run.summary %}
 <div class="card p-4 mb-4 animate-in" style="border-left:3px solid #10b981;">
     <div class="flex items-start gap-3">
@@ -125,6 +143,12 @@
                                 class="text-xs font-medium px-2 py-0.5 rounded"
                                 style="background:#fee2e2;color:#991b1b;cursor:pointer;border:none;">
                             Retry from {{ def.label }}
+                        </button>
+                        {% elif s == 'completed' and is_terminal and run.status == 'failed' %}
+                        <button onclick="retryFromStage('{{ stage.key }}')"
+                                class="text-xs font-medium px-2 py-0.5 rounded"
+                                style="background:#f1f5f9;color:#64748b;cursor:pointer;border:1px solid #e2e8f0;">
+                            Retry from here
                         </button>
                         {% endif %}
                     </div>

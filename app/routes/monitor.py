@@ -122,10 +122,15 @@ def retry_run(run_id):
         except Exception:
             pass
 
-        # Create a new run linked to the original
+        # Create a new run linked to the original, with retry metadata
+        retry_filters = {
+            **original.filters,
+            '_retry_from': from_stage,
+            '_parent_run_id': run_id,
+        }
         new_run = Run(
             platform=original.platform,
-            filters=original.filters,
+            filters=retry_filters,
             bdr_assignment=original.bdr_assignment,
         )
         # Copy stage_outputs from original for checkpoint loading

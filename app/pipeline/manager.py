@@ -177,6 +177,8 @@ def run_pipeline(run_id: str, retry_from_stage: str = None):
             if run.actual_cost + est > max_budget:
                 print(f"[Pipeline] Budget exceeded: actual={run.actual_cost:.2f} + est={est:.2f} > max={max_budget:.2f}")
                 run.fail(f"Budget limit ${max_budget:.2f} would be exceeded (spent ${run.actual_cost:.2f}, next stage ~${est:.2f})")
+                run.summary = _generate_run_summary(run, failed=True)
+                run.save()
                 persist_run(run)
                 notify_run_failed(run)
                 return
@@ -268,6 +270,8 @@ def run_pipeline(run_id: str, retry_from_stage: str = None):
             print(f"[Pipeline] Stage '{stage_name}' FAILED: {e}")
             traceback.print_exc()
             run.fail(f"Stage '{stage_name}' failed: {str(e)}")
+            run.summary = _generate_run_summary(run, failed=True)
+            run.save()
             persist_run(run)
             notify_run_failed(run)
             return
@@ -284,44 +288,191 @@ def run_pipeline(run_id: str, retry_from_stage: str = None):
 
 # ── Run summary generator ────────────────────────────────────────────────────
 
-def _generate_run_summary(run) -> str:
-    """Generate a human-readable summary of the run. Pure Python, no API calls."""
-    parts = [f"{run.platform.capitalize()} run."]
+def _generate_run_summary(run, failed: bool = False) -> str:
+    """Generate a human-readable summary of the run. Pure Python, no API calls.
 
+    Produces a narrative funnel summary with contextual warnings.
+    Works for both completed and failed runs.
+    """
     found = run.profiles_found or 0
     dupes = run.duplicates_skipped or 0
     prescreened = run.profiles_pre_screened or 0
     enriched = run.profiles_enriched or 0
     scored = run.profiles_scored or 0
     synced = run.contacts_synced or 0
-
-    parts.append(f"Found {found} profiles")
-    if dupes:
-        parts.append(f"skipped {dupes} duplicates")
-
-    if prescreened:
-        parts.append(f"{prescreened} passed pre-screen")
-    if scored:
-        parts.append(f"{scored} scored")
-    if synced:
-        parts.append(f"{synced} synced to CRM")
-
-    # Tier highlights
     tier = run.tier_distribution or {}
     auto = tier.get('auto_enroll', 0)
+    high_pri = tier.get('high_priority_review', 0)
+    estimated = run.estimated_cost or 0.0
+    actual = run.actual_cost or 0.0
+    platform = (run.platform or 'unknown').capitalize()
+
+    # ── Zero-results short circuit ──
+    if found == 0 and not failed:
+        return f"No {platform} profiles found. Check filters and try again."
+
+    # ── Failed run ──
+    if failed:
+        return _generate_failed_summary(
+            run, platform=platform, found=found, dupes=dupes,
+            prescreened=prescreened, enriched=enriched, scored=scored,
+            actual=actual,
+        )
+
+    # ── Narrative funnel ──
+    lines = []
+
+    # Discovery line
+    discovery = f"Discovered {found} {platform} profiles"
+    if dupes:
+        discovery += f" ({dupes} duplicates removed)"
+    discovery += "."
+    lines.append(discovery)
+
+    # Pre-screen line
+    if prescreened:
+        if found > 0:
+            yield_pct = round((prescreened / found) * 100)
+            lines.append(f"{prescreened} of {found} passed pre-screen ({yield_pct}% yield).")
+        else:
+            lines.append(f"{prescreened} passed pre-screen.")
+
+    # Enrichment (only mention if there were failures worth noting)
+    if prescreened > 0 and enriched > 0 and enriched < prescreened:
+        lines.append(f"{enriched} of {prescreened} enriched successfully.")
+
+    # Scoring + CRM sync line — "42 synced to CRM — 8 auto-enroll, 18 high priority."
+    crm_parts = []
+    if synced:
+        crm_parts.append(f"{synced} synced to CRM")
+    tier_details = []
     if auto:
-        parts.append(f"{auto} auto-enroll")
+        tier_details.append(f"{auto} auto-enroll")
+    if high_pri:
+        tier_details.append(f"{high_pri} high priority")
+    if crm_parts:
+        line = crm_parts[0]
+        if tier_details:
+            line += ' — ' + ', '.join(tier_details)
+        line += '.'
+        lines.append(line)
 
     # Conversion rate
     if found > 0 and synced > 0:
         conv = round((synced / found) * 100)
-        parts.append(f"{conv}% conversion")
+        lines.append(f"{conv}% overall conversion.")
 
     # Cost
-    if run.actual_cost and run.actual_cost > 0:
-        parts.append(f"~${run.actual_cost:.2f} spent")
+    if actual > 0:
+        lines.append(f"~${actual:.2f} spent.")
 
-    return ". ".join(parts[:3]) + ". " + ", ".join(parts[3:]) + "." if len(parts) > 3 else ". ".join(parts) + "."
+    # ── Warnings ──
+    warnings = _collect_warnings(
+        run, failed=False, found=found, prescreened=prescreened,
+        enriched=enriched, scored=scored, synced=synced,
+        auto=auto, estimated=estimated, actual=actual,
+    )
+
+    if warnings:
+        lines.append('Warning: ' + ' '.join(warnings))
+
+    return ' '.join(lines)
+
+
+def _generate_failed_summary(
+    run, *, platform, found, dupes, prescreened, enriched, scored, actual,
+) -> str:
+    """Build summary for a failed run, including partial progress and error context."""
+    # Extract error reason from the last error entry
+    last_error = ''
+    if run.errors:
+        last_err = run.errors[-1] if isinstance(run.errors, list) else run.errors
+        if isinstance(last_err, dict):
+            last_error = last_err.get('message', '')
+        elif isinstance(last_err, str):
+            last_error = last_err
+
+    stage = run.current_stage or 'unknown'
+    stage_label = stage.replace('_', ' ')
+
+    # Determine partial progress within the failing stage from stage_progress
+    progress = getattr(run, 'stage_progress', None) or {}
+    stage_info = progress.get(stage, {})
+    stage_completed = stage_info.get('completed', 0)
+    stage_total = stage_info.get('total', 0)
+
+    parts = []
+
+    # Opening line — include partial progress when available
+    if stage_total > 0 and stage_completed > 0:
+        parts.append(
+            f"{platform} run failed at {stage_label} stage after processing "
+            f"{stage_completed} of {stage_total} profiles."
+        )
+    else:
+        parts.append(f"{platform} run failed during {stage_label}.")
+
+    # Funnel context — what completed before the failure
+    progress_notes = []
+    if found:
+        note = f"discovered {found}"
+        if dupes:
+            note += f" ({dupes} duplicates removed)"
+        progress_notes.append(note)
+    if prescreened:
+        progress_notes.append(f"{prescreened} passed pre-screen")
+    if enriched:
+        progress_notes.append(f"{enriched} enriched")
+    if scored:
+        progress_notes.append(f"{scored} scored")
+    if progress_notes:
+        parts.append("Before failure: " + ', '.join(progress_notes) + '.')
+
+    # Cost incurred before failure
+    if actual > 0:
+        parts.append(f"~${actual:.2f} spent before failure.")
+
+    # Error reason
+    if last_error:
+        parts.append(f"Error: {last_error}")
+
+    return ' '.join(parts)
+
+
+def _collect_warnings(
+    run, *, failed, found, prescreened, enriched, scored, synced,
+    auto, estimated, actual,
+) -> list:
+    """Collect contextual warning strings for the summary."""
+    warnings = []
+
+    # Low pre-screen yield
+    if found > 0 and prescreened > 0:
+        yield_pct = round((prescreened / found) * 100)
+        if yield_pct < 30:
+            warnings.append(f"Pre-screen yield was low at {yield_pct}%.")
+
+    # High enrichment failure rate
+    if prescreened > 0 and enriched > 0 and enriched < (prescreened * 0.8):
+        fail_pct = round((1 - enriched / prescreened) * 100)
+        warnings.append(f"{fail_pct}% of profiles failed enrichment.")
+
+    # No auto-enrolls despite scoring
+    if scored > 0 and auto == 0:
+        warnings.append("No auto-enroll candidates found.")
+
+    # Cost overrun
+    if estimated > 0 and actual > estimated * 1.2:
+        overrun_pct = round(((actual - estimated) / estimated) * 100)
+        warnings.append(f"Cost exceeded estimate by {overrun_pct}%.")
+
+    # Early pipeline exit (completed but didn't reach CRM sync)
+    stage = run.current_stage or ''
+    if not failed and synced == 0 and scored == 0 and stage and stage != 'crm_sync':
+        stage_label = stage.replace('_', ' ')
+        warnings.append(f"Pipeline stopped after {stage_label} — no profiles advanced further.")
+
+    return warnings
 
 
 # ── Cost estimation ──────────────────────────────────────────────────────────
