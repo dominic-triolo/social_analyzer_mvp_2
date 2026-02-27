@@ -2,5 +2,8 @@ __pycache__/
 *.pyc
 .env
 local.db
+*.db
 .claude/
 roadmap_share.pdf
+.venv/
+.pytest_cache/
