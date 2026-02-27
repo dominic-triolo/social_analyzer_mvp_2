@@ -287,6 +287,21 @@
         }
         .tag-pill button:hover { color: #f65c4e; }
 
+        .suggestion-chip {
+            display: inline-flex; align-items: center; gap: 3px;
+            background: #f0fdf4; color: #005c69;
+            font-size: 12px; font-weight: 400;
+            padding: 2px 6px; border-radius: 6px;
+            border: 1px dashed rgba(0,178,201,0.3);
+        }
+        .suggestion-chip button {
+            color: #00b2c9; font-weight: 700; line-height: 1;
+            cursor: pointer; background: none; border: none; font-size: 13px;
+        }
+        .suggestion-chip button:last-child { color: #9ca3af; }
+        .suggestion-chip button:last-child:hover { color: #f65c4e; }
+        .suggestion-chip button:first-child:hover { color: #10b981; }
+
         /* ── Pipeline pulse ──────────────────────────────── */
         .pulse-ring { animation: pulse-ring 1.8s cubic-bezier(0.215,0.61,0.355,1) infinite; }
         @keyframes pulse-ring {

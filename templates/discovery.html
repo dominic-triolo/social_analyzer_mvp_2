@@ -306,6 +306,18 @@
                             <div>
                                 <label class="block text-xs font-semibold mb-1.5" style="color:#005c69;">Hashtags</label>
                                 <input type="text" id="hashtags" placeholder="e.g., travel, wanderlust (comma-separated)" class="input-field">
+                                <div class="flex items-center gap-2 mt-1.5">
+                                    <button type="button" id="ig-suggest-btn" onclick="suggestKeywords('instagram')"
+                                            class="text-xs font-medium" style="color:#00b2c9;cursor:pointer;background:none;border:none;padding:0;">
+                                        Suggest keywords
+                                    </button>
+                                </div>
+                                <div id="ig-suggestions" class="flex flex-wrap gap-1.5 mt-2 hidden">
+                                    <button type="button" onclick="acceptAllSuggestions('instagram')"
+                                            class="text-xs font-medium mr-1" style="color:#00b2c9;background:none;border:none;cursor:pointer;padding:0;">
+                                        Accept all
+                                    </button>
+                                </div>
                             </div>
                             <div>
                                 <label class="block text-xs font-semibold mb-1" style="color:#005c69;">Bio Phrase Filter</label>
@@ -335,7 +347,19 @@
                             <input type="text" id="patreon-keyword-input" placeholder="Type keyword and press Enter..."
                                    class="flex-1 min-w-[180px] outline-none text-sm py-1 bg-transparent">
                         </div>
-                        <p class="text-xs mt-1" style="color:#3c4858;opacity:0.35;">Press Enter to add, click x to remove</p>
+                        <div class="flex items-center gap-2 mt-1">
+                            <p class="text-xs" style="color:#3c4858;opacity:0.35;">Press Enter to add, click x to remove</p>
+                            <button type="button" id="patreon-suggest-btn" onclick="suggestKeywords('patreon')"
+                                    class="text-xs font-medium" style="color:#00b2c9;cursor:pointer;background:none;border:none;padding:0;">
+                                Suggest keywords
+                            </button>
+                        </div>
+                        <div id="patreon-suggestions" class="flex flex-wrap gap-1.5 mt-2 hidden">
+                            <button type="button" onclick="acceptAllSuggestions('patreon')"
+                                    class="text-xs font-medium mr-1" style="color:#00b2c9;background:none;border:none;cursor:pointer;padding:0;">
+                                Accept all
+                            </button>
+                        </div>
                     </div>
                     <div>
                         <label class="block text-xs font-semibold mb-1.5" style="color:#005c69;">Max Results</label>
@@ -375,7 +399,19 @@
                             <input type="text" id="facebook-keyword-input" placeholder="Type keyword and press Enter..."
                                    class="flex-1 min-w-[180px] outline-none text-sm py-1 bg-transparent">
                         </div>
-                        <p class="text-xs mt-1" style="color:#3c4858;opacity:0.35;">Press Enter to add, click x to remove</p>
+                        <div class="flex items-center gap-2 mt-1">
+                            <p class="text-xs" style="color:#3c4858;opacity:0.35;">Press Enter to add, click x to remove</p>
+                            <button type="button" id="facebook-suggest-btn" onclick="suggestKeywords('facebook')"
+                                    class="text-xs font-medium" style="color:#00b2c9;cursor:pointer;background:none;border:none;padding:0;">
+                                Suggest keywords
+                            </button>
+                        </div>
+                        <div id="facebook-suggestions" class="flex flex-wrap gap-1.5 mt-2 hidden">
+                            <button type="button" onclick="acceptAllSuggestions('facebook')"
+                                    class="text-xs font-medium mr-1" style="color:#00b2c9;background:none;border:none;cursor:pointer;padding:0;">
+                                Accept all
+                            </button>
+                        </div>
                     </div>
                     <div>
                         <label class="block text-xs font-semibold mb-1.5" style="color:#005c69;">Max Results</label>
@@ -849,6 +885,136 @@ loadPresets();
 document.querySelectorAll('.platform-card').forEach(btn => {
     btn.addEventListener('click', () => { if (!btn.disabled) setTimeout(loadPresets, 100); });
 });
+
+// ── AI Keyword Suggestions ──────────────────────────────────────────
+const _suggestionState = {};
+
+function _getExistingKeywords(platform) {
+    if (platform === 'instagram') {
+        const hashtags = document.getElementById('hashtags').value.trim();
+        const tags = hashtags ? hashtags.split(',').map(t => t.trim()).filter(Boolean) : [];
+        const bio = document.getElementById('bio-phrase-0').value.trim();
+        if (bio) tags.push(bio);
+        return tags;
+    } else if (platform === 'patreon') {
+        return getTagValues('patreon-keyword-wrapper');
+    } else if (platform === 'facebook') {
+        return getTagValues('facebook-keyword-wrapper');
+    }
+    return [];
+}
+
+function _getSuggestBtn(platform) {
+    const ids = {instagram: 'ig-suggest-btn', patreon: 'patreon-suggest-btn', facebook: 'facebook-suggest-btn'};
+    return document.getElementById(ids[platform]);
+}
+
+function _getSuggestionsContainer(platform) {
+    const ids = {instagram: 'ig-suggestions', patreon: 'patreon-suggestions', facebook: 'facebook-suggestions'};
+    return document.getElementById(ids[platform]);
+}
+
+async function suggestKeywords(platform) {
+    const keywords = _getExistingKeywords(platform);
+    if (!keywords.length) {
+        showModal('Enter at least one keyword first', {type: 'warning', title: 'No keywords'});
+        return;
+    }
+
+    const btn = _getSuggestBtn(platform);
+    const origText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Suggesting...';
+
+    try {
+        const res = await fetch('/api/keyword-suggestions', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({platform, keywords}),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+            showModal(data.error || 'Suggestion failed', {type: 'error'});
+            return;
+        }
+
+        _suggestionState[platform] = data.suggestions || [];
+        _renderSuggestions(platform);
+    } catch (e) {
+        showModal('Failed to get suggestions', {type: 'error'});
+    } finally {
+        btn.disabled = false;
+        btn.textContent = origText;
+    }
+}
+
+function _renderSuggestions(platform) {
+    const container = _getSuggestionsContainer(platform);
+    const suggestions = _suggestionState[platform] || [];
+    if (!suggestions.length) {
+        container.classList.add('hidden');
+        return;
+    }
+
+    // Keep the "Accept all" button, clear chips
+    const acceptAllBtn = container.querySelector('button');
+    container.innerHTML = '';
+    container.appendChild(acceptAllBtn);
+
+    suggestions.forEach((s, i) => {
+        const chip = document.createElement('span');
+        chip.className = 'suggestion-chip';
+        chip.innerHTML = `<button type="button" onclick="acceptSuggestion('${platform}',${i})" title="Accept">+</button> ${escapeHtml(s)} <button type="button" onclick="dismissSuggestion('${platform}',${i})" title="Dismiss">&times;</button>`;
+        container.appendChild(chip);
+    });
+
+    container.classList.remove('hidden');
+}
+
+function acceptSuggestion(platform, index) {
+    const suggestions = _suggestionState[platform] || [];
+    const kw = suggestions[index];
+    if (!kw) return;
+
+    if (platform === 'instagram') {
+        const inp = document.getElementById('hashtags');
+        const cur = inp.value.trim();
+        inp.value = cur ? cur + ', ' + kw : kw;
+    } else {
+        const wrapperId = platform + '-keyword-wrapper';
+        const inputId = platform + '-keyword-input';
+        _tagState[wrapperId].push(kw);
+        _renderTags(wrapperId, inputId);
+    }
+
+    suggestions.splice(index, 1);
+    _renderSuggestions(platform);
+}
+
+function dismissSuggestion(platform, index) {
+    const suggestions = _suggestionState[platform] || [];
+    suggestions.splice(index, 1);
+    _renderSuggestions(platform);
+}
+
+function acceptAllSuggestions(platform) {
+    const suggestions = (_suggestionState[platform] || []).slice();
+    suggestions.forEach(kw => {
+        if (platform === 'instagram') {
+            const inp = document.getElementById('hashtags');
+            const cur = inp.value.trim();
+            inp.value = cur ? cur + ', ' + kw : kw;
+        } else {
+            const wrapperId = platform + '-keyword-wrapper';
+            const inputId = platform + '-keyword-input';
+            _tagState[wrapperId].push(kw);
+            _renderTags(wrapperId, inputId);
+        }
+    });
+    _suggestionState[platform] = [];
+    _renderSuggestions(platform);
+}
 
 // ── Staleness check ──────────────────────────────────────────────────
 async function checkStaleness() {

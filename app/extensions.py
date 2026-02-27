@@ -14,6 +14,7 @@ from app.config import (
     R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME,
     R2_ENDPOINT_URL, R2_PUBLIC_URL,
     OPENAI_API_KEY,
+    ANTHROPIC_API_KEY,
 )
 
 logger = logging.getLogger('app.extensions')
@@ -50,3 +51,15 @@ if OPENAI_API_KEY:
         logger.error("Error initializing OpenAI client: %s", e)
 else:
     logger.warning("OPENAI_API_KEY not set")
+
+# ── Anthropic ────────────────────────────────────────────────────────────────
+anthropic_client = None
+if ANTHROPIC_API_KEY:
+    try:
+        from anthropic import Anthropic
+        anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY)
+        logger.info("Anthropic client initialized successfully")
+    except Exception as e:
+        logger.error("Error initializing Anthropic client: %s", e)
+else:
+    logger.warning("ANTHROPIC_API_KEY not set")

@@ -25,6 +25,9 @@ INSIGHTIQ_SECRET = os.getenv('INSIGHTIQ_SECRET')
 # ── OpenAI ────────────────────────────────────────────────────────────────────
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
+# ── Anthropic ─────────────────────────────────────────────────────────────────
+ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
+
 # ── HubSpot ───────────────────────────────────────────────────────────────────
 HUBSPOT_WEBHOOK_URL = os.getenv('HUBSPOT_WEBHOOK_URL')
 HUBSPOT_API_KEY = os.getenv('HUBSPOT_API_KEY')

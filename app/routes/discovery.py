@@ -1,11 +1,14 @@
 """
-Discovery routes — Discovery UI page + HTMX partials + presets API + staleness check.
+Discovery routes — Discovery UI page + HTMX partials + presets API + staleness check + keyword suggestions.
 """
+import logging
 import traceback
 from flask import Blueprint, render_template, request, jsonify
 
 from app.database import get_session
 from app.models.preset import Preset
+
+logger = logging.getLogger(__name__)
 
 bp = Blueprint('discovery', __name__)
 
@@ -119,6 +122,68 @@ def delete_preset(preset_id):
         return jsonify({'error': str(e)}), 500
     finally:
         session.close()
+
+
+# ── AI Keyword Suggestions ──────────────────────────────────────────
+
+KEYWORD_PROMPTS = {
+    'instagram': (
+        "You are a social media marketing expert. Given these Instagram discovery keywords, "
+        "suggest 8-10 related terms that would help find travel creators on Instagram. "
+        "Include a mix of hashtags (with #) and bio phrases. "
+        "Return one suggestion per line, nothing else."
+    ),
+    'patreon': (
+        "You are a creator economy expert. Given these Patreon search keywords, "
+        "suggest 8-10 related search terms for finding travel-related creators on Patreon. "
+        "Focus on creator niches, content types, and travel sub-topics. "
+        "Return one suggestion per line, nothing else."
+    ),
+    'facebook': (
+        "You are a community marketing expert. Given these Facebook group search keywords, "
+        "suggest 8-10 related terms for finding travel-related Facebook groups. "
+        "Focus on group topics, travel niches, and community themes. "
+        "Return one suggestion per line, nothing else."
+    ),
+}
+
+
+@bp.route('/api/keyword-suggestions', methods=['POST'])
+def keyword_suggestions():
+    """Generate AI keyword suggestions using Claude Haiku."""
+    from app.extensions import anthropic_client
+
+    if not anthropic_client:
+        return jsonify({'error': 'AI suggestions unavailable — ANTHROPIC_API_KEY not configured'}), 503
+
+    data = request.json or {}
+    platform = data.get('platform', 'instagram')
+    keywords = data.get('keywords', [])
+
+    if not keywords:
+        return jsonify({'error': 'Provide at least one keyword'}), 400
+
+    system_prompt = KEYWORD_PROMPTS.get(platform, KEYWORD_PROMPTS['instagram'])
+    user_input = "Current keywords: " + ", ".join(keywords)
+
+    try:
+        response = anthropic_client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=256,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_input}],
+        )
+        raw = response.content[0].text
+        suggestions = [line.strip().lstrip('•-').strip() for line in raw.strip().splitlines() if line.strip()]
+
+        # Deduplicate against user's existing keywords (case-insensitive)
+        existing = {k.lower() for k in keywords}
+        suggestions = [s for s in suggestions if s.lower() not in existing]
+
+        return jsonify({'suggestions': suggestions})
+    except Exception as e:
+        logger.error("Keyword suggestion error: %s", e)
+        return jsonify({'error': 'Failed to generate suggestions'}), 500
 
 
 # ── Staleness check ──────────────────────────────────────────────────────────
