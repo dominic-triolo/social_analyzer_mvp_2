@@ -1,12 +1,11 @@
-"""Tests for app.services.benchmarks — snapshot persistence, baselines, deviations."""
+"""Tests for app.services.benchmarks — computed metrics, baselines, deviations."""
 import pytest
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from unittest.mock import patch, MagicMock
 
 from app.models.db_run import DbRun
-from app.models.metric_snapshot import MetricSnapshot
 from app.services.benchmarks import (
-    persist_metric_snapshot,
+    compute_daily_metrics,
     get_baseline,
     compute_deviations,
     Deviation,
@@ -20,158 +19,128 @@ def patch_bench_session(db_session):
         yield db_session
 
 
+def _make_db_run(session, id, platform='instagram', found=100, prescreened=80,
+                 enriched=70, scored=50, synced=30, cost=5.0,
+                 tier_distribution=None, created_at=None):
+    """Helper: insert a completed DbRun row."""
+    run = DbRun(
+        id=id, platform=platform, status='completed',
+        profiles_found=found, profiles_pre_screened=prescreened,
+        profiles_enriched=enriched, profiles_scored=scored,
+        contacts_synced=synced, actual_cost=cost,
+        tier_distribution=tier_distribution or {},
+    )
+    if created_at:
+        run.created_at = created_at
+    session.add(run)
+    session.commit()
+    return run
+
+
 # ---------------------------------------------------------------------------
-# persist_metric_snapshot
+# compute_daily_metrics
 # ---------------------------------------------------------------------------
 
-class TestPersistMetricSnapshot:
+class TestComputeDailyMetrics:
 
-    def test_creates_snapshot_for_completed_run(self, patch_bench_session):
+    def test_computes_metrics_for_completed_run(self, patch_bench_session):
         session = patch_bench_session
-        run = self._make_run()
-        db_run = DbRun(
-            id='r1', platform='instagram', status='completed',
-            profiles_found=100, profiles_pre_screened=80,
-            profiles_enriched=70, profiles_scored=50,
-            contacts_synced=30, actual_cost=5.0,
-        )
-        session.add(db_run)
-        session.commit()
+        _make_db_run(session, 'r1', found=100, prescreened=80, scored=50,
+                     synced=30, cost=5.0,
+                     tier_distribution={'auto_enroll': 5, 'high_priority_review': 10})
 
-        result = persist_metric_snapshot(run)
+        result = compute_daily_metrics('instagram')
         assert result is not None
-        assert result.platform == 'instagram'
-        assert result.date == date.today()
-        assert result.runs_count == 1
-        assert result.avg_found == 100.0
+        assert result['platform'] == 'instagram'
+        assert result['runs_count'] == 1
+        assert result['avg_found'] == 100.0
+        assert result['yield_rate'] == 80.0  # 80/100 * 100
+        assert result['funnel_conversion'] == 30.0  # 30/100 * 100
+        assert result['avg_cost_per_lead'] == round(5.0 / 30, 4)
 
-    def test_upserts_existing_snapshot(self, patch_bench_session):
+    def test_averages_multiple_runs(self, patch_bench_session):
         session = patch_bench_session
-        run = self._make_run()
-        # Create two completed runs for today
-        for i, found in enumerate([100, 200]):
-            session.add(DbRun(
-                id=f'r{i}', platform='instagram', status='completed',
-                profiles_found=found, profiles_pre_screened=found - 20,
-                profiles_enriched=found - 30, profiles_scored=found - 50,
-                contacts_synced=found - 70, actual_cost=5.0,
-            ))
-        session.commit()
+        _make_db_run(session, 'r1', found=100, prescreened=80, scored=50, synced=30, cost=5.0)
+        _make_db_run(session, 'r2', found=200, prescreened=180, scored=150, synced=130, cost=10.0)
 
-        persist_metric_snapshot(run)
-        persist_metric_snapshot(run)
-
-        snapshots = session.query(MetricSnapshot).filter(
-            MetricSnapshot.date == date.today(),
-            MetricSnapshot.platform == 'instagram',
-        ).all()
-        assert len(snapshots) == 1
-        # avg_found should be average of 100 and 200
-        assert snapshots[0].avg_found == 150.0
+        result = compute_daily_metrics('instagram')
+        assert result['runs_count'] == 2
+        assert result['avg_found'] == 150.0  # avg(100, 200)
 
     def test_returns_none_when_no_completed_runs(self, patch_bench_session):
-        run = self._make_run()
-        result = persist_metric_snapshot(run)
+        result = compute_daily_metrics('instagram')
         assert result is None
 
     def test_computes_yield_rate(self, patch_bench_session):
         session = patch_bench_session
-        run = self._make_run()
-        session.add(DbRun(
-            id='r1', platform='instagram', status='completed',
-            profiles_found=100, profiles_pre_screened=40,
-            profiles_enriched=35, profiles_scored=30,
-            contacts_synced=20, actual_cost=3.0,
-        ))
-        session.commit()
+        _make_db_run(session, 'r1', found=100, prescreened=40)
 
-        result = persist_metric_snapshot(run)
-        assert result.yield_rate == 40.0  # 40/100 * 100
+        result = compute_daily_metrics('instagram')
+        assert result['yield_rate'] == 40.0
 
     def test_computes_funnel_conversion(self, patch_bench_session):
         session = patch_bench_session
-        run = self._make_run()
-        session.add(DbRun(
-            id='r1', platform='instagram', status='completed',
-            profiles_found=100, profiles_pre_screened=80,
-            profiles_enriched=70, profiles_scored=50,
-            contacts_synced=25, actual_cost=5.0,
-        ))
-        session.commit()
+        _make_db_run(session, 'r1', found=100, synced=25)
 
-        result = persist_metric_snapshot(run)
-        assert result.funnel_conversion == 25.0  # 25/100 * 100
+        result = compute_daily_metrics('instagram')
+        assert result['funnel_conversion'] == 25.0
 
     def test_computes_cost_per_lead(self, patch_bench_session):
         session = patch_bench_session
-        run = self._make_run()
-        session.add(DbRun(
-            id='r1', platform='instagram', status='completed',
-            profiles_found=100, profiles_pre_screened=80,
-            profiles_enriched=70, profiles_scored=50,
-            contacts_synced=10, actual_cost=5.0,
-        ))
-        session.commit()
+        _make_db_run(session, 'r1', found=100, synced=10, cost=5.0)
 
-        result = persist_metric_snapshot(run)
-        assert result.avg_cost_per_lead == 0.5  # 5.0/10
+        result = compute_daily_metrics('instagram')
+        assert result['avg_cost_per_lead'] == 0.5
 
     def test_handles_zero_found(self, patch_bench_session):
         session = patch_bench_session
-        run = self._make_run()
-        session.add(DbRun(
-            id='r1', platform='instagram', status='completed',
-            profiles_found=0, profiles_pre_screened=0,
-            profiles_enriched=0, profiles_scored=0,
-            contacts_synced=0, actual_cost=0.0,
-        ))
-        session.commit()
+        _make_db_run(session, 'r1', found=0, prescreened=0, scored=0, synced=0, cost=0.0)
 
-        result = persist_metric_snapshot(run)
-        assert result.yield_rate == 0.0
-        assert result.funnel_conversion == 0.0
+        result = compute_daily_metrics('instagram')
+        assert result['yield_rate'] == 0.0
+        assert result['funnel_conversion'] == 0.0
 
     def test_handles_zero_synced_for_cpl(self, patch_bench_session):
         session = patch_bench_session
-        run = self._make_run()
-        session.add(DbRun(
-            id='r1', platform='instagram', status='completed',
-            profiles_found=50, profiles_pre_screened=40,
-            profiles_enriched=35, profiles_scored=30,
-            contacts_synced=0, actual_cost=2.0,
-        ))
-        session.commit()
+        _make_db_run(session, 'r1', found=50, synced=0, cost=2.0)
 
-        result = persist_metric_snapshot(run)
-        assert result.avg_cost_per_lead == 0.0
+        result = compute_daily_metrics('instagram')
+        assert result['avg_cost_per_lead'] == 0.0
 
     def test_only_counts_matching_platform(self, patch_bench_session):
         session = patch_bench_session
-        run = self._make_run(platform='patreon')
-        session.add(DbRun(
-            id='r1', platform='instagram', status='completed',
-            profiles_found=100, profiles_pre_screened=80,
-            profiles_enriched=70, profiles_scored=50,
-            contacts_synced=30, actual_cost=5.0,
-        ))
-        session.commit()
+        _make_db_run(session, 'r1', platform='instagram')
 
-        result = persist_metric_snapshot(run)
+        result = compute_daily_metrics('patreon')
         assert result is None
+
+    def test_auto_enroll_rate_aggregated_across_runs(self, patch_bench_session):
+        """auto_enroll_rate should aggregate tier_distribution across all runs, not just the last."""
+        session = patch_bench_session
+        _make_db_run(session, 'r1',
+                     tier_distribution={'auto_enroll': 5, 'high_priority_review': 15})
+        _make_db_run(session, 'r2',
+                     tier_distribution={'auto_enroll': 10, 'high_priority_review': 10})
+
+        result = compute_daily_metrics('instagram')
+        # Total: auto_enroll=15, total_tiered=40 → 37.5%
+        assert result['auto_enroll_rate'] == 37.5
+
+    def test_specific_target_date(self, patch_bench_session):
+        session = patch_bench_session
+        yesterday = datetime.now() - timedelta(days=1)
+        _make_db_run(session, 'r1', created_at=yesterday)
+
+        # Today should return None (no runs today)
+        assert compute_daily_metrics('instagram') is None
+        # Yesterday should find the run
+        result = compute_daily_metrics('instagram', target_date=yesterday.date())
+        assert result is not None
 
     def test_handles_exception_gracefully(self, db_session):
-        """When get_session raises, returns None without crashing."""
-        run = self._make_run()
         with patch('app.services.benchmarks.get_session', side_effect=Exception('db down')):
-            result = persist_metric_snapshot(run)
+            result = compute_daily_metrics('instagram')
         assert result is None
-
-    @staticmethod
-    def _make_run(platform='instagram'):
-        run = MagicMock()
-        run.platform = platform
-        run.tier_distribution = {'auto_enroll': 5, 'high_priority_review': 10}
-        return run
 
 
 # ---------------------------------------------------------------------------
@@ -180,94 +149,54 @@ class TestPersistMetricSnapshot:
 
 class TestGetBaseline:
 
-    def test_returns_averages_from_snapshots(self, patch_bench_session):
+    def test_returns_averages_from_runs(self, patch_bench_session):
         session = patch_bench_session
-        today = date.today()
+        now = datetime.now()
         for i in range(5):
-            session.add(MetricSnapshot(
-                date=today - timedelta(days=i),
-                platform='instagram',
-                yield_rate=50.0 + i,
-                avg_score=30.0,
-                auto_enroll_rate=20.0,
-                avg_found=100.0 + i * 10,
-                avg_scored=50.0,
-                avg_synced=25.0,
-                funnel_conversion=25.0,
-                avg_cost_per_lead=0.5,
-                runs_count=1,
-            ))
-        session.commit()
+            _make_db_run(session, f'r{i}', found=100 + i * 10,
+                         created_at=now - timedelta(days=i))
 
         baseline = get_baseline('instagram')
         assert baseline is not None
         assert baseline['snapshot_count'] == 5
         assert baseline['avg_found'] > 0
 
-    def test_returns_none_for_insufficient_data(self, patch_bench_session):
+    def test_returns_none_for_insufficient_dates(self, patch_bench_session):
         session = patch_bench_session
-        today = date.today()
-        # Only 2 snapshots — below minimum of 3
+        # Only 2 dates — below minimum of 3
+        now = datetime.now()
         for i in range(2):
-            session.add(MetricSnapshot(
-                date=today - timedelta(days=i),
-                platform='instagram',
-                yield_rate=50.0,
-                avg_found=100.0,
-                runs_count=1,
-            ))
-        session.commit()
+            _make_db_run(session, f'r{i}', created_at=now - timedelta(days=i))
 
         baseline = get_baseline('instagram')
         assert baseline is None
 
     def test_filters_by_platform(self, patch_bench_session):
         session = patch_bench_session
-        today = date.today()
+        now = datetime.now()
         for i in range(5):
-            session.add(MetricSnapshot(
-                date=today - timedelta(days=i),
-                platform='instagram',
-                yield_rate=50.0,
-                avg_found=100.0,
-                runs_count=1,
-            ))
-        session.commit()
+            _make_db_run(session, f'r{i}', platform='instagram',
+                         created_at=now - timedelta(days=i))
 
         assert get_baseline('instagram') is not None
         assert get_baseline('patreon') is None
 
     def test_respects_days_parameter(self, patch_bench_session):
         session = patch_bench_session
-        today = date.today()
-        # Snapshots from 40+ days ago
+        now = datetime.now()
+        # Runs from 40+ days ago
         for i in range(5):
-            session.add(MetricSnapshot(
-                date=today - timedelta(days=40 + i),
-                platform='instagram',
-                yield_rate=50.0,
-                avg_found=100.0,
-                runs_count=1,
-            ))
-        session.commit()
+            _make_db_run(session, f'r{i}',
+                         created_at=now - timedelta(days=40 + i))
 
         assert get_baseline('instagram', days=30) is None
         assert get_baseline('instagram', days=60) is not None
 
     def test_returns_correct_keys(self, patch_bench_session):
         session = patch_bench_session
-        today = date.today()
+        now = datetime.now()
         for i in range(3):
-            session.add(MetricSnapshot(
-                date=today - timedelta(days=i),
-                platform='instagram',
-                yield_rate=50.0, avg_score=30.0,
-                auto_enroll_rate=20.0,
-                avg_found=100.0, avg_scored=50.0,
-                avg_synced=25.0, funnel_conversion=25.0,
-                avg_cost_per_lead=0.5, runs_count=1,
-            ))
-        session.commit()
+            _make_db_run(session, f'r{i}', created_at=now - timedelta(days=i))
 
         baseline = get_baseline('instagram')
         expected_keys = {
@@ -276,6 +205,24 @@ class TestGetBaseline:
             'funnel_conversion', 'avg_cost_per_lead',
         }
         assert set(baseline.keys()) == expected_keys
+
+    def test_auto_enroll_rate_aggregated(self, patch_bench_session):
+        """auto_enroll_rate should aggregate across all runs in the window."""
+        session = patch_bench_session
+        now = datetime.now()
+        _make_db_run(session, 'r0',
+                     tier_distribution={'auto_enroll': 10, 'high_priority_review': 10},
+                     created_at=now)
+        _make_db_run(session, 'r1',
+                     tier_distribution={'auto_enroll': 0, 'high_priority_review': 20},
+                     created_at=now - timedelta(days=1))
+        _make_db_run(session, 'r2',
+                     tier_distribution={'auto_enroll': 5, 'high_priority_review': 5},
+                     created_at=now - timedelta(days=2))
+
+        baseline = get_baseline('instagram')
+        # Total: auto_enroll=15, total_tiered=50 → 30.0%
+        assert baseline['auto_enroll_rate'] == 30.0
 
     def test_handles_exception_gracefully(self, db_session):
         with patch('app.services.benchmarks.get_session', side_effect=Exception('db down')):

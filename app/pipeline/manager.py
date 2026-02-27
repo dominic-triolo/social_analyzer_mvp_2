@@ -9,6 +9,7 @@ and feeds the result to the next stage. Progress is tracked on the Run object.
 """
 import json
 import logging
+import time
 import traceback
 from typing import Dict, Type
 
@@ -20,7 +21,7 @@ from app.services.db import (
     dedup_profiles, record_filter_history,
 )
 from app.services.notifications import notify_run_complete, notify_run_failed
-from app.services.benchmarks import persist_metric_snapshot, get_baseline, compute_deviations
+from app.services.benchmarks import get_baseline, compute_deviations
 from app.pipeline.cost_config import get_default_budget, get_warning_threshold
 
 logger = logging.getLogger('pipeline.manager')
@@ -139,6 +140,7 @@ def run_pipeline(run_id: str, retry_from_stage: str = None):
 
     logger.info("Starting run %s for platform=%s", run_id, run.platform)
     profiles = []
+    stage_timings = {}
 
     # Handle retry from checkpoint
     skipping = False
@@ -216,7 +218,13 @@ def run_pipeline(run_id: str, retry_from_stage: str = None):
         # Execute
         try:
             logger.info("Stage '%s' — %s — %d profiles in", stage_name, adapter.__class__.__name__, len(profiles))
+            stage_start = time.time()
             result: StageResult = adapter.run(profiles, run)
+            stage_elapsed = time.time() - stage_start
+            stage_timings[stage_name] = {
+                'duration_s': round(stage_elapsed, 2),
+            }
+            run.stage_timings = stage_timings
 
             # Update progress
             run.stage_progress[stage_name]['completed'] = result.processed - result.failed
@@ -279,7 +287,6 @@ def run_pipeline(run_id: str, retry_from_stage: str = None):
                 run.complete()
                 persist_run(run)
                 persist_lead_results(run, profiles)
-                persist_metric_snapshot(run)
                 notify_run_complete(run)
                 return
 
@@ -298,7 +305,6 @@ def run_pipeline(run_id: str, retry_from_stage: str = None):
     run.complete()
     persist_run(run)
     persist_lead_results(run, profiles)
-    persist_metric_snapshot(run)
     notify_run_complete(run)
     logger.info("Run %s completed — found=%s, scored=%s, synced=%s",
                 run_id, run.profiles_found, run.profiles_scored, run.contacts_synced)

@@ -14,7 +14,6 @@ import app.models.lead  # noqa: F401
 import app.models.lead_run  # noqa: F401
 import app.models.filter_history  # noqa: F401
 import app.models.preset  # noqa: F401
-import app.models.metric_snapshot  # noqa: F401
 
 config = context.config
 

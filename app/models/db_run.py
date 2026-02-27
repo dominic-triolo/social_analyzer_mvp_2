@@ -28,5 +28,7 @@ class DbRun(Base):
     estimated_cost = Column(Float, nullable=True)
     actual_cost = Column(Float, nullable=True)
     stage_outputs = Column(JSON, nullable=True)
+    errors = Column(JSON, nullable=True)
+    stage_timings = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     finished_at = Column(DateTime(timezone=True), nullable=True)

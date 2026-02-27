@@ -1,8 +1,10 @@
 """
-Benchmarks service — snapshot persistence, baseline computation, deviation detection.
+Benchmarks service — computed metrics, baseline computation, deviation detection.
 
 Called on pipeline completion to track per-platform performance baselines
 and detect significant deviations from the 30-day rolling average.
+
+Metrics are computed directly from DbRun rows — no intermediate snapshot table.
 """
 import logging
 from dataclasses import dataclass
@@ -13,7 +15,6 @@ from sqlalchemy import func
 
 from app.database import get_session
 from app.models.db_run import DbRun
-from app.models.metric_snapshot import MetricSnapshot
 
 logger = logging.getLogger('services.benchmarks')
 
@@ -29,11 +30,11 @@ class Deviation:
     direction: str       # 'above' or 'below'
 
 
-def persist_metric_snapshot(run) -> Optional[MetricSnapshot]:
-    """Upsert a MetricSnapshot row for (today, run.platform).
+def compute_daily_metrics(platform: str, target_date: date = None) -> Optional[dict]:
+    """Compute daily aggregate metrics for a platform from DbRun rows.
 
-    Aggregates all completed DbRun rows for that date+platform to compute
-    daily snapshot metrics. Called after each successful pipeline completion.
+    Returns a dict with the same shape as the old MetricSnapshot, or None
+    if no completed runs exist for the given date + platform.
     """
     try:
         session = get_session()
@@ -41,10 +42,9 @@ def persist_metric_snapshot(run) -> Optional[MetricSnapshot]:
         logger.error("Failed to get session: %s", e)
         return None
     try:
-        today = date.today()
-        platform = run.platform
+        if target_date is None:
+            target_date = date.today()
 
-        # Aggregate all completed runs for this date + platform
         row = session.query(
             func.count(DbRun.id).label('runs'),
             func.avg(DbRun.profiles_found).label('avg_found'),
@@ -55,7 +55,7 @@ def persist_metric_snapshot(run) -> Optional[MetricSnapshot]:
         ).filter(
             DbRun.status == 'completed',
             DbRun.platform == platform,
-            func.date(DbRun.created_at) == today,
+            func.date(DbRun.created_at) == target_date,
         ).first()
 
         if not row or row.runs == 0:
@@ -68,74 +68,51 @@ def persist_metric_snapshot(run) -> Optional[MetricSnapshot]:
         avg_cost = float(row.avg_cost or 0)
 
         yield_rate = (avg_prescreened / avg_found * 100) if avg_found > 0 else 0.0
-        auto_enroll_rate = 0.0
         funnel_conversion = (avg_synced / avg_found * 100) if avg_found > 0 else 0.0
         avg_cost_per_lead = (avg_cost / avg_synced) if avg_synced > 0 else 0.0
 
-        # Compute auto_enroll_rate from the latest run's tier_distribution
-        tier = getattr(run, 'tier_distribution', None) or {}
-        tier_total = sum(tier.values()) if tier else 0
-        if tier_total > 0:
-            auto_enroll_rate = (tier.get('auto_enroll', 0) / tier_total) * 100
-
-        # Compute avg_score from scored runs today
-        score_row = session.query(
-            func.avg(DbRun.profiles_scored).label('avg_score'),
-        ).filter(
+        # Compute auto_enroll_rate: aggregate tier_distribution across all
+        # completed runs for this date+platform
+        runs_with_tiers = session.query(DbRun.tier_distribution).filter(
             DbRun.status == 'completed',
             DbRun.platform == platform,
-            DbRun.profiles_scored > 0,
-            func.date(DbRun.created_at) == today,
-        ).first()
-        avg_score = float(score_row.avg_score or 0) if score_row else 0.0
+            func.date(DbRun.created_at) == target_date,
+        ).all()
 
-        # Upsert: find existing or create new
-        snapshot = session.query(MetricSnapshot).filter(
-            MetricSnapshot.date == today,
-            MetricSnapshot.platform == platform,
-        ).first()
+        total_tiered = 0
+        total_auto_enroll = 0
+        for (tier_dist,) in runs_with_tiers:
+            if tier_dist and isinstance(tier_dist, dict):
+                total_tiered += sum(tier_dist.values())
+                total_auto_enroll += tier_dist.get('auto_enroll', 0)
+        auto_enroll_rate = (total_auto_enroll / total_tiered * 100) if total_tiered > 0 else 0.0
 
-        if snapshot:
-            snapshot.runs_count = row.runs
-            snapshot.yield_rate = round(yield_rate, 2)
-            snapshot.avg_score = round(avg_score, 2)
-            snapshot.auto_enroll_rate = round(auto_enroll_rate, 2)
-            snapshot.avg_found = round(avg_found, 2)
-            snapshot.avg_scored = round(avg_scored, 2)
-            snapshot.avg_synced = round(avg_synced, 2)
-            snapshot.funnel_conversion = round(funnel_conversion, 2)
-            snapshot.avg_cost_per_lead = round(avg_cost_per_lead, 4)
-        else:
-            snapshot = MetricSnapshot(
-                date=today,
-                platform=platform,
-                runs_count=row.runs,
-                yield_rate=round(yield_rate, 2),
-                avg_score=round(avg_score, 2),
-                auto_enroll_rate=round(auto_enroll_rate, 2),
-                avg_found=round(avg_found, 2),
-                avg_scored=round(avg_scored, 2),
-                avg_synced=round(avg_synced, 2),
-                funnel_conversion=round(funnel_conversion, 2),
-                avg_cost_per_lead=round(avg_cost_per_lead, 4),
-            )
-            session.add(snapshot)
-
-        session.commit()
-        return snapshot
+        return {
+            'date': target_date.isoformat(),
+            'platform': platform,
+            'runs_count': row.runs,
+            'yield_rate': round(yield_rate, 2),
+            'avg_score': round(avg_scored, 2),
+            'auto_enroll_rate': round(auto_enroll_rate, 2),
+            'avg_found': round(avg_found, 2),
+            'avg_scored': round(avg_scored, 2),
+            'avg_synced': round(avg_synced, 2),
+            'funnel_conversion': round(funnel_conversion, 2),
+            'avg_cost_per_lead': round(avg_cost_per_lead, 4),
+        }
 
     except Exception as e:
-        session.rollback()
-        logger.error("Failed to persist snapshot: %s", e)
+        logger.error("Failed to compute daily metrics: %s", e)
         return None
     finally:
         session.close()
 
 
 def get_baseline(platform: str, days: int = 30) -> Optional[dict]:
-    """Average MetricSnapshot rows from the last N days for a platform.
+    """Compute a rolling baseline from DbRun rows over the last N days.
 
-    Returns None if fewer than 3 snapshot days exist (insufficient data).
+    Aggregates completed runs grouped by date, requires at least 3 distinct
+    run-dates before returning a baseline (insufficient data otherwise).
     """
     try:
         session = get_session()
@@ -145,35 +122,67 @@ def get_baseline(platform: str, days: int = 30) -> Optional[dict]:
     try:
         cutoff = date.today() - timedelta(days=days)
 
-        row = session.query(
-            func.count(MetricSnapshot.id).label('count'),
-            func.avg(MetricSnapshot.yield_rate).label('yield_rate'),
-            func.avg(MetricSnapshot.avg_score).label('avg_score'),
-            func.avg(MetricSnapshot.auto_enroll_rate).label('auto_enroll_rate'),
-            func.avg(MetricSnapshot.avg_found).label('avg_found'),
-            func.avg(MetricSnapshot.avg_scored).label('avg_scored'),
-            func.avg(MetricSnapshot.avg_synced).label('avg_synced'),
-            func.avg(MetricSnapshot.funnel_conversion).label('funnel_conversion'),
-            func.avg(MetricSnapshot.avg_cost_per_lead).label('avg_cost_per_lead'),
+        # Count distinct dates with completed runs
+        distinct_dates = session.query(
+            func.count(func.distinct(func.date(DbRun.created_at)))
         ).filter(
-            MetricSnapshot.platform == platform,
-            MetricSnapshot.date >= cutoff,
+            DbRun.status == 'completed',
+            DbRun.platform == platform,
+            func.date(DbRun.created_at) >= cutoff,
+        ).scalar()
+
+        if not distinct_dates or distinct_dates < 3:
+            return None
+
+        # Aggregate across all completed runs in the window
+        row = session.query(
+            func.avg(DbRun.profiles_found).label('avg_found'),
+            func.avg(DbRun.profiles_pre_screened).label('avg_prescreened'),
+            func.avg(DbRun.profiles_scored).label('avg_scored'),
+            func.avg(DbRun.contacts_synced).label('avg_synced'),
+            func.avg(DbRun.actual_cost).label('avg_cost'),
+        ).filter(
+            DbRun.status == 'completed',
+            DbRun.platform == platform,
+            func.date(DbRun.created_at) >= cutoff,
         ).first()
 
-        if not row or row.count < 3:
-            return None
+        avg_found = float(row.avg_found or 0)
+        avg_prescreened = float(row.avg_prescreened or 0)
+        avg_scored = float(row.avg_scored or 0)
+        avg_synced = float(row.avg_synced or 0)
+        avg_cost = float(row.avg_cost or 0)
+
+        yield_rate = (avg_prescreened / avg_found * 100) if avg_found > 0 else 0.0
+        funnel_conversion = (avg_synced / avg_found * 100) if avg_found > 0 else 0.0
+        avg_cost_per_lead = (avg_cost / avg_synced) if avg_synced > 0 else 0.0
+
+        # Aggregate auto_enroll_rate across all runs in the window
+        runs_with_tiers = session.query(DbRun.tier_distribution).filter(
+            DbRun.status == 'completed',
+            DbRun.platform == platform,
+            func.date(DbRun.created_at) >= cutoff,
+        ).all()
+
+        total_tiered = 0
+        total_auto_enroll = 0
+        for (tier_dist,) in runs_with_tiers:
+            if tier_dist and isinstance(tier_dist, dict):
+                total_tiered += sum(tier_dist.values())
+                total_auto_enroll += tier_dist.get('auto_enroll', 0)
+        auto_enroll_rate = (total_auto_enroll / total_tiered * 100) if total_tiered > 0 else 0.0
 
         return {
             'days': days,
-            'snapshot_count': row.count,
-            'yield_rate': round(float(row.yield_rate or 0), 2),
-            'avg_score': round(float(row.avg_score or 0), 2),
-            'auto_enroll_rate': round(float(row.auto_enroll_rate or 0), 2),
-            'avg_found': round(float(row.avg_found or 0), 2),
-            'avg_scored': round(float(row.avg_scored or 0), 2),
-            'avg_synced': round(float(row.avg_synced or 0), 2),
-            'funnel_conversion': round(float(row.funnel_conversion or 0), 2),
-            'avg_cost_per_lead': round(float(row.avg_cost_per_lead or 0), 4),
+            'snapshot_count': distinct_dates,
+            'yield_rate': round(yield_rate, 2),
+            'avg_score': round(avg_scored, 2),
+            'auto_enroll_rate': round(auto_enroll_rate, 2),
+            'avg_found': round(avg_found, 2),
+            'avg_scored': round(avg_scored, 2),
+            'avg_synced': round(avg_synced, 2),
+            'funnel_conversion': round(funnel_conversion, 2),
+            'avg_cost_per_lead': round(avg_cost_per_lead, 4),
         }
 
     except Exception as e:

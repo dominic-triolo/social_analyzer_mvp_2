@@ -16,7 +16,6 @@ def db_engine():
     import app.models.lead_run
     import app.models.filter_history
     import app.models.preset
-    import app.models.metric_snapshot
     Base.metadata.create_all(engine)
     yield engine
     engine.dispose()
@@ -103,6 +102,7 @@ def make_run():
             errors=[],
             summary='',
             stage_outputs={},
+            stage_timings=None,
         )
         defaults.update(overrides)
         run = MagicMock()

@@ -54,6 +54,8 @@ def persist_run(run):
             db_run.estimated_cost = run.estimated_cost or None
             db_run.actual_cost = run.actual_cost or None
             db_run.stage_outputs = run.stage_outputs or None
+            db_run.errors = _safe_json(run.errors[-50:]) if run.errors else None
+            db_run.stage_timings = getattr(run, 'stage_timings', None) or None
             if run.status in ('completed', 'failed'):
                 db_run.finished_at = datetime.now()
 
@@ -85,6 +87,15 @@ def persist_lead_results(run, profiles):
                 platform_id=platform_id,
             ).first()
 
+            # Extract enrichment fields for Lead
+            social_data = profile.get('_social_data', {}) or {}
+            creator_profile = profile.get('_creator_profile', {}) or {}
+            content_items = profile.get('_content_items', []) or []
+            engagement = social_data.get('average_engagement') or creator_profile.get('engagement_rate')
+            category = creator_profile.get('primary_category')
+            location = _extract_location(profile)
+            extra_data = _build_extra_data(profile, run.platform)
+
             if lead is None:
                 lead = Lead(
                     platform=run.platform,
@@ -96,6 +107,11 @@ def persist_lead_results(run, profiles):
                     email=profile.get('email', ''),
                     website=profile.get('website', '') or profile.get('url', ''),
                     social_urls=profile.get('_social_urls', {}),
+                    engagement_rate=engagement,
+                    media_count=len(content_items) if content_items else None,
+                    category=category,
+                    location=location,
+                    extra_data=extra_data,
                 )
                 session.add(lead)
                 session.flush()  # get lead.id
@@ -105,6 +121,11 @@ def persist_lead_results(run, profiles):
                 lead.bio = profile.get('introduction', '') or profile.get('bio', '') or lead.bio
                 lead.follower_count = profile.get('follower_count', 0) or lead.follower_count
                 lead.email = profile.get('email', '') or lead.email
+                lead.engagement_rate = engagement or lead.engagement_rate
+                lead.media_count = len(content_items) if content_items else lead.media_count
+                lead.category = category or lead.category
+                lead.location = location or lead.location
+                lead.extra_data = extra_data or lead.extra_data
                 lead.last_seen_at = datetime.now()
 
             # Extract scoring data
@@ -122,6 +143,20 @@ def persist_lead_results(run, profiles):
                 if val:
                     evidence[key.lstrip('_')] = val
 
+            # Build enrichment/content/prescreen JSON blobs for LeadRun
+            enrichment_blob = _safe_json({
+                k: profile.get(k) for k in ('_social_data', '_profile_data')
+                if profile.get(k)
+            }) or None
+            content_blob = _safe_json({
+                k: profile.get(k) for k in ('_content_items', '_content_analyses')
+                if profile.get(k)
+            }) or None
+            prescreen_blob = _safe_json({
+                k: profile.get(k) for k in ('_selected_indices', '_has_travel_experience', '_prescreen_score')
+                if profile.get(k) is not None
+            }) or None
+
             lead_run = LeadRun(
                 lead_id=lead.id,
                 run_id=run.id,
@@ -135,6 +170,9 @@ def persist_lead_results(run, profiles):
                 priority_tier=analysis.get('priority_tier'),
                 score_reasoning=analysis.get('score_reasoning'),
                 synced_to_crm=stage_reached == 'crm_sync',
+                enrichment_data=enrichment_blob,
+                content_data=content_blob,
+                prescreen_data=prescreen_blob,
             )
             session.add(lead_run)
 
@@ -271,3 +309,59 @@ def _determine_stage_reached(profile):
     if profile.get('_prescreen_result'):
         return 'pre_screen'
     return 'discovery'
+
+
+def _build_extra_data(profile, platform):
+    """Build platform-specific catch-all JSON from profile data."""
+    extra = {}
+    if platform == 'patreon':
+        keys = ('patron_count', 'tier_count', 'tiers', 'is_monthly', 'earnings_visibility')
+    elif platform == 'facebook':
+        keys = ('member_count', 'post_frequency', 'group_type', 'privacy')
+    elif platform == 'instagram':
+        keys = ('is_verified', 'is_business', 'account_type', 'avg_likes', 'avg_comments')
+    else:
+        keys = ()
+    for key in keys:
+        val = profile.get(key)
+        if val is None:
+            val = profile.get(f'_{key}')
+        if val is not None:
+            extra[key] = val
+    return extra or None
+
+
+def _extract_location(profile):
+    """Extract location string from profile data (multiple possible sources)."""
+    # Direct location field
+    loc = profile.get('location') or profile.get('_location')
+    if loc:
+        return loc if isinstance(loc, str) else str(loc)
+    # InsightIQ enrichment location
+    social = profile.get('_social_data', {}) or {}
+    loc = social.get('location') or social.get('city')
+    if loc:
+        return loc if isinstance(loc, str) else str(loc)
+    return None
+
+
+def _safe_json(data):
+    """Ensure data is JSON-serializable; strip oversized string values."""
+    if not data:
+        return None
+    try:
+        # Quick check: can it round-trip through JSON?
+        json.dumps(data)
+        return data
+    except (TypeError, ValueError):
+        # Strip non-serializable values
+        if isinstance(data, dict):
+            cleaned = {}
+            for k, v in data.items():
+                try:
+                    json.dumps(v)
+                    cleaned[k] = v
+                except (TypeError, ValueError):
+                    cleaned[k] = str(v)[:500]
+            return cleaned
+        return None

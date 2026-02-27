@@ -25,4 +25,7 @@ class LeadRun(Base):
     priority_tier = Column(Text, nullable=True)
     score_reasoning = Column(Text, nullable=True)
     synced_to_crm = Column(Boolean, default=False)
+    enrichment_data = Column(JSON, nullable=True)
+    content_data = Column(JSON, nullable=True)
+    prescreen_data = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

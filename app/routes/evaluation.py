@@ -273,7 +273,7 @@ def api_trends():
         else:
             total_found = total_scored = total_synced = 0
 
-        # Fetch baseline from MetricSnapshot for reference line
+        # Fetch baseline (computed from DbRun) for reference line
         baseline = get_baseline(platform) if platform else None
 
         return jsonify({

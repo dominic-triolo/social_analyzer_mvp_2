@@ -143,6 +143,5 @@ def create_app():
     importlib.import_module('app.models.lead_run')
     importlib.import_module('app.models.filter_history')
     importlib.import_module('app.models.preset')
-    importlib.import_module('app.models.metric_snapshot')
 
     return app

@@ -14,6 +14,9 @@ from app.services.db import (
     get_filter_staleness,
     _extract_platform_id,
     _determine_stage_reached,
+    _build_extra_data,
+    _extract_location,
+    _safe_json,
 )
 from app.models.db_run import DbRun
 from app.models.lead import Lead
@@ -682,3 +685,287 @@ class TestIntegration:
         # ran_at uses server_default (UTC) while code compares with datetime.now() (local)
         # so days_ago can be 0 or -1 depending on timezone; both are acceptable for "today"
         assert staleness['last_run_days_ago'] in (0, -1)
+
+
+# ---------------------------------------------------------------------------
+# New schema columns: DbRun.errors, Lead enrichment, LeadRun data columns
+# ---------------------------------------------------------------------------
+
+class TestNewDbRunColumns:
+    """Tests for DbRun.errors and DbRun.stage_timings columns."""
+
+    def test_persist_run_stores_errors_json(self, db_session, make_run):
+        run = make_run()
+        persist_run(run)  # initial insert
+
+        run.status = 'completed'
+        run.errors = [
+            {'stage': 'enrichment', 'message': 'API timeout'},
+            {'stage': 'analysis', 'message': 'Rate limited'},
+        ]
+        persist_run(run)
+
+        row = db_session.get(DbRun, run.id)
+        assert row.errors is not None
+        assert len(row.errors) == 2
+        assert row.errors[0]['message'] == 'API timeout'
+
+    def test_persist_run_truncates_errors_to_50(self, db_session, make_run):
+        run = make_run()
+        persist_run(run)
+
+        run.status = 'completed'
+        run.errors = [{'stage': 'enrichment', 'message': f'error-{i}'} for i in range(100)]
+        persist_run(run)
+
+        row = db_session.get(DbRun, run.id)
+        assert len(row.errors) == 50
+
+    def test_persist_run_stores_empty_errors_as_none(self, db_session, make_run):
+        run = make_run()
+        persist_run(run)
+
+        run.status = 'completed'
+        run.errors = []
+        persist_run(run)
+
+        row = db_session.get(DbRun, run.id)
+        assert row.errors is None
+
+    def test_persist_run_stores_stage_timings(self, db_session, make_run):
+        run = make_run()
+        persist_run(run)
+
+        run.status = 'completed'
+        run.errors = []
+        run.stage_timings = {'discovery': {'duration_s': 12.5}, 'enrichment': {'duration_s': 45.7}}
+        persist_run(run)
+
+        row = db_session.get(DbRun, run.id)
+        assert row.stage_timings is not None
+        assert row.stage_timings['discovery']['duration_s'] == 12.5
+
+
+class TestNewLeadColumns:
+    """Tests for Lead enrichment columns (engagement_rate, category, location, extra_data)."""
+
+    def test_enrichment_columns_populated_on_insert(self, db_session, make_run):
+        run = make_run()
+        persist_run(run)
+
+        profiles = [{
+            'platform_username': 'enriched_user',
+            'name': 'Enriched Creator',
+            '_social_data': {'average_engagement': 3.5, 'location': 'New York'},
+            '_creator_profile': {'primary_category': 'Travel'},
+            '_content_items': [{'id': 1}, {'id': 2}, {'id': 3}],
+        }]
+        persist_lead_results(run, profiles)
+
+        lead = db_session.query(Lead).filter_by(platform_id='enriched_user').first()
+        assert lead.engagement_rate == 3.5
+        assert lead.media_count == 3
+        assert lead.category == 'Travel'
+        assert lead.location == 'New York'
+
+    def test_enrichment_columns_updated_on_upsert(self, db_session, make_run):
+        run1 = make_run(id='run-001')
+        persist_run(run1)
+        persist_lead_results(run1, [{'platform_username': 'upd_user', 'name': 'User'}])
+
+        run2 = make_run(id='run-002')
+        persist_run(run2)
+        persist_lead_results(run2, [{
+            'platform_username': 'upd_user',
+            'name': 'User',
+            '_social_data': {'average_engagement': 5.0},
+            '_creator_profile': {'primary_category': 'Food'},
+            '_content_items': [{'id': 1}],
+            'location': 'London',
+        }])
+
+        lead = db_session.query(Lead).filter_by(platform_id='upd_user').first()
+        assert lead.engagement_rate == 5.0
+        assert lead.category == 'Food'
+        assert lead.location == 'London'
+        assert lead.media_count == 1
+
+    def test_extra_data_instagram(self, db_session, make_run):
+        run = make_run()
+        persist_run(run)
+
+        profiles = [{
+            'platform_username': 'ig_user',
+            'is_verified': True,
+            'is_business': True,
+        }]
+        persist_lead_results(run, profiles)
+
+        lead = db_session.query(Lead).filter_by(platform_id='ig_user').first()
+        assert lead.extra_data is not None
+        assert lead.extra_data.get('is_verified') is True
+
+    def test_extra_data_patreon(self, db_session, make_run):
+        run = make_run(platform='patreon')
+        persist_run(run)
+
+        profiles = [{
+            'slug': 'travel_creator',
+            'name': 'Patreon Creator',
+            'patron_count': 500,
+            'tier_count': 3,
+        }]
+        persist_lead_results(run, profiles)
+
+        lead = db_session.query(Lead).filter_by(platform_id='travel_creator').first()
+        assert lead.extra_data is not None
+        assert lead.extra_data['patron_count'] == 500
+        assert lead.extra_data['tier_count'] == 3
+
+    def test_no_enrichment_data_leaves_columns_null(self, db_session, make_run):
+        run = make_run()
+        persist_run(run)
+
+        profiles = [{'platform_username': 'plain_user', 'name': 'Plain'}]
+        persist_lead_results(run, profiles)
+
+        lead = db_session.query(Lead).filter_by(platform_id='plain_user').first()
+        assert lead.engagement_rate is None
+        assert lead.media_count is None
+        assert lead.category is None
+        assert lead.location is None
+        assert lead.extra_data is None
+
+
+class TestNewLeadRunColumns:
+    """Tests for LeadRun enrichment/content/prescreen data columns."""
+
+    def test_enrichment_data_stored(self, db_session, make_run):
+        run = make_run()
+        persist_run(run)
+
+        profiles = [{
+            'platform_username': 'enrich_lr',
+            '_social_data': {'followers': 50000, 'engagement': 3.5},
+            '_profile_data': {'bio_keywords': ['travel']},
+            '_lead_analysis': {'lead_score': 0.8},
+        }]
+        persist_lead_results(run, profiles)
+
+        lr = db_session.query(LeadRun).first()
+        assert lr.enrichment_data is not None
+        assert '_social_data' in lr.enrichment_data
+        assert '_profile_data' in lr.enrichment_data
+
+    def test_content_data_stored(self, db_session, make_run):
+        run = make_run()
+        persist_run(run)
+
+        profiles = [{
+            'platform_username': 'content_lr',
+            '_content_items': [{'id': 1, 'caption': 'Travel post'}],
+            '_content_analyses': [{'score': 0.9, 'themes': ['travel']}],
+            '_lead_analysis': {'lead_score': 0.7},
+        }]
+        persist_lead_results(run, profiles)
+
+        lr = db_session.query(LeadRun).first()
+        assert lr.content_data is not None
+        assert '_content_items' in lr.content_data
+        assert '_content_analyses' in lr.content_data
+
+    def test_prescreen_data_stored(self, db_session, make_run):
+        run = make_run()
+        persist_run(run)
+
+        profiles = [{
+            'platform_username': 'prescreen_lr',
+            '_prescreen_result': 'passed',
+            '_selected_indices': [0, 2, 3],
+            '_has_travel_experience': True,
+            '_prescreen_score': 0.85,
+            '_lead_analysis': {'lead_score': 0.75},
+        }]
+        persist_lead_results(run, profiles)
+
+        lr = db_session.query(LeadRun).first()
+        assert lr.prescreen_data is not None
+        assert lr.prescreen_data['_selected_indices'] == [0, 2, 3]
+        assert lr.prescreen_data['_has_travel_experience'] is True
+        assert lr.prescreen_data['_prescreen_score'] == 0.85
+
+    def test_no_data_leaves_columns_null(self, db_session, make_run):
+        run = make_run()
+        persist_run(run)
+
+        profiles = [{'platform_username': 'bare_lr'}]
+        persist_lead_results(run, profiles)
+
+        lr = db_session.query(LeadRun).first()
+        assert lr.enrichment_data is None
+        assert lr.content_data is None
+        assert lr.prescreen_data is None
+
+
+# ---------------------------------------------------------------------------
+# Helper functions
+# ---------------------------------------------------------------------------
+
+class TestBuildExtraData:
+
+    def test_instagram_keys(self):
+        profile = {'is_verified': True, 'is_business': False, 'avg_likes': 500}
+        result = _build_extra_data(profile, 'instagram')
+        assert result == {'is_verified': True, 'is_business': False, 'avg_likes': 500}
+
+    def test_patreon_keys(self):
+        profile = {'patron_count': 100, 'tier_count': 3}
+        result = _build_extra_data(profile, 'patreon')
+        assert result == {'patron_count': 100, 'tier_count': 3}
+
+    def test_facebook_keys(self):
+        profile = {'member_count': 5000, 'privacy': 'public'}
+        result = _build_extra_data(profile, 'facebook')
+        assert result == {'member_count': 5000, 'privacy': 'public'}
+
+    def test_returns_none_when_empty(self):
+        assert _build_extra_data({}, 'instagram') is None
+
+    def test_unknown_platform_returns_none(self):
+        assert _build_extra_data({'patron_count': 100}, 'tiktok') is None
+
+
+class TestExtractLocation:
+
+    def test_direct_location(self):
+        assert _extract_location({'location': 'New York'}) == 'New York'
+
+    def test_underscore_location(self):
+        assert _extract_location({'_location': 'London'}) == 'London'
+
+    def test_social_data_location(self):
+        assert _extract_location({'_social_data': {'location': 'Paris'}}) == 'Paris'
+
+    def test_social_data_city(self):
+        assert _extract_location({'_social_data': {'city': 'Tokyo'}}) == 'Tokyo'
+
+    def test_returns_none_when_missing(self):
+        assert _extract_location({}) is None
+
+
+class TestSafeJson:
+
+    def test_passthrough_valid_data(self):
+        data = {'key': 'value', 'count': 42}
+        assert _safe_json(data) == data
+
+    def test_returns_none_for_empty(self):
+        assert _safe_json({}) is None
+        assert _safe_json(None) is None
+
+    def test_handles_non_serializable(self):
+        data = {'good': 'value', 'bad': datetime.now()}
+        result = _safe_json(data)
+        assert result is not None
+        assert result['good'] == 'value'
+        assert isinstance(result['bad'], str)
