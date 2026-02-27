@@ -431,6 +431,7 @@ class TestInstagramPrescreen:
         assert result.failed == 0
         assert '_content_items' in result.profiles[0]
         assert '_selected_indices' in result.profiles[0]
+        assert result.meta == {}  # No filtered profiles
 
     @patch('app.pipeline.prescreen.check_post_frequency', return_value=(True, 'No recent posts'))
     @patch('app.services.insightiq.filter_content_items', return_value=[{'id': 1}])
@@ -449,6 +450,9 @@ class TestInstagramPrescreen:
         assert result.skipped == 1
         assert profiles[0]['_prescreen_result'] == 'disqualified'
         assert profiles[0]['_prescreen_score'] == 0.15
+        assert len(result.meta['filtered']) == 1
+        assert result.meta['filtered'][0]['type'] == 'disqualified'
+        assert result.meta['filtered'][0]['reason'] == 'No recent posts'
 
     @patch('app.pipeline.prescreen.pre_screen_profile')
     @patch('app.pipeline.prescreen.create_profile_snapshot')
@@ -477,6 +481,9 @@ class TestInstagramPrescreen:
         assert result.skipped == 1
         assert profiles[0]['_prescreen_result'] == 'rejected'
         assert profiles[0]['_prescreen_score'] == 0.20
+        assert len(result.meta['filtered']) == 1
+        assert result.meta['filtered'][0]['type'] == 'rejected'
+        assert result.meta['filtered'][0]['reason'] == 'Meme account'
 
     @patch('app.services.insightiq.fetch_social_content')
     def test_no_content_items_skipped(self, mock_fetch, mock_run):
@@ -489,6 +496,8 @@ class TestInstagramPrescreen:
 
         assert len(result.profiles) == 0
         assert result.skipped == 1
+        assert len(result.meta['filtered']) == 1
+        assert result.meta['filtered'][0]['type'] == 'no_content'
 
     @patch('app.services.insightiq.fetch_social_content')
     def test_api_error_recorded(self, mock_fetch, mock_run):
@@ -516,6 +525,7 @@ class TestInstagramPrescreen:
 
         assert len(result.profiles) == 0
         assert result.skipped == 1
+        assert result.meta['filtered'][0]['type'] == 'no_content'
 
     @patch('app.pipeline.prescreen.pre_screen_profile')
     @patch('app.pipeline.prescreen.create_profile_snapshot')
@@ -870,6 +880,50 @@ class TestIntegration:
 
             assert len(result.profiles) == 0
             assert result.skipped == 1
+
+    @patch('app.pipeline.prescreen.pre_screen_profile')
+    @patch('app.pipeline.prescreen.create_profile_snapshot')
+    @patch('app.pipeline.prescreen.check_for_travel_experience', return_value=False)
+    @patch('app.services.insightiq.filter_content_items', return_value=[{'id': 1}])
+    @patch('app.services.insightiq.fetch_social_content')
+    def test_mixed_pass_and_filter_tracks_all_reasons(
+        self, mock_fetch, mock_filter, mock_travel,
+        mock_snapshot, mock_prescreen, make_run,
+    ):
+        """Multiple profiles: some pass, some filtered — meta tracks all filter reasons."""
+        # Profile 1: no content → filtered
+        # Profile 2: disqualified by frequency → filtered
+        # Profile 3: passes all checks
+        mock_fetch.side_effect = [
+            {'data': []},  # no content
+            {'data': [{'id': 1}]},  # has content, will be disqualified
+            {'data': [{'id': 1, 'profile': {'platform_username': 'good', 'follower_count': 5000, 'image_url': ''}}]},
+        ]
+        mock_snapshot.return_value = Image.new('RGB', (100, 100), 'white')
+        mock_prescreen.return_value = {
+            'decision': 'continue', 'reasoning': 'OK',
+            'selected_content_indices': [0],
+        }
+
+        run = make_run(platform='instagram', filters={})
+        adapter = InstagramPrescreen()
+
+        with patch('app.pipeline.prescreen.check_post_frequency') as mock_freq:
+            # First call for profile 2 → disqualify, second call for profile 3 → pass
+            mock_freq.side_effect = [(True, 'Stale posts'), (False, '')]
+            profiles = [
+                {'url': 'https://instagram.com/empty', 'bio': '', 'follower_count': 0},
+                {'url': 'https://instagram.com/stale', 'bio': '', 'follower_count': 1000},
+                {'url': 'https://instagram.com/good', 'bio': 'Hello', 'follower_count': 5000},
+            ]
+            result = adapter.run(profiles, run)
+
+        assert len(result.profiles) == 1
+        assert result.skipped == 2
+        assert len(result.meta['filtered']) == 2
+        assert result.meta['filtered'][0]['type'] == 'no_content'
+        assert result.meta['filtered'][1]['type'] == 'disqualified'
+        assert result.meta['filtered'][1]['reason'] == 'Stale posts'
 
     def test_patreon_combined_nsfw_and_patron_filter(self, make_run):
         """NSFW and patron count filters work together correctly."""

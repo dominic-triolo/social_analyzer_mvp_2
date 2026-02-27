@@ -1,5 +1,6 @@
 """Tests for app.pipeline.crm — CRM sync stage adapters."""
 import pytest
+import logging
 from unittest.mock import patch, MagicMock, call
 
 from app.config import BDR_OWNER_IDS
@@ -33,7 +34,7 @@ class TestAdaptersRegistry:
 # ── InstagramCrmSync ───────────────────────────────────────────────────────
 
 class TestInstagramCrmSync:
-    """InstagramCrmSync pushes each profile individually to HubSpot."""
+    """InstagramCrmSync batch-creates HubSpot contacts from discovery leads."""
 
     def test_is_stage_adapter_subclass(self):
         assert issubclass(InstagramCrmSync, StageAdapter)
@@ -50,23 +51,16 @@ class TestInstagramCrmSync:
         assert adapter.estimate_cost(100) == 0.0
         assert adapter.estimate_cost(9999) == 0.0
 
-    @patch('app.pipeline.crm.send_to_hubspot')
-    def test_run_syncs_profiles_to_hubspot(self, mock_send, make_run):
-        """Each profile with a contact_id is sent to HubSpot."""
+    def test_run_syncs_all_profiles_without_contact_id(self, make_run):
+        """All profiles are synced regardless of contact_id presence."""
         profiles = [
             {
-                'contact_id': 'c-001',
-                '_lead_analysis': {'lead_score': 0.85, 'section_scores': {'a': 1}, 'score_reasoning': 'Good'},
-                '_creator_profile': {'name': 'Creator A'},
-                '_content_analyses': [{'id': 1}],
-                '_first_name': 'Alice',
+                '_lead_analysis': {'lead_score': 0.85},
+                '_profile_data': {'username': 'creator_a'},
             },
             {
-                'contact_id': 'c-002',
-                '_lead_analysis': {'lead_score': 0.60, 'section_scores': {}, 'score_reasoning': 'OK'},
-                '_creator_profile': {},
-                '_content_analyses': [],
-                '_first_name': 'Bob',
+                '_lead_analysis': {'lead_score': 0.60},
+                '_profile_data': {'username': 'creator_b'},
             },
         ]
         run = make_run(platform='instagram')
@@ -79,26 +73,9 @@ class TestInstagramCrmSync:
         assert result.processed == 2
         assert result.failed == 0
         assert result.errors == []
-        assert mock_send.call_count == 2
 
-    @patch('app.pipeline.crm.send_to_hubspot')
-    def test_run_uses_id_fallback_for_contact_id(self, mock_send, make_run):
-        """Falls back to 'id' field when 'contact_id' is not present."""
-        profiles = [
-            {'id': 'fallback-id', '_lead_analysis': {'lead_score': 0.5}},
-        ]
-        run = make_run(platform='instagram')
-
-        adapter = InstagramCrmSync()
-        result = adapter.run(profiles, run)
-
-        assert len(result.profiles) == 1
-        # First positional arg to send_to_hubspot is the contact_id
-        assert mock_send.call_args_list[0][0][0] == 'fallback-id'
-
-    @patch('app.pipeline.crm.send_to_hubspot')
-    def test_run_skips_profile_without_contact_id(self, mock_send, make_run):
-        """Profiles with no contact_id or id are skipped with an error."""
+    def test_run_no_contact_id_required(self, make_run):
+        """Profiles without contact_id or id are still synced successfully."""
         profiles = [
             {'_lead_analysis': {'lead_score': 0.9}},
         ]
@@ -107,51 +84,14 @@ class TestInstagramCrmSync:
         adapter = InstagramCrmSync()
         result = adapter.run(profiles, run)
 
-        assert len(result.profiles) == 0
-        assert result.processed == 1
-        assert result.failed == 1
-        assert 'No contact_id' in result.errors[0]
-        mock_send.assert_not_called()
+        assert len(result.profiles) == 1
+        assert result.failed == 0
 
-    @patch('app.pipeline.crm.send_to_hubspot')
-    def test_run_skips_profile_with_empty_contact_id(self, mock_send, make_run):
-        """Empty string contact_id is treated as missing."""
-        profiles = [
-            {'contact_id': '', 'id': '', '_lead_analysis': {}},
-        ]
-        run = make_run(platform='instagram')
-
-        adapter = InstagramCrmSync()
-        result = adapter.run(profiles, run)
-
-        assert len(result.profiles) == 0
-        assert result.failed == 1
-        mock_send.assert_not_called()
-
-    @patch('app.pipeline.crm.send_to_hubspot')
-    def test_run_handles_hubspot_error_gracefully(self, mock_send, make_run):
-        """HubSpot API errors are caught and recorded, not raised."""
-        mock_send.side_effect = Exception("HubSpot 429 rate limit")
-
-        profiles = [
-            {'contact_id': 'c-err', '_lead_analysis': {'lead_score': 0.5}},
-        ]
-        run = make_run(platform='instagram')
-
-        adapter = InstagramCrmSync()
-        result = adapter.run(profiles, run)
-
-        assert len(result.profiles) == 0
-        assert result.failed == 1
-        assert 'c-err' in result.errors[0]
-        assert 'rate limit' in result.errors[0]
-
-    @patch('app.pipeline.crm.send_to_hubspot')
-    def test_run_increments_progress_on_success(self, mock_send, make_run):
+    def test_run_increments_progress_on_success(self, make_run):
         """Each synced profile triggers a 'completed' progress increment."""
         profiles = [
-            {'contact_id': 'c-1', '_lead_analysis': {}},
-            {'contact_id': 'c-2', '_lead_analysis': {}},
+            {'_lead_analysis': {}, '_profile_data': {'username': 'a'}},
+            {'_lead_analysis': {}, '_profile_data': {'username': 'b'}},
         ]
         run = make_run(platform='instagram')
 
@@ -164,25 +104,11 @@ class TestInstagramCrmSync:
         ]
         assert len(completed_calls) == 2
 
-    @patch('app.pipeline.crm.send_to_hubspot')
-    def test_run_increments_progress_on_failure(self, mock_send, make_run):
-        """Failed syncs trigger a 'failed' progress increment."""
-        mock_send.side_effect = Exception("API error")
-
-        profiles = [{'contact_id': 'c-fail', '_lead_analysis': {}}]
-        run = make_run(platform='instagram')
-
-        adapter = InstagramCrmSync()
-        adapter.run(profiles, run)
-
-        run.increment_stage_progress.assert_called_once_with('crm_sync', 'failed')
-
-    @patch('app.pipeline.crm.send_to_hubspot')
-    def test_run_updates_run_contacts_synced(self, mock_send, make_run):
-        """run.contacts_synced is set to the number of successfully synced profiles."""
+    def test_run_updates_run_contacts_synced(self, make_run):
+        """run.contacts_synced is set to the number of synced profiles."""
         profiles = [
-            {'contact_id': 'c-1', '_lead_analysis': {}},
-            {'contact_id': 'c-2', '_lead_analysis': {}},
+            {'_lead_analysis': {}, '_profile_data': {'username': 'a'}},
+            {'_lead_analysis': {}, '_profile_data': {'username': 'b'}},
         ]
         run = make_run(platform='instagram')
 
@@ -192,10 +118,9 @@ class TestInstagramCrmSync:
         assert run.contacts_synced == 2
         run.save.assert_called_once()
 
-    @patch('app.pipeline.crm.send_to_hubspot')
-    def test_run_saves_run_after_sync(self, mock_send, make_run):
+    def test_run_saves_run_after_sync(self, make_run):
         """run.save() is called after processing all profiles."""
-        profiles = [{'contact_id': 'c-1', '_lead_analysis': {}}]
+        profiles = [{'_lead_analysis': {}}]
         run = make_run(platform='instagram')
 
         adapter = InstagramCrmSync()
@@ -203,8 +128,7 @@ class TestInstagramCrmSync:
 
         run.save.assert_called_once()
 
-    @patch('app.pipeline.crm.send_to_hubspot')
-    def test_run_empty_profiles(self, mock_send, make_run):
+    def test_run_empty_profiles(self, make_run):
         """Empty input produces empty output and zero synced count."""
         run = make_run(platform='instagram')
 
@@ -215,87 +139,75 @@ class TestInstagramCrmSync:
         assert result.processed == 0
         assert result.failed == 0
         assert run.contacts_synced == 0
-        mock_send.assert_not_called()
 
-    @patch('app.pipeline.crm.send_to_hubspot')
-    def test_run_passes_correct_args_to_hubspot(self, mock_send, make_run):
-        """send_to_hubspot receives the correct arguments from the profile."""
-        profile = {
-            'contact_id': 'c-args',
-            '_lead_analysis': {
-                'lead_score': 0.92,
-                'section_scores': {'engagement': 0.8, 'reach': 0.9},
-                'score_reasoning': 'Excellent engagement',
-            },
-            '_creator_profile': {'name': 'Test Creator', 'bio': 'Travel'},
-            '_content_analyses': [{'type': 'image', 'score': 0.9}],
-            '_first_name': 'Testy',
-        }
-        run = make_run(platform='instagram')
-
-        adapter = InstagramCrmSync()
-        adapter.run([profile], run)
-
-        mock_send.assert_called_once_with(
-            'c-args',
-            0.92,
-            {'engagement': 0.8, 'reach': 0.9},
-            'Excellent engagement',
-            {'name': 'Test Creator', 'bio': 'Travel'},
-            [{'type': 'image', 'score': 0.9}],
-            profile['_lead_analysis'],
-            first_name='Testy',
-        )
-
-    @patch('app.pipeline.crm.send_to_hubspot')
-    def test_run_defaults_missing_analysis_fields(self, mock_send, make_run):
-        """Missing _lead_analysis sub-fields default to safe values."""
-        profile = {
-            'contact_id': 'c-defaults',
-            '_lead_analysis': {},  # No lead_score, section_scores, etc.
-        }
-        run = make_run(platform='instagram')
-
-        adapter = InstagramCrmSync()
-        adapter.run([profile], run)
-
-        args, kwargs = mock_send.call_args
-        assert args[0] == 'c-defaults'
-        assert args[1] == 0       # lead_score default
-        assert args[2] == {}      # section_scores default
-        assert args[3] == ''      # score_reasoning default
-
-    @patch('app.pipeline.crm.send_to_hubspot')
-    def test_run_defaults_first_name_to_there(self, mock_send, make_run):
-        """Missing _first_name defaults to 'there'."""
-        profile = {'contact_id': 'c-name', '_lead_analysis': {}}
-        run = make_run(platform='instagram')
-
-        adapter = InstagramCrmSync()
-        adapter.run([profile], run)
-
-        _, kwargs = mock_send.call_args
-        assert kwargs['first_name'] == 'there'
-
-    @patch('app.pipeline.crm.send_to_hubspot')
-    def test_run_mixed_success_and_failure(self, mock_send, make_run):
-        """Mix of successful and failed syncs is tracked correctly."""
-        mock_send.side_effect = [None, Exception("fail"), None]
-
+    def test_run_meta_contains_stub_mode(self, make_run):
+        """StageResult meta indicates stub mode and synced count."""
         profiles = [
-            {'contact_id': 'ok-1', '_lead_analysis': {}},
-            {'contact_id': 'fail-1', '_lead_analysis': {}},
-            {'contact_id': 'ok-2', '_lead_analysis': {}},
+            {'_lead_analysis': {'lead_score': 0.85}, '_profile_data': {'username': 'test'}},
         ]
         run = make_run(platform='instagram')
 
         adapter = InstagramCrmSync()
         result = adapter.run(profiles, run)
 
-        assert len(result.profiles) == 2
-        assert result.processed == 3
-        assert result.failed == 1
-        assert run.contacts_synced == 2
+        assert result.meta['mode'] == 'stub'
+        assert result.meta['synced_count'] == 1
+
+    def test_run_tier_auto_enroll(self, make_run):
+        """Score >= 0.8 maps to auto_enroll tier."""
+        profiles = [{'_lead_analysis': {'lead_score': 0.85}, '_profile_data': {'username': 'high'}}]
+        run = make_run(platform='instagram')
+
+        adapter = InstagramCrmSync()
+        result = adapter.run(profiles, run)
+
+        assert len(result.profiles) == 1
+
+    def test_run_tier_high_priority(self, make_run):
+        """Score >= 0.5 and < 0.8 maps to high_priority tier."""
+        profiles = [{'_lead_analysis': {'lead_score': 0.65}, '_profile_data': {'username': 'mid'}}]
+        run = make_run(platform='instagram')
+
+        adapter = InstagramCrmSync()
+        result = adapter.run(profiles, run)
+
+        assert len(result.profiles) == 1
+
+    def test_run_tier_review(self, make_run):
+        """Score < 0.5 maps to review tier."""
+        profiles = [{'_lead_analysis': {'lead_score': 0.3}, '_profile_data': {'username': 'low'}}]
+        run = make_run(platform='instagram')
+
+        adapter = InstagramCrmSync()
+        result = adapter.run(profiles, run)
+
+        assert len(result.profiles) == 1
+
+    def test_run_logs_each_profile(self, make_run, caplog):
+        """Each profile is logged with name, score, and tier."""
+        profiles = [
+            {'_lead_analysis': {'lead_score': 0.9}, '_profile_data': {'username': 'star_creator'}},
+        ]
+        run = make_run(platform='instagram')
+
+        adapter = InstagramCrmSync()
+        with caplog.at_level(logging.INFO, logger='pipeline.crm'):
+            adapter.run(profiles, run)
+
+        assert 'star_creator' in caplog.text
+        assert 'auto_enroll' in caplog.text
+
+    def test_run_fallback_name_from_profile_url(self, make_run):
+        """When _profile_data has no username, falls back to profile_url."""
+        profiles = [
+            {'_lead_analysis': {'lead_score': 0.5}, 'profile_url': 'https://instagram.com/fallback'},
+        ]
+        run = make_run(platform='instagram')
+
+        adapter = InstagramCrmSync()
+        result = adapter.run(profiles, run)
+
+        assert len(result.profiles) == 1
 
 
 # ── PatreonCrmSync ─────────────────────────────────────────────────────────

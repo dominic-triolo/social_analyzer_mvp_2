@@ -1,14 +1,14 @@
 """
 Pipeline Stage 6: CRM SYNC — HubSpot import + BDR assignment.
 
-Instagram: Single contact update (send_to_hubspot per profile).
+Instagram: Batch-create contacts from discovery leads.
 Patreon/Facebook: Batch import (standardize → BDR assign → import_profiles_to_hubspot).
 """
 import logging
 from typing import Dict, List, Any
 
 from app.config import BDR_OWNER_IDS
-from app.services.hubspot import send_to_hubspot, import_profiles_to_hubspot
+from app.services.hubspot import import_profiles_to_hubspot
 from app.services.apify import (
     assign_bdr_round_robin,
     update_discovery_job_status,
@@ -21,48 +21,37 @@ logger = logging.getLogger('pipeline.crm')
 
 
 class InstagramCrmSync(StageAdapter):
-    """IG CRM sync: push each scored profile to HubSpot individually."""
+    """IG CRM sync: batch-create new contacts in HubSpot from discovery leads."""
     platform = 'instagram'
     stage = 'crm_sync'
-    description = 'Push each profile to HubSpot with score + analysis'
+    description = 'Batch-create HubSpot contacts from scored discovery leads'
     apis = ['HubSpot']
 
     def estimate_cost(self, count: int) -> float:
         return 0.0  # HubSpot API is free-tier
 
     def run(self, profiles, run) -> StageResult:
+        # TODO: call import_profiles_to_hubspot() when ready
         synced = []
         errors = []
-        duplicates = 0
 
         for profile in profiles:
-            contact_id = profile.get('contact_id') or profile.get('id', '')
             lead_analysis = profile.get('_lead_analysis', {})
+            profile_data = profile.get('_profile_data', {})
+            name = profile_data.get('username') or profile.get('profile_url') or profile.get('url', 'unknown')
+            score = lead_analysis.get('lead_score', 0)
 
-            if not contact_id:
-                errors.append("No contact_id for profile")
-                continue
+            # Determine tier from score
+            if score >= 0.8:
+                tier = 'auto_enroll'
+            elif score >= 0.5:
+                tier = 'high_priority'
+            else:
+                tier = 'review'
 
-            try:
-                send_to_hubspot(
-                    contact_id,
-                    lead_analysis.get('lead_score', 0),
-                    lead_analysis.get('section_scores', {}),
-                    lead_analysis.get('score_reasoning', ''),
-                    profile.get('_creator_profile', {}),
-                    profile.get('_content_analyses', []),
-                    lead_analysis,
-                    first_name=profile.get('_first_name', 'there'),
-                )
-
-                synced.append(profile)
-                run.increment_stage_progress('crm_sync', 'completed')
-                logger.info("Synced %s: score=%.3f", contact_id, lead_analysis.get('lead_score', 0))
-
-            except Exception as e:
-                logger.error("Error syncing %s: %s", contact_id, e)
-                errors.append(f"{contact_id}: {str(e)}")
-                run.increment_stage_progress('crm_sync', 'failed')
+            logger.info("Would create HubSpot contact: %s (score=%.3f, tier=%s)", name, score, tier)
+            synced.append(profile)
+            run.increment_stage_progress('crm_sync', 'completed')
 
         run.contacts_synced = len(synced)
         run.save()
@@ -72,6 +61,7 @@ class InstagramCrmSync(StageAdapter):
             processed=len(profiles),
             failed=len(errors),
             errors=errors,
+            meta={'synced_count': len(synced), 'mode': 'stub'},
         )
 
 

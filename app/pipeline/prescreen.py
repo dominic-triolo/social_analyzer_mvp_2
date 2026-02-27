@@ -268,6 +268,7 @@ class InstagramPrescreen(StageAdapter):
 
         passed = []
         errors = []
+        filtered = []
         skipped = 0
 
         for i, profile in enumerate(profiles):
@@ -280,11 +281,13 @@ class InstagramPrescreen(StageAdapter):
                 social_data = fetch_social_content(profile_url)
                 content_items = social_data.get('data', [])
                 if not content_items:
+                    filtered.append({'profile': profile_url, 'reason': 'No content items found', 'type': 'no_content'})
                     skipped += 1
                     continue
 
                 filtered_items = filter_content_items(content_items)
                 if not filtered_items:
+                    filtered.append({'profile': profile_url, 'reason': 'All content items filtered out', 'type': 'no_content'})
                     skipped += 1
                     continue
 
@@ -295,6 +298,7 @@ class InstagramPrescreen(StageAdapter):
                     profile['_prescreen_result'] = 'disqualified'
                     profile['_prescreen_reason'] = reason
                     profile['_prescreen_score'] = 0.15
+                    filtered.append({'profile': profile_url, 'reason': reason, 'type': 'disqualified'})
                     skipped += 1
                     continue
 
@@ -314,6 +318,7 @@ class InstagramPrescreen(StageAdapter):
                     profile['_prescreen_result'] = 'rejected'
                     profile['_prescreen_reason'] = screen_result.get('reasoning', '')
                     profile['_prescreen_score'] = 0.20
+                    filtered.append({'profile': profile_url, 'reason': screen_result.get('reasoning', ''), 'type': 'rejected'})
                     skipped += 1
                     continue
 
@@ -332,6 +337,9 @@ class InstagramPrescreen(StageAdapter):
                 errors.append(f"{profile_url}: {str(e)}")
                 run.increment_stage_progress('pre_screen', 'failed')
 
+        if filtered:
+            logger.info("Pre-screen: %d passed, %d filtered out of %d", len(passed), len(filtered), len(profiles))
+
         return StageResult(
             profiles=passed,
             processed=len(profiles),
@@ -339,6 +347,7 @@ class InstagramPrescreen(StageAdapter):
             skipped=skipped,
             errors=errors,
             cost=len(profiles) * 0.05,
+            meta={'filtered': filtered} if filtered else {},
         )
 
 
