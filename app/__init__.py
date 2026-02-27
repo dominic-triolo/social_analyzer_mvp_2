@@ -5,7 +5,7 @@ Creates and configures the Flask app, registers all blueprints.
 """
 import os
 from datetime import datetime, timezone
-from flask import Flask
+from flask import Flask, request, session, redirect, url_for, render_template_string
 
 
 def _time_since(iso_str):
@@ -43,7 +43,73 @@ def create_app():
 
     configure_logging(app)
 
+    # Secret key for sessions
+    app.secret_key = os.getenv('SECRET_KEY', 'dev-secret-change-me')
+
     app.jinja_env.filters['time_since'] = _time_since
+
+    # ── Simple password auth ────────────────────────────────────────────
+    from app.config import DASHBOARD_PASSWORD
+
+    LOGIN_PAGE = '''
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Login — TrovaTrip</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+        <style>body { font-family: 'DM Sans', sans-serif; }</style>
+    </head>
+    <body class="min-h-screen flex items-center justify-center" style="background:#eeece1;">
+        <div style="background:white;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);padding:2.5rem;width:100%;max-width:360px;">
+            <h1 class="text-lg font-bold mb-1" style="color:#005c69;">TrovaTrip Lead Pipeline</h1>
+            <p class="text-sm mb-6" style="color:#3c4858;opacity:0.5;">Enter password to continue</p>
+            {% if error %}
+            <p class="text-xs mb-3" style="color:#f65c4e;">Wrong password</p>
+            {% endif %}
+            <form method="POST" action="/login">
+                <input type="password" name="password" autofocus placeholder="Password"
+                       class="w-full rounded-lg px-3 py-2.5 text-sm mb-4 outline-none"
+                       style="border:1px solid rgba(60,72,88,0.15);background:white;">
+                <button type="submit" class="w-full rounded-lg py-2.5 text-sm font-medium text-white"
+                        style="background:#005c69;cursor:pointer;">
+                    Log in
+                </button>
+            </form>
+        </div>
+    </body>
+    </html>
+    '''
+
+    OPEN_PATHS = {'/health', '/login', '/webhook/hubspot'}
+
+    @app.before_request
+    def require_login():
+        if not DASHBOARD_PASSWORD:
+            return  # No password set — open access (local dev)
+        if request.path in OPEN_PATHS or request.path.startswith('/static/'):
+            return
+        if session.get('authenticated'):
+            return
+        if request.method == 'POST' and request.path == '/login':
+            return
+        return redirect('/login')
+
+    @app.route('/login', methods=['GET', 'POST'])
+    def login():
+        if request.method == 'POST':
+            if request.form.get('password') == DASHBOARD_PASSWORD:
+                session['authenticated'] = True
+                return redirect('/')
+            return render_template_string(LOGIN_PAGE, error=True)
+        return render_template_string(LOGIN_PAGE, error=False)
+
+    @app.route('/logout')
+    def logout():
+        session.clear()
+        return redirect('/login')
 
     # Register blueprints
     from app.routes.dashboard import bp as dashboard_bp

@@ -52,6 +52,9 @@ MILLIONVERIFIER_API_KEY = os.getenv('MILLIONVERIFIER_API_KEY')
 # ── Slack notifications ──────────────────────────────────────────────────────
 SLACK_WEBHOOK_URL = os.getenv('SLACK_WEBHOOK_URL')
 
+# ── Auth ─────────────────────────────────────────────────────────────────────
+DASHBOARD_PASSWORD = os.getenv('DASHBOARD_PASSWORD')
+
 # ── BDR Round-Robin — display name → HubSpot owner ID ────────────────────────
 BDR_OWNER_IDS = {
     'Miriam Plascencia':   '83266567',
