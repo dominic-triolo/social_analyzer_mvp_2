@@ -1,0 +1,17 @@
+# Cost configuration — v1.0
+# Per-platform budgets, rates, and guardrail thresholds.
+version: "1.0"
+
+defaults:
+  instagram: { max_budget: 50.00, warning_threshold: 0.80 }
+  patreon:   { max_budget: 20.00, warning_threshold: 0.80 }
+  facebook:  { max_budget: 20.00, warning_threshold: 0.80 }
+
+rates:
+  instagram: { discovery: 0.02, pre_screen: 0.05, analysis: 0.15, scoring: 0.02 }
+  patreon:   { discovery: 0.01, enrichment: 0.05, analysis: 0.10, scoring: 0.02 }
+  facebook:  { discovery: 0.01, enrichment: 0.05, analysis: 0.10, scoring: 0.02 }
+
+guardrails:
+  confirmation_threshold: 10.00   # Show confirm dialog above this
+  absolute_max: 200.00            # Hard cap regardless of user input

@@ -413,6 +413,47 @@ class TestRunsTablePartial:
 
 
 # ---------------------------------------------------------------------------
+# POST /api/cost-estimate
+# ---------------------------------------------------------------------------
+
+class TestCostEstimate:
+    """POST /api/cost-estimate returns estimated cost + budget info."""
+
+    @patch('app.routes.monitor._estimate_total_cost', return_value=5.50)
+    @patch('app.routes.monitor.get_default_budget', return_value=50.00)
+    @patch('app.routes.monitor.get_confirmation_threshold', return_value=10.00)
+    def test_returns_estimate(self, mock_thresh, mock_budget, mock_cost, client):
+        resp = client.post('/api/cost-estimate', json={
+            'platform': 'instagram',
+            'filters': {'max_results': 50},
+        })
+        assert resp.status_code == 200
+        assert resp.json['estimated_cost'] == 5.50
+        assert resp.json['default_budget'] == 50.00
+        assert resp.json['needs_confirmation'] is False
+
+    @patch('app.routes.monitor._estimate_total_cost', return_value=15.00)
+    @patch('app.routes.monitor.get_default_budget', return_value=50.00)
+    @patch('app.routes.monitor.get_confirmation_threshold', return_value=10.00)
+    def test_needs_confirmation_when_above_threshold(self, mock_thresh, mock_budget, mock_cost, client):
+        resp = client.post('/api/cost-estimate', json={
+            'platform': 'instagram',
+            'filters': {'max_results': 200},
+        })
+        assert resp.status_code == 200
+        assert resp.json['needs_confirmation'] is True
+
+    def test_rejects_unsupported_platform(self, client):
+        resp = client.post('/api/cost-estimate', json={'platform': 'tiktok'})
+        assert resp.status_code == 400
+
+    @patch('app.routes.monitor._estimate_total_cost', side_effect=Exception("oops"))
+    def test_returns_500_on_error(self, mock_cost, client):
+        resp = client.post('/api/cost-estimate', json={'platform': 'instagram'})
+        assert resp.status_code == 500
+
+
+# ---------------------------------------------------------------------------
 # GET /api/pipeline-info
 # ---------------------------------------------------------------------------
 

@@ -440,6 +440,23 @@
                     </div>
                 </div>
 
+                <!-- Budget & Cost Estimate -->
+                <div class="mt-5 pt-4" style="border-top:1px solid #f3f4f6;">
+                    <h2 class="section-label mb-2">Budget</h2>
+                    <div class="flex items-center gap-3">
+                        <div class="relative flex-1">
+                            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style="color:#3c4858;opacity:0.5;">$</span>
+                            <input type="number" id="budget-input" step="0.01" min="0"
+                                   class="input-field w-full" style="padding-left:1.5rem;"
+                                   placeholder="Platform default">
+                        </div>
+                        <div id="cost-estimate-badge" class="text-xs whitespace-nowrap" style="color:#3c4858;opacity:0.5;"></div>
+                    </div>
+                    <p class="text-xs mt-1.5" style="color:#3c4858;opacity:0.35;">
+                        Leave blank to use platform default. Pipeline stops if cost exceeds budget.
+                    </p>
+                </div>
+
                 <button type="submit" id="submit-btn" class="btn-primary w-full py-3">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M14.5 14.5L10.5 10.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
                     Launch Discovery Run
@@ -596,6 +613,21 @@ document.getElementById('discovery-form').addEventListener('submit', async funct
         return;
     }
 
+    // Pre-launch cost confirmation (best-effort)
+    try {
+        const estimate = await fetchCostEstimate();
+        if (estimate && estimate.needs_confirmation) {
+            const budgetLabel = filters.max_budget
+                ? '$' + filters.max_budget.toFixed(2)
+                : '$' + estimate.default_budget.toFixed(2) + ' (default)';
+            const ok = await showConfirm(
+                'Estimated cost: $' + estimate.estimated_cost.toFixed(2) + '\nBudget: ' + budgetLabel,
+                {title: 'Confirm launch', confirmLabel: 'Launch'}
+            );
+            if (!ok) return;
+        }
+    } catch(e) { /* don't block launch if estimate fails */ }
+
     const btn = document.getElementById('submit-btn');
     btn.disabled = true;
     btn.innerHTML = 'Launching...';
@@ -700,8 +732,54 @@ function buildFilters() {
         if (minPPM > 0) filters.min_posts_per_month = minPPM;
     }
 
+    // Budget (shared across all platforms)
+    const budgetVal = document.getElementById('budget-input').value.trim();
+    if (budgetVal) filters.max_budget = parseFloat(budgetVal);
+
     return filters;
 }
+
+// ── Cost estimate ────────────────────────────────────────────────────
+let _costTimer;
+async function fetchCostEstimate() {
+    try {
+        const filters = buildFilters();
+        if (!filters) return;
+        const res = await fetch('/api/cost-estimate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({platform: selectedPlatform, filters}),
+        });
+        const data = await res.json();
+        const badge = document.getElementById('cost-estimate-badge');
+        if (data.estimated_cost !== undefined) {
+            badge.textContent = 'Est. ~$' + data.estimated_cost.toFixed(2);
+            badge.style.color = data.needs_confirmation ? '#f59e0b' : '#3c4858';
+            badge.style.opacity = '1';
+        }
+        // Update placeholder with default budget
+        if (data.default_budget) {
+            document.getElementById('budget-input').placeholder = '$' + data.default_budget.toFixed(2) + ' (default)';
+        }
+        return data;
+    } catch(e) { /* best-effort */ return null; }
+}
+
+function debouncedCostEstimate() {
+    clearTimeout(_costTimer);
+    _costTimer = setTimeout(fetchCostEstimate, 800);
+}
+
+// Trigger cost estimate on filter changes + platform switch
+document.querySelectorAll('.input-field').forEach(el => {
+    el.addEventListener('change', debouncedCostEstimate);
+    el.addEventListener('input', debouncedCostEstimate);
+});
+document.querySelectorAll('.platform-card').forEach(btn => {
+    btn.addEventListener('click', () => { if (!btn.disabled) setTimeout(fetchCostEstimate, 200); });
+});
+// Initial fetch
+setTimeout(fetchCostEstimate, 500);
 
 // ── Presets ──────────────────────────────────────────────────────────
 let _presets = [];
