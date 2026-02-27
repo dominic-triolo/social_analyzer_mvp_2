@@ -4,6 +4,7 @@ Benchmarks service — snapshot persistence, baseline computation, deviation det
 Called on pipeline completion to track per-platform performance baselines
 and detect significant deviations from the 30-day rolling average.
 """
+import logging
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import List, Optional
@@ -13,6 +14,8 @@ from sqlalchemy import func
 from app.database import get_session
 from app.models.db_run import DbRun
 from app.models.metric_snapshot import MetricSnapshot
+
+logger = logging.getLogger('services.benchmarks')
 
 
 @dataclass
@@ -35,7 +38,7 @@ def persist_metric_snapshot(run) -> Optional[MetricSnapshot]:
     try:
         session = get_session()
     except Exception as e:
-        print(f"[Benchmarks] Failed to get session: {e}")
+        logger.error("Failed to get session: %s", e)
         return None
     try:
         today = date.today()
@@ -123,7 +126,7 @@ def persist_metric_snapshot(run) -> Optional[MetricSnapshot]:
 
     except Exception as e:
         session.rollback()
-        print(f"[Benchmarks] Failed to persist snapshot: {e}")
+        logger.error("Failed to persist snapshot: %s", e)
         return None
     finally:
         session.close()
@@ -137,7 +140,7 @@ def get_baseline(platform: str, days: int = 30) -> Optional[dict]:
     try:
         session = get_session()
     except Exception as e:
-        print(f"[Benchmarks] Failed to get session: {e}")
+        logger.error("Failed to get session: %s", e)
         return None
     try:
         cutoff = date.today() - timedelta(days=days)
@@ -174,7 +177,7 @@ def get_baseline(platform: str, days: int = 30) -> Optional[dict]:
         }
 
     except Exception as e:
-        print(f"[Benchmarks] Failed to get baseline: {e}")
+        logger.error("Failed to get baseline: %s", e)
         return None
     finally:
         session.close()

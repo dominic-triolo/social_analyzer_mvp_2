@@ -4,6 +4,10 @@ Centralized configuration — all env vars, constants, BDR map.
 import os
 
 
+# ── Logging ──────────────────────────────────────────────────────────────────
+LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
+LOG_FORMAT = os.getenv('LOG_FORMAT', 'text')
+
 # ── Redis ─────────────────────────────────────────────────────────────────────
 REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
 

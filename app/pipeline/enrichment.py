@@ -4,9 +4,12 @@ Pipeline Stage 3: ENRICHMENT — Contact info, social data, media.
 Instagram: Content already fetched in prescreen; this stage does R2 rehosting.
 Patreon/Facebook: Full 11-step enrichment pipeline (social bios, Apollo, email validation).
 """
+import logging
 from typing import Dict, List, Any
 
 from app.pipeline.base import StageAdapter, StageResult
+
+logger = logging.getLogger('pipeline.enrichment')
 
 
 # ── Adapters ──────────────────────────────────────────────────────────────────
@@ -37,7 +40,7 @@ class InstagramEnrichment(StageAdapter):
             enriched.append(profile)
             run.increment_stage_progress('enrichment', 'completed')
 
-        print(f"[IG Enrichment] {len(enriched)}/{len(profiles)} enriched")
+        logger.info("%d/%d enriched", len(enriched), len(profiles))
 
         return StageResult(
             profiles=enriched,
@@ -63,13 +66,14 @@ class PatreonEnrichment(StageAdapter):
         if not profiles:
             return StageResult(profiles=[], processed=0)
 
-        print(f"[Patreon Enrichment] Enriching {len(profiles)} profiles")
+        logger.info("Enriching %d profiles", len(profiles))
         enriched = enrich_profiles_full_pipeline(profiles, run.id, platform='patreon')
 
         return StageResult(
             profiles=enriched,
             processed=len(profiles),
             meta={'enrichment_steps': 11},
+            cost=len(profiles) * 0.05,
         )
 
 
@@ -89,13 +93,14 @@ class FacebookEnrichment(StageAdapter):
         if not profiles:
             return StageResult(profiles=[], processed=0)
 
-        print(f"[FB Enrichment] Enriching {len(profiles)} profiles")
+        logger.info("Enriching %d profiles", len(profiles))
         enriched = enrich_profiles_full_pipeline(profiles, run.id, platform='facebook_groups')
 
         return StageResult(
             profiles=enriched,
             processed=len(profiles),
             meta={'enrichment_steps': 11},
+            cost=len(profiles) * 0.05,
         )
 
 

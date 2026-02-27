@@ -9,12 +9,15 @@ All adapters output: lead_score (float), priority_tier (str), section_scores (di
 """
 import os
 import json
+import logging
 from typing import Dict, List, Any
 
 import yaml
 
 from app.extensions import openai_client as client
 from app.pipeline.base import StageAdapter, StageResult
+
+logger = logging.getLogger('pipeline.scoring')
 
 
 # ── Scoring config (YAML with hardcoded fallback) ────────────────────────────
@@ -82,9 +85,9 @@ def load_scoring_config():
     try:
         with open(config_path, 'r') as f:
             _scoring_config = yaml.safe_load(f)
-        print(f"[Scoring] Config loaded from YAML (version={_scoring_config.get('version', '?')})")
+        logger.info("Config loaded from YAML (version=%s)", _scoring_config.get('version', '?'))
     except Exception as e:
-        print(f"[Scoring] YAML config not found ({e}), using defaults")
+        logger.warning("YAML config not found (%s), using defaults", e)
         _scoring_config = _default_config()
 
     return _scoring_config
@@ -106,9 +109,9 @@ def load_category_examples():
         try:
             with open(examples_path, 'r') as f:
                 CATEGORY_EXAMPLES = json.load(f)
-            print("Category examples loaded")
+            logger.info("Category examples loaded")
         except Exception as e:
-            print(f"Could not load category examples: {e}")
+            logger.warning("Could not load category examples: %s", e)
             CATEGORY_EXAMPLES = {}
     return CATEGORY_EXAMPLES
 
@@ -303,7 +306,7 @@ RESPOND ONLY with JSON:
     )
 
     result = json.loads(response.choices[0].message.content)
-    print(f"Evidence-Based Score Response: {json.dumps(result, indent=2)}")
+    logger.debug("Evidence-based score response: %s", json.dumps(result, indent=2))
 
     niche = result.get('niche_and_audience_identity', 0.0)
     authenticity = result.get('creator_authenticity_and_presence', 0.0)
@@ -484,10 +487,10 @@ class InstagramScoring(StageAdapter):
                     run.tier_distribution[tier] += 1
 
                 run.increment_stage_progress('scoring', 'completed')
-                print(f"[IG Scoring] {profile_url}: {lead_analysis['lead_score']:.3f} ({tier})")
+                logger.info("%s: score=%.3f (%s)", profile_url, lead_analysis['lead_score'], tier)
 
             except Exception as e:
-                print(f"[IG Scoring] Error on {profile_url}: {e}")
+                logger.error("Error on %s: %s", profile_url, e)
                 errors.append(str(e))
                 run.increment_stage_progress('scoring', 'failed')
 
@@ -496,6 +499,7 @@ class InstagramScoring(StageAdapter):
             processed=len(profiles),
             failed=len(errors),
             errors=errors,
+            cost=len(profiles) * 0.02,
         )
 
 
@@ -537,10 +541,10 @@ class PatreonScoring(StageAdapter):
                     run.tier_distribution[tier] += 1
 
                 run.increment_stage_progress('scoring', 'completed')
-                print(f"[Patreon Scoring] {creator_name}: {lead_analysis['lead_score']:.3f} ({tier})")
+                logger.info("%s: score=%.3f (%s)", creator_name, lead_analysis['lead_score'], tier)
 
             except Exception as e:
-                print(f"[Patreon Scoring] Error on {creator_name}: {e}")
+                logger.error("Error on %s: %s", creator_name, e)
                 errors.append(str(e))
                 run.increment_stage_progress('scoring', 'failed')
 
@@ -549,6 +553,7 @@ class PatreonScoring(StageAdapter):
             processed=len(profiles),
             failed=len(errors),
             errors=errors,
+            cost=len(profiles) * 0.02,
         )
 
 
@@ -589,10 +594,10 @@ class FacebookScoring(StageAdapter):
                     run.tier_distribution[tier] += 1
 
                 run.increment_stage_progress('scoring', 'completed')
-                print(f"[FB Scoring] {group_name}: {lead_analysis['lead_score']:.3f} ({tier})")
+                logger.info("%s: score=%.3f (%s)", group_name, lead_analysis['lead_score'], tier)
 
             except Exception as e:
-                print(f"[FB Scoring] Error on {group_name}: {e}")
+                logger.error("Error on %s: %s", group_name, e)
                 errors.append(str(e))
                 run.increment_stage_progress('scoring', 'failed')
 
@@ -601,6 +606,7 @@ class FacebookScoring(StageAdapter):
             processed=len(profiles),
             failed=len(errors),
             errors=errors,
+            cost=len(profiles) * 0.02,
         )
 
 

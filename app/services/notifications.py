@@ -3,10 +3,12 @@ Notifications — Slack webhook integration for pipeline events.
 
 Notification failure never blocks the pipeline.
 """
-import traceback
+import logging
 import requests
 
 from app.config import SLACK_WEBHOOK_URL
+
+logger = logging.getLogger('services.notifications')
 
 
 def notify_run_complete(run):
@@ -53,11 +55,10 @@ def notify_run_complete(run):
             })
 
         requests.post(SLACK_WEBHOOK_URL, json={"blocks": blocks}, timeout=10)
-        print(f"[Slack] Run {run.id[:8]} completion notification sent")
+        logger.info("Run %s completion notification sent", run.id[:8])
 
     except Exception:
-        traceback.print_exc()
-        print(f"[Slack] Failed to send notification for run {run.id[:8]}")
+        logger.error("Failed to send notification for run %s", run.id[:8], exc_info=True)
 
 
 def notify_run_failed(run):
@@ -95,8 +96,7 @@ def notify_run_failed(run):
             })
 
         requests.post(SLACK_WEBHOOK_URL, json={"blocks": blocks}, timeout=10)
-        print(f"[Slack] Run {run.id[:8]} failure notification sent")
+        logger.info("Run %s failure notification sent", run.id[:8])
 
     except Exception:
-        traceback.print_exc()
-        print(f"[Slack] Failed to send failure notification for run {run.id[:8]}")
+        logger.error("Failed to send failure notification for run %s", run.id[:8], exc_info=True)

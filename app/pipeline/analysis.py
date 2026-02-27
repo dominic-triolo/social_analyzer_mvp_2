@@ -8,6 +8,7 @@ Facebook:  Group health metrics + admin profile signals.
 All adapters attach analysis results to profiles for the scoring stage.
 """
 import json
+import logging
 from typing import Dict, List, Any
 
 import requests
@@ -21,6 +22,8 @@ from app.services.openai_client import (
 from app.services.r2 import rehost_media_on_r2, create_thumbnail_grid
 from app.extensions import openai_client as client
 from app.pipeline.base import StageAdapter, StageResult
+
+logger = logging.getLogger('pipeline.analysis')
 
 
 # ── Shared analysis functions ─────────────────────────────────────────────────
@@ -98,7 +101,7 @@ Respond ONLY with JSON:
         "posts_analyzed": len(engagement_data),
     }
 
-    print(f"Thumbnail Evidence: {json.dumps(result, indent=2)}")
+    logger.debug("Thumbnail evidence: %s", json.dumps(result, indent=2))
     return result
 
 
@@ -112,7 +115,7 @@ def analyze_selected_content(
 
     for idx in selected_indices[:3]:
         if idx >= len(filtered_items):
-            print(f"Index {idx} out of range, skipping")
+            logger.warning("Index %d out of range, skipping", idx)
             continue
 
         item = filtered_items[idx]
@@ -135,7 +138,7 @@ def analyze_selected_content(
             media_format = 'IMAGE'
 
         if not media_url:
-            print(f"Item at index {idx}: No media URL, skipping")
+            logger.warning("Item at index %d: No media URL, skipping", idx)
             continue
 
         media_url = media_url.rstrip('.')
@@ -145,10 +148,10 @@ def analyze_selected_content(
                 head_response = requests.head(media_url, timeout=10)
                 content_length = int(head_response.headers.get('content-length', 0))
                 if content_length > 25 * 1024 * 1024:
-                    print(f"Item {idx}: Video too large ({content_length / 1024 / 1024:.1f}MB), skipping")
+                    logger.warning("Item %d: Video too large (%.1fMB), skipping", idx, content_length / 1024 / 1024)
                     continue
             except Exception as e:
-                print(f"Item {idx}: Could not check video size: {e}, attempting anyway")
+                logger.warning("Item %d: Could not check video size: %s, attempting anyway", idx, e)
 
         try:
             rehosted_url = rehost_media_on_r2(media_url, contact_id, media_format)
@@ -158,9 +161,9 @@ def analyze_selected_content(
             analysis['likes_and_views_disabled'] = item.get('likes_and_views_disabled', False)
             analysis['engagement'] = item.get('engagement', {})
             content_analyses.append(analysis)
-            print(f"Item {idx}: Successfully analyzed")
+            logger.debug("Item %d: Successfully analyzed", idx)
         except Exception as e:
-            print(f"Item {idx}: Error analyzing: {e}")
+            logger.error("Item %d: Error analyzing: %s", idx, e)
 
     return content_analyses
 
@@ -184,13 +187,13 @@ def gather_evidence(filtered_items: List[Dict], bio: str, contact_id: str):
             'engagement': item.get('engagement', {}),
         })
 
-    print(f"Gathering evidence from: {len(thumbnail_urls)} thumbnails, {len(captions)} captions")
+    logger.info("Gathering evidence from: %d thumbnails, %d captions", len(thumbnail_urls), len(captions))
 
     bio_evidence = analyze_bio_evidence(bio)
     caption_evidence = analyze_caption_evidence(captions)
     thumbnail_evidence = analyze_thumbnail_evidence(thumbnail_urls, engagement_data, contact_id)
 
-    print("Evidence gathering complete")
+    logger.info("Evidence gathering complete")
     return bio_evidence, caption_evidence, thumbnail_evidence
 
 
@@ -248,10 +251,10 @@ class InstagramAnalysis(StageAdapter):
 
                 analyzed.append(profile)
                 run.increment_stage_progress('analysis', 'completed')
-                print(f"[IG Analysis] Analyzed {profile_url}: {len(content_analyses)} items")
+                logger.info("Analyzed %s: %d items", profile_url, len(content_analyses))
 
             except Exception as e:
-                print(f"[IG Analysis] Error on {profile_url}: {e}")
+                logger.error("Error on %s: %s", profile_url, e)
                 errors.append(f"{profile_url}: {str(e)}")
                 run.increment_stage_progress('analysis', 'failed')
 
@@ -260,6 +263,7 @@ class InstagramAnalysis(StageAdapter):
             processed=len(profiles),
             failed=len(errors),
             errors=errors,
+            cost=len(profiles) * 0.15,
         )
 
 
@@ -364,10 +368,10 @@ Respond ONLY with JSON:
 
                 analyzed.append(profile)
                 run.increment_stage_progress('analysis', 'completed')
-                print(f"[Patreon Analysis] {creator_name}: {analysis_result.get('niche_description', '?')}")
+                logger.info("%s: niche_description=%s", creator_name, analysis_result.get('niche_description', '?'))
 
             except Exception as e:
-                print(f"[Patreon Analysis] Error on {creator_name}: {e}")
+                logger.error("Error on %s: %s", creator_name, e)
                 errors.append(f"{creator_name}: {str(e)}")
                 run.increment_stage_progress('analysis', 'failed')
 
@@ -376,6 +380,7 @@ Respond ONLY with JSON:
             processed=len(profiles),
             failed=len(errors),
             errors=errors,
+            cost=len(profiles) * 0.10,
         )
 
 
@@ -470,10 +475,10 @@ Respond ONLY with JSON:
 
                 analyzed.append(profile)
                 run.increment_stage_progress('analysis', 'completed')
-                print(f"[FB Analysis] {group_name}: {analysis_result.get('niche_description', '?')}")
+                logger.info("%s: niche_description=%s", group_name, analysis_result.get('niche_description', '?'))
 
             except Exception as e:
-                print(f"[FB Analysis] Error on {group_name}: {e}")
+                logger.error("Error on %s: %s", group_name, e)
                 errors.append(f"{group_name}: {str(e)}")
                 run.increment_stage_progress('analysis', 'failed')
 
@@ -482,6 +487,7 @@ Respond ONLY with JSON:
             processed=len(profiles),
             failed=len(errors),
             errors=errors,
+            cost=len(profiles) * 0.10,
         )
 
 

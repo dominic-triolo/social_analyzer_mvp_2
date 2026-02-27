@@ -1,14 +1,17 @@
 """
 OpenAI API helpers — GPT-4o vision, Whisper transcription, with retry logic.
 """
-import os
 import json
+import logging
+import os
 import tempfile
 import time
 import requests
 from typing import Dict, List, Any
 
 from app.extensions import openai_client as client
+
+logger = logging.getLogger('services.openai')
 
 
 def analyze_content_item(media_url: str, media_format: str) -> Dict[str, Any]:
@@ -110,11 +113,11 @@ def transcribe_video_with_whisper(video_url: str, max_retries: int = 3) -> str:
             is_rate_limit = 'rate_limit' in error_str or '429' in error_str or 'rate limit' in error_str
             if is_rate_limit and attempt < max_retries - 1:
                 wait_time = (attempt + 1) * 10
-                print(f"Whisper rate limit hit, waiting {wait_time}s (attempt {attempt + 1}/{max_retries})")
+                logger.warning("Whisper rate limit hit, waiting %ds (attempt %d/%d)", wait_time, attempt + 1, max_retries)
                 time.sleep(wait_time)
             else:
                 if attempt == max_retries - 1:
-                    print(f"Whisper failed after {max_retries} attempts: {e}")
+                    logger.error("Whisper failed after %d attempts: %s", max_retries, e)
                 raise
 
 
@@ -170,7 +173,7 @@ Respond ONLY with JSON:
         response_format={"type": "json_object"},
     )
     result = json.loads(response.choices[0].message.content)
-    print(f"Bio Evidence: {json.dumps(result, indent=2)}")
+    logger.debug("Bio Evidence: %s", json.dumps(result, indent=2))
     return result
 
 
@@ -230,7 +233,7 @@ Respond ONLY with JSON:
         response_format={"type": "json_object"},
     )
     result = json.loads(response.choices[0].message.content)
-    print(f"Caption Evidence: {json.dumps(result, indent=2)}")
+    logger.debug("Caption Evidence: %s", json.dumps(result, indent=2))
     return result
 
 
@@ -285,7 +288,7 @@ Return JSON with these fields:
     result = json.loads(response.choices[0].message.content)
     if 'primary_category' not in result:
         result['primary_category'] = 'unknown'
-    print(f"Creator Profile: {json.dumps(result, indent=2)}")
+    logger.debug("Creator Profile: %s", json.dumps(result, indent=2))
     return result
 
 
@@ -348,8 +351,8 @@ Return ONLY the name(s). No quotes, no explanation."""
         first_names = response.choices[0].message.content.strip().strip('"').strip("'")
         if not first_names or first_names.lower() in ('', 'none', 'unknown', 'n/a', 'not provided', 'there'):
             first_names = _full_name_fallback()
-        print(f"[FIRST_NAME] @{username} → '{first_names}'")
+        logger.debug("@%s -> '%s'", username, first_names)
         return first_names
     except Exception as e:
-        print(f"[FIRST_NAME] Error for @{username}: {e}")
+        logger.error("Error extracting first name for @%s: %s", username, e)
         return _full_name_fallback()

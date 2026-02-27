@@ -6,6 +6,7 @@ Patreon:   NSFW filter + patron count + post count.
 Facebook:  Member count + visibility + posts/month.
 """
 import json
+import logging
 import base64
 from io import BytesIO
 from datetime import datetime, timedelta, timezone
@@ -16,6 +17,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 from app.extensions import openai_client as client
 from app.pipeline.base import StageAdapter, StageResult
+
+logger = logging.getLogger('pipeline.prescreen')
 
 
 # ── Shared helpers (used by IG adapter + enrichment task) ─────────────────────
@@ -54,11 +57,11 @@ def check_post_frequency(content_items: List[Dict[str, Any]]) -> Tuple[bool, str
             if gap > six_weeks:
                 return True, f"Gap of {gap.days} days between posts (>6 weeks)"
 
-        print(f"Post frequency check passed: {len(dates)} posts, most recent {(current_date - most_recent).days} days ago")
+        logger.info("Post frequency check passed: %d posts, most recent %d days ago", len(dates), (current_date - most_recent).days)
         return False, ""
 
     except Exception as e:
-        print(f"Error checking post frequency: {e}")
+        logger.error("Error checking post frequency: %s", e)
         return True, f"Error parsing dates: {str(e)}"
 
 
@@ -132,7 +135,7 @@ def create_profile_snapshot(profile_data: Dict[str, Any], content_items: List[Di
                 draw.rectangle([x, y, x+thumb_size, y+thumb_size], outline='lightgray', width=2, fill='#f0f0f0')
                 draw.text((x + thumb_size//2 - 20, y + thumb_size//2), "No Image", font=font_stats, fill='gray')
         except Exception as e:
-            print(f"Error loading thumbnail {idx}: {e}")
+            logger.error("Error loading thumbnail %d: %s", idx, e)
             draw.rectangle([x, y, x+thumb_size, y+thumb_size], outline='red', width=2, fill='#ffe0e0')
             draw.text((x + thumb_size//2 - 15, y + thumb_size//2), "Error", font=font_stats, fill='red')
 
@@ -150,7 +153,7 @@ def check_for_travel_experience(bio: str, content_items: List[Dict[str, Any]]) -
 
     bio_lower = bio.lower()
     if any(keyword in bio_lower for keyword in travel_keywords):
-        print(f"Travel indicators found in bio: {bio[:100]}...")
+        logger.info("Travel indicators found in bio: %s...", bio[:100])
         return True
 
     for item in content_items[:10]:
@@ -236,7 +239,7 @@ Respond ONLY with JSON:
     )
 
     result = json.loads(response.choices[0].message.content)
-    print(f"Pre-screen result: {result}")
+    logger.debug("Pre-screen result: %s", result)
     return result
 
 
@@ -286,7 +289,7 @@ class InstagramPrescreen(StageAdapter):
                 # Post frequency check
                 should_disqualify, reason = check_post_frequency(filtered_items)
                 if should_disqualify:
-                    print(f"[IG Prescreen] {profile_url}: DISQUALIFIED - {reason}")
+                    logger.info("%s: DISQUALIFIED - %s", profile_url, reason)
                     profile['_prescreen_result'] = 'disqualified'
                     profile['_prescreen_reason'] = reason
                     profile['_prescreen_score'] = 0.15
@@ -305,7 +308,7 @@ class InstagramPrescreen(StageAdapter):
                 screen_result = pre_screen_profile(snapshot, profile_data)
 
                 if screen_result.get('decision') == 'reject':
-                    print(f"[IG Prescreen] {profile_url}: REJECTED - {screen_result.get('reasoning')}")
+                    logger.info("%s: REJECTED - %s", profile_url, screen_result.get('reasoning'))
                     profile['_prescreen_result'] = 'rejected'
                     profile['_prescreen_reason'] = screen_result.get('reasoning', '')
                     profile['_prescreen_score'] = 0.20
@@ -323,7 +326,7 @@ class InstagramPrescreen(StageAdapter):
                 run.increment_stage_progress('pre_screen', 'completed')
 
             except Exception as e:
-                print(f"[IG Prescreen] Error on {profile_url}: {e}")
+                logger.error("Error on %s: %s", profile_url, e)
                 errors.append(f"{profile_url}: {str(e)}")
                 run.increment_stage_progress('pre_screen', 'failed')
 
@@ -333,6 +336,7 @@ class InstagramPrescreen(StageAdapter):
             failed=len(errors),
             skipped=skipped,
             errors=errors,
+            cost=len(profiles) * 0.05,
         )
 
 
@@ -378,7 +382,7 @@ class PatreonPrescreen(StageAdapter):
 
             passed.append(p)
 
-        print(f"[Patreon Prescreen] {len(passed)}/{len(profiles)} passed (skipped {skipped})")
+        logger.info("%d/%d passed (skipped %d)", len(passed), len(profiles), skipped)
 
         return StageResult(
             profiles=passed,
@@ -431,7 +435,7 @@ class FacebookPrescreen(StageAdapter):
 
             passed.append(p)
 
-        print(f"[FB Prescreen] {len(passed)}/{len(profiles)} passed (skipped {skipped})")
+        logger.info("%d/%d passed (skipped %d)", len(passed), len(profiles), skipped)
 
         return StageResult(
             profiles=passed,

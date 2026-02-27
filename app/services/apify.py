@@ -2,6 +2,7 @@
 Apify actor management, social graph building, Apollo enrichment,
 and all platform-agnostic enrichment pipeline logic.
 """
+import logging
 import os
 import re
 import json
@@ -12,6 +13,8 @@ from typing import Dict, List, Any, Optional
 from datetime import datetime
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup
+
+logger = logging.getLogger('services.apify')
 
 from app.config import (
     APIFY_API_TOKEN, APOLLO_API_KEY, MILLIONVERIFIER_API_KEY,
@@ -147,17 +150,17 @@ class ApolloEnrichment:
             )
 
             if resp.status_code == 429:
-                print("[APOLLO] Rate limited — backing off 2s")
+                logger.warning("Rate limited — backing off 2s")
                 time.sleep(2)
                 return None
             if resp.status_code in (401, 403):
-                print(f"[APOLLO] Auth error ({resp.status_code})")
+                logger.error("Auth error (%s)", resp.status_code)
                 return None
             if resp.status_code == 422:
-                print("[APOLLO] Unprocessable (422) — invalid params")
+                logger.warning("Unprocessable (422) — invalid params")
                 return None
             if not resp.ok:
-                print(f"[APOLLO] Error {resp.status_code}")
+                logger.error("Error %s", resp.status_code)
                 return None
 
             person = resp.json().get('person') or {}
@@ -188,7 +191,7 @@ class ApolloEnrichment:
             }
 
         except Exception as e:
-            print(f"[APOLLO] Exception: {e}")
+            logger.error("Exception: %s", e)
             return None
 
 
@@ -236,7 +239,7 @@ class MillionVerifierClient:
                 'role':    bool(data.get('role')),
             }
         except Exception as e:
-            print(f"[MV] Error verifying {email}: {e}")
+            logger.error("Error verifying %s: %s", email, e)
             return {'email': email, 'status': 'unknown', 'quality': 'unknown',
                     'free': False, 'role': False}
 
@@ -265,7 +268,7 @@ class MillionVerifierClient:
                         result = future.result()
                         results[email] = result['status']
                     except Exception as e:
-                        print(f"[MV] Future error for {email}: {e}")
+                        logger.error("Future error for %s: %s", email, e)
                         results[email] = 'unknown'
 
             # 100 ms delay between batches
@@ -401,7 +404,7 @@ class SocialGraphBuilder:
             try:
                 return self._apify_scrape_pages(urls, page_type='aggregator')
             except Exception as e:
-                print(f"[SGB] Apify aggregator scrape failed, falling back: {e}")
+                logger.warning("Apify aggregator scrape failed, falling back: %s", e)
 
         # Direct fallback
         results = {}
@@ -438,7 +441,7 @@ class SocialGraphBuilder:
             try:
                 return self._apify_crawl_websites(start_urls, domain_map, websites)
             except Exception as e:
-                print(f"[SGB] Apify website crawl failed, falling back: {e}")
+                logger.warning("Apify website crawl failed, falling back: %s", e)
 
         # Direct fallback (shorter list — direct HTTP is rate-limited anyway)
         results: Dict[str, Dict] = {}
@@ -633,7 +636,7 @@ async function pageFunction(context) {
         AND profile currently has no email AND no website AND no linkedin_url.
         """
         if not APIFY_API_TOKEN:
-            print("[GOOGLE_BRIDGE] APIFY_API_TOKEN not set — skipping")
+            logger.warning("APIFY_API_TOKEN not set — skipping Google bridge")
             return profiles
 
         # Filter to profiles that actually need it
@@ -646,10 +649,10 @@ async function pageFunction(context) {
         ]
 
         if not needs_bridge:
-            print("[GOOGLE_BRIDGE] No profiles need bridging — skipping")
+            logger.info("No profiles need bridging — skipping")
             return profiles
 
-        print(f"[GOOGLE_BRIDGE] Running for {len(needs_bridge)} profiles")
+        logger.info("Google bridge running for %d profiles", len(needs_bridge))
 
         # Build query list
         queries: List[Dict] = []
@@ -696,7 +699,7 @@ async function pageFunction(context) {
                 raw = list(apify.dataset(run["defaultDatasetId"]).iterate_items())
                 all_results.extend(raw or [])
             except Exception as e:
-                print(f"[GOOGLE_BRIDGE] Apify error (batch {batch_start}): {e}")
+                logger.error("Google bridge Apify error (batch %d): %s", batch_start, e)
 
         if not all_results:
             return profiles
@@ -764,7 +767,7 @@ async function pageFunction(context) {
                     if name:
                         profile['creator_name'] = name
 
-        print(f"[GOOGLE_BRIDGE] Enriched {len(needs_bridge)} profiles")
+        logger.info("Google bridge enriched %d profiles", len(needs_bridge))
         return profiles
 
     # ------------------------------------------------------------------
@@ -795,15 +798,15 @@ async function pageFunction(context) {
         already have an email (YT is cheap + fast and may give a better email).
         """
         if not self.apify_token:
-            print("[YT_ABOUT] APIFY_API_TOKEN not set — skipping")
+            logger.warning("APIFY_API_TOKEN not set — skipping YouTube about")
             return profiles
 
         yt_profiles = [p for p in profiles if p.get('youtube_url')]
         if not yt_profiles:
-            print("[YT_ABOUT] No profiles with youtube_url — skipping")
+            logger.info("No profiles with youtube_url — skipping")
             return profiles
 
-        print(f"[YT_ABOUT] Scraping {len(yt_profiles)} YouTube About pages")
+        logger.info("Scraping %d YouTube About pages", len(yt_profiles))
 
         # Build URL → profile index map
         url_to_idxs: Dict[str, List[int]] = {}
@@ -850,7 +853,7 @@ async function pageFunction(context) {
             run   = apify.actor("apify~cheerio-scraper").call(run_input=run_input, timeout_secs=300)
             items = list(apify.dataset(run["defaultDatasetId"]).iterate_items())
         except Exception as e:
-            print(f"[YT_ABOUT] Apify error: {e}")
+            logger.error("YouTube about Apify error: %s", e)
             return profiles
 
         _LINK_AGG_HOSTS = set(self.LINK_AGGREGATORS)
@@ -906,7 +909,7 @@ async function pageFunction(context) {
                     if name and name.lower() not in ('youtube', ''):
                         p['creator_name'] = name
 
-        print(f"[YT_ABOUT] Completed scraping {len(yt_profiles)} YouTube pages")
+        logger.info("Completed scraping %d YouTube pages", len(yt_profiles))
         return profiles
 
     # ------------------------------------------------------------------
@@ -935,15 +938,15 @@ async function pageFunction(context) {
         linktree_url, instagram_followers.
         """
         if not self.apify_token:
-            print("[IG_BIO] APIFY_API_TOKEN not set — skipping")
+            logger.warning("APIFY_API_TOKEN not set — skipping IG bio")
             return profiles
 
         ig_profiles = [p for p in profiles if p.get('instagram_url')]
         if not ig_profiles:
-            print("[IG_BIO] No profiles with instagram_url — skipping")
+            logger.info("No profiles with instagram_url — skipping")
             return profiles
 
-        print(f"[IG_BIO] Scraping {len(ig_profiles)} Instagram bios")
+        logger.info("Scraping %d Instagram bios", len(ig_profiles))
 
         # Extract handles; build handle → profile indices map
         handle_to_idxs: Dict[str, List[int]] = {}
@@ -971,7 +974,7 @@ async function pageFunction(context) {
             )
             items = list(apify.dataset(run["defaultDatasetId"]).iterate_items())
         except Exception as e:
-            print(f"[IG_BIO] Apify error: {e}")
+            logger.error("IG bio Apify error: %s", e)
             return profiles
 
         for item in items:
@@ -1024,7 +1027,7 @@ async function pageFunction(context) {
                             if not p.get('personal_website'):
                                 p['personal_website'] = ext_url.split('?')[0]
 
-        print(f"[IG_BIO] Completed scraping {len(ig_profiles)} Instagram profiles")
+        logger.info("Completed scraping %d Instagram profiles", len(ig_profiles))
         return profiles
 
     # ------------------------------------------------------------------
@@ -1054,15 +1057,15 @@ async function pageFunction(context) {
         linkedin_url, linktree_url, twitter_followers.
         """
         if not self.apify_token:
-            print("[TW_BIO] APIFY_API_TOKEN not set — skipping")
+            logger.warning("APIFY_API_TOKEN not set — skipping Twitter bio")
             return profiles
 
         tw_profiles = [p for p in profiles if p.get('twitter_url')]
         if not tw_profiles:
-            print("[TW_BIO] No profiles with twitter_url — skipping")
+            logger.info("No profiles with twitter_url — skipping")
             return profiles
 
-        print(f"[TW_BIO] Scraping {len(tw_profiles)} Twitter bios")
+        logger.info("Scraping %d Twitter bios", len(tw_profiles))
 
         handle_to_idxs: Dict[str, List[int]] = {}
         for i, p in enumerate(profiles):
@@ -1088,7 +1091,7 @@ async function pageFunction(context) {
             )
             items = list(apify.dataset(run["defaultDatasetId"]).iterate_items())
         except Exception as e:
-            print(f"[TW_BIO] Apify error: {e}")
+            logger.error("Twitter bio Apify error: %s", e)
             return profiles
 
         for item in items:
@@ -1165,7 +1168,7 @@ async function pageFunction(context) {
                             if not p.get('personal_website'):
                                 p['personal_website'] = ext_url.split('?')[0]
 
-        print(f"[TW_BIO] Completed scraping {len(tw_profiles)} Twitter profiles")
+        logger.info("Completed scraping %d Twitter profiles", len(tw_profiles))
         return profiles
 
     # ------------------------------------------------------------------
@@ -1188,15 +1191,15 @@ async function pageFunction(context) {
         Updates profiles in-place with: email, creator_name, personal_website.
         """
         if not self.apify_token:
-            print("[RSS] APIFY_API_TOKEN not set — skipping")
+            logger.warning("APIFY_API_TOKEN not set — skipping RSS")
             return profiles
 
         rss_profiles = [p for p in profiles if p.get('rss_url')]
         if not rss_profiles:
-            print("[RSS] No profiles with rss_url — skipping")
+            logger.info("No profiles with rss_url — skipping")
             return profiles
 
-        print(f"[RSS] Parsing {len(rss_profiles)} RSS feeds")
+        logger.info("Parsing %d RSS feeds", len(rss_profiles))
 
         url_to_idxs: Dict[str, List[int]] = {}
         rss_urls: List[str] = []
@@ -1242,7 +1245,7 @@ async function pageFunction(context) {
             run   = apify.actor("apify~cheerio-scraper").call(run_input=run_input, timeout_secs=180)
             items = list(apify.dataset(run["defaultDatasetId"]).iterate_items())
         except Exception as e:
-            print(f"[RSS] Apify error: {e}")
+            logger.error("RSS Apify error: %s", e)
             return profiles
 
         for item in items:
@@ -1280,7 +1283,7 @@ async function pageFunction(context) {
                         if not p.get('personal_website'):
                             p['personal_website'] = channel_link.split('?')[0]
 
-        print(f"[RSS] Completed parsing {len(rss_profiles)} RSS feeds")
+        logger.info("Completed parsing %d RSS feeds", len(rss_profiles))
         return profiles
 
     # ------------------------------------------------------------------
@@ -1302,7 +1305,7 @@ async function pageFunction(context) {
         google_bridge_enrich.
         """
         if not self.apify_token:
-            print("[CONTACT_SEARCH] APIFY_API_TOKEN not set — skipping")
+            logger.warning("APIFY_API_TOKEN not set — skipping contact search")
             return profiles
 
         needs_search = [
@@ -1313,10 +1316,10 @@ async function pageFunction(context) {
         ]
 
         if not needs_search:
-            print("[CONTACT_SEARCH] No profiles need contact search — skipping")
+            logger.info("No profiles need contact search — skipping")
             return profiles
 
-        print(f"[CONTACT_SEARCH] Running for {len(needs_search)} profiles")
+        logger.info("Contact search running for %d profiles", len(needs_search))
 
         queries: List[Dict] = []
         for p in needs_search:
@@ -1363,7 +1366,7 @@ async function pageFunction(context) {
                 raw = list(apify.dataset(run["defaultDatasetId"]).iterate_items())
                 all_results.extend(raw or [])
             except Exception as e:
-                print(f"[CONTACT_SEARCH] Apify error (batch {batch_start}): {e}")
+                logger.error("Contact search Apify error (batch %d): %s", batch_start, e)
 
         if not all_results:
             return profiles
@@ -1415,7 +1418,7 @@ async function pageFunction(context) {
                     if name:
                         profile['creator_name'] = name
 
-        print(f"[CONTACT_SEARCH] Enriched {len(needs_search)} profiles")
+        logger.info("Contact search enriched %d profiles", len(needs_search))
         return profiles
 
     # ------------------------------------------------------------------
@@ -1449,7 +1452,7 @@ async function pageFunction(context) {
 
             result['emails'] = list(set(result['emails']))
         except Exception as e:
-            print(f"[SGB] Direct scrape error {url}: {e}")
+            logger.error("Direct scrape error %s: %s", url, e)
         return result
 
     def _direct_scrape_aggregator(self, url: str) -> Dict:
@@ -1476,7 +1479,7 @@ async function pageFunction(context) {
                             result['personal_website'] = href
 
         except Exception as e:
-            print(f"[SGB] Direct aggregator scrape error {url}: {e}")
+            logger.error("Direct aggregator scrape error %s: %s", url, e)
         return result
 
     # ------------------------------------------------------------------
@@ -1713,7 +1716,7 @@ def enrich_with_leads_finder(profiles: List[Dict], job_id: str) -> List[Dict]:
     Matches results back to profiles by domain.
     """
     if not APIFY_API_TOKEN:
-        print("[LEADS_FINDER] APIFY_API_TOKEN not set — skipping")
+        logger.warning("APIFY_API_TOKEN not set — skipping leads finder")
         return profiles
 
     apollo = ApolloEnrichment('')  # static methods only
@@ -1732,10 +1735,10 @@ def enrich_with_leads_finder(profiles: List[Dict], job_id: str) -> List[Dict]:
 
     domains = list(domain_to_profile_idxs.keys())
     if not domains:
-        print("[LEADS_FINDER] No enrichable domains — skipping")
+        logger.info("No enrichable domains — skipping leads finder")
         return profiles
 
-    print(f"[LEADS_FINDER] Looking up {len(domains)} domains...")
+    logger.info("Leads finder looking up %d domains", len(domains))
 
     try:
         from apify_client import ApifyClient
@@ -1750,7 +1753,7 @@ def enrich_with_leads_finder(profiles: List[Dict], job_id: str) -> List[Dict]:
             run_input=run_input, timeout_secs=120
         )
         items = list(apify.dataset(run["defaultDatasetId"]).iterate_items())
-        print(f"[LEADS_FINDER] Got {len(items)} results")
+        logger.info("Leads finder got %d results", len(items))
 
         # Index results by domain
         best_by_domain: Dict[str, Dict] = {}
@@ -1779,10 +1782,10 @@ def enrich_with_leads_finder(profiles: List[Dict], job_id: str) -> List[Dict]:
                     p['creator_name'] = f"{match['first_name']} {match['last_name']}"
                 matched += 1
 
-        print(f"[LEADS_FINDER] Matched emails for {matched} profiles")
+        logger.info("Leads finder matched emails for %d profiles", matched)
 
     except Exception as e:
-        print(f"[LEADS_FINDER] Error: {e}")
+        logger.error("Leads finder error: %s", e)
         import traceback
         traceback.print_exc()
 
@@ -1830,7 +1833,7 @@ def enrich_profiles_full_pipeline(profiles: List[Dict], job_id: str,
 
     from concurrent.futures import ThreadPoolExecutor, as_completed as futures_as_completed
 
-    print(f"[ENRICH] Starting full pipeline for {len(profiles)} {platform} profiles")
+    logger.info("Starting full enrichment pipeline for %d %s profiles", len(profiles), platform)
 
     sgb    = SocialGraphBuilder(apify_token=APIFY_API_TOKEN)
     apollo = ApolloEnrichment(APOLLO_API_KEY) if APOLLO_API_KEY else None
@@ -1847,7 +1850,7 @@ def enrich_profiles_full_pipeline(profiles: List[Dict], job_id: str,
     # ------------------------------------------------------------------ #
     # GROUP 1 (parallel): Google Bridge | RSS | Link Agg Pass 1          #
     # ------------------------------------------------------------------ #
-    print("[ENRICH] Group 1 (parallel): Google Bridge | RSS | Link Agg Pass 1")
+    logger.info("Group 1 (parallel): Google Bridge | RSS | Link Agg Pass 1")
 
     def _g1_google_bridge() -> str:
         if platform in ('facebook_group', 'meetup'):
@@ -1869,7 +1872,7 @@ def enrich_profiles_full_pipeline(profiles: List[Dict], job_id: str,
                     agg_urls.append(val)
                     local_map.setdefault(val, []).append(i)
         if agg_urls:
-            print(f"[ENRICH]   Link Agg P1: {len(set(agg_urls))} URLs")
+            logger.info("Link Agg P1: %d URLs", len(set(agg_urls)))
             results = sgb.scrape_link_aggregators_batch(list(set(agg_urls)))
             for url, data in results.items():
                 for i in local_map.get(url, []):
@@ -1895,14 +1898,14 @@ def enrich_profiles_full_pipeline(profiles: List[Dict], job_id: str,
             label = g1_tasks[fut]
             try:
                 fut.result()
-                print(f"[ENRICH]   {label} done")
+                logger.info("%s done", label)
             except Exception as e:
-                print(f"[ENRICH]   {label} error: {e}")
+                logger.error("%s error: %s", label, e)
 
     # ------------------------------------------------------------------ #
     # GROUP 2 (parallel): YouTube | Instagram | Twitter bios             #
     # ------------------------------------------------------------------ #
-    print("[ENRICH] Group 2 (parallel): YouTube About Pages | Instagram | Twitter bios")
+    logger.info("Group 2 (parallel): YouTube About Pages | Instagram | Twitter bios")
 
     def _g2_youtube() -> str:
         sgb.scrape_youtube_about_pages_batch(profiles)
@@ -1926,16 +1929,16 @@ def enrich_profiles_full_pipeline(profiles: List[Dict], job_id: str,
             label = g2_tasks[fut]
             try:
                 fut.result()
-                print(f"[ENRICH]   {label} done")
+                logger.info("%s done", label)
             except Exception as e:
-                print(f"[ENRICH]   {label} error: {e}")
+                logger.error("%s error: %s", label, e)
 
     # ------------------------------------------------------------------ #
     # Link Aggregators Pass 2                                             #
     # Scrape NEW aggregator URLs surfaced during Group 2.                #
     # Only for profiles that still have no email.                        #
     # ------------------------------------------------------------------ #
-    print("[ENRICH] Link Aggregators Pass 2")
+    logger.info("Link Aggregators Pass 2")
 
     agg_urls_p2: List[str] = []
     agg_url_to_idx_p2: Dict[str, List[int]] = {}
@@ -1948,7 +1951,7 @@ def enrich_profiles_full_pipeline(profiles: List[Dict], job_id: str,
             agg_url_to_idx_p2.setdefault(lt, []).append(i)
 
     if agg_urls_p2:
-        print(f"[ENRICH]   Pass 2: {len(set(agg_urls_p2))} new aggregator URLs")
+        logger.info("Pass 2: %d new aggregator URLs", len(set(agg_urls_p2)))
         agg_results_p2 = sgb.scrape_link_aggregators_batch(list(set(agg_urls_p2)))
         for url, data in agg_results_p2.items():
             for i in agg_url_to_idx_p2.get(url, []):
@@ -1964,13 +1967,13 @@ def enrich_profiles_full_pipeline(profiles: List[Dict], job_id: str,
     # ------------------------------------------------------------------ #
     # Google Contact Search  (last resort)                               #
     # ------------------------------------------------------------------ #
-    print("[ENRICH] Google Contact Search")
+    logger.info("Google Contact Search")
     profiles = sgb.google_contact_search(profiles, job_id)
 
     # ------------------------------------------------------------------ #
     # Website Crawl  (26 subpages + glob patterns + email priority)      #
     # ------------------------------------------------------------------ #
-    print("[ENRICH] Website Crawl")
+    logger.info("Website Crawl")
 
     websites_to_crawl: List[str] = []
     website_to_idx: Dict[str, List[int]] = {}
@@ -1983,7 +1986,7 @@ def enrich_profiles_full_pipeline(profiles: List[Dict], job_id: str,
             website_to_idx.setdefault(site, []).append(i)
 
     if websites_to_crawl:
-        print(f"[ENRICH]   Crawling {len(set(websites_to_crawl))} websites")
+        logger.info("Crawling %d websites", len(set(websites_to_crawl)))
         website_results = sgb.crawl_websites_batch(list(set(websites_to_crawl)))
         for domain, data in website_results.items():
             for site, idxs in website_to_idx.items():
@@ -1999,7 +2002,7 @@ def enrich_profiles_full_pipeline(profiles: List[Dict], job_id: str,
     # ------------------------------------------------------------------ #
     # Apollo.io                                                           #
     # ------------------------------------------------------------------ #
-    print("[ENRICH] Apollo.io")
+    logger.info("Apollo.io enrichment")
 
     if apollo:
         apollo_hits = 0
@@ -2038,7 +2041,7 @@ def enrich_profiles_full_pipeline(profiles: List[Dict], job_id: str,
                 if result.get('email'):
                     p['email'] = result['email']
                     apollo_hits += 1
-                    print(f"[APOLLO] Found email for {name or domain}")
+                    logger.info("Apollo found email for %s", name or domain)
                 if result.get('first_name') and not p.get('creator_name'):
                     p['creator_name'] = (
                         f"{result['first_name']} {result.get('last_name', '')}".strip()
@@ -2052,20 +2055,20 @@ def enrich_profiles_full_pipeline(profiles: List[Dict], job_id: str,
 
             time.sleep(0.3)
 
-        print(f"[ENRICH]   Apollo found {apollo_hits} emails")
+        logger.info("Apollo found %d emails", apollo_hits)
     else:
-        print("[ENRICH]   Apollo skipped (no API key)")
+        logger.info("Apollo skipped (no API key)")
 
     # ------------------------------------------------------------------ #
     # Leads Finder                                                        #
     # ------------------------------------------------------------------ #
-    print("[ENRICH] Leads Finder")
+    logger.info("Leads Finder")
     profiles = enrich_with_leads_finder(profiles, job_id)
 
     # ------------------------------------------------------------------ #
     # MillionVerifier  (validate all discovered emails)                   #
     # ------------------------------------------------------------------ #
-    print("[ENRICH] MillionVerifier email validation")
+    logger.info("MillionVerifier email validation")
 
     if mv:
         email_items = [
@@ -2074,19 +2077,19 @@ def enrich_profiles_full_pipeline(profiles: List[Dict], job_id: str,
             if p.get('email')
         ]
         if email_items:
-            print(f"[ENRICH]   Validating {len(email_items)} emails")
+            logger.info("Validating %d emails", len(email_items))
             validation_results = mv.verify_batch(email_items)
             for item in email_items:
                 status = validation_results.get(item['email'], 'unknown')
                 profiles[item['idx']]['email_validation_status'] = status
             valid_count = sum(1 for s in validation_results.values() if s == 'valid')
-            print(f"[ENRICH]   {valid_count}/{len(email_items)} emails valid")
+            logger.info("%d/%d emails valid", valid_count, len(email_items))
         else:
-            print("[ENRICH]   No emails to validate")
+            logger.info("No emails to validate")
     else:
-        print("[ENRICH]   MillionVerifier skipped (no API key)")
+        logger.info("MillionVerifier skipped (no API key)")
 
-    print(f"[ENRICH] Pipeline complete for {len(profiles)} profiles")
+    logger.info("Enrichment pipeline complete for %d profiles", len(profiles))
     return profiles
 
 
@@ -2137,10 +2140,10 @@ def standardize_patreon_profiles(profiles: List[Dict]) -> List[Dict]:
             standardized.append(props)
 
         except Exception as e:
-            print(f"[STANDARDIZE] Patreon profile #{i+1} error: {e}")
+            logger.error("Patreon profile #%d error: %s", i+1, e)
             continue
 
-    print(f"[STANDARDIZE] {len(standardized)} Patreon profiles ready for HubSpot")
+    logger.info("%d Patreon profiles ready for HubSpot", len(standardized))
     return standardized
 
 
@@ -2187,10 +2190,10 @@ def standardize_facebook_profiles(profiles: List[Dict]) -> List[Dict]:
             standardized.append(props)
 
         except Exception as e:
-            print(f"[STANDARDIZE] Facebook profile #{i+1} error: {e}")
+            logger.error("Facebook profile #%d error: %s", i+1, e)
             continue
 
-    print(f"[STANDARDIZE] {len(standardized)} Facebook profiles ready for HubSpot")
+    logger.info("%d Facebook profiles ready for HubSpot", len(standardized))
     return standardized
 
 
@@ -2214,13 +2217,13 @@ def assign_bdr_round_robin(profiles: List[Dict], bdr_names: List[str]) -> List[D
     """
     owner_ids = [BDR_OWNER_IDS[n] for n in bdr_names if n in BDR_OWNER_IDS]
     if not owner_ids:
-        print("[BDR] No valid BDR names supplied – skipping round-robin assignment")
+        logger.warning("No valid BDR names supplied – skipping round-robin assignment")
         return profiles
     for i, profile in enumerate(profiles):
         profile['bdr_'] = owner_ids[i % len(owner_ids)]
         # Mark for BDR review — cleared later for auto_enroll contacts by send_to_hubspot
         profile['lead_list_fit'] = 'Not_reviewed'
-    print(f"[BDR] Assigned {len(owner_ids)} BDR(s) round-robin across {len(profiles)} profiles")
+    logger.info("Assigned %d BDR(s) round-robin across %d profiles", len(owner_ids), len(profiles))
     return profiles
 
 
@@ -2240,6 +2243,6 @@ def update_discovery_job_status(job_id, status, **kwargs):
         job_data.update(kwargs)
 
         redis_client.setex(job_key, 86400, json.dumps(job_data))
-        print(f"Job {job_id} → {status}")
+        logger.info("Job %s → %s", job_id, status)
     except Exception as e:
-        print(f"Failed to update job status: {e}")
+        logger.error("Failed to update job status: %s", e)

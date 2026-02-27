@@ -1,8 +1,9 @@
 """
 HubSpot webhook + batch import.
 """
-import os
 import json
+import logging
+import os
 import time
 import requests
 from typing import Dict, List
@@ -10,6 +11,8 @@ from datetime import datetime
 
 from app.config import HUBSPOT_WEBHOOK_URL, HUBSPOT_API_KEY, HUBSPOT_API_URL
 from app.extensions import redis_client as r
+
+logger = logging.getLogger('services.hubspot')
 
 
 def send_to_hubspot(
@@ -87,7 +90,7 @@ def send_to_hubspot(
         if result_type == 'enriched' and lead_analysis:
             r.hincrby('trovastats:priority_tiers', lead_analysis.get('priority_tier', 'unknown'), 1)
     except Exception as e:
-        print(f"Error tracking stats in Redis: {e}")
+        logger.error("Error tracking stats in Redis: %s", e)
 
     payload = {
         "contact_id": contact_id,
@@ -126,13 +129,13 @@ def send_to_hubspot(
     if priority_tier == "auto_enroll":
         payload["bdr_"] = ""
 
-    print(f"Sending to HubSpot: {HUBSPOT_WEBHOOK_URL}")
-    print(f"Enrichment Status: {enrichment_status}")
+    logger.info("Sending to HubSpot: %s", HUBSPOT_WEBHOOK_URL)
+    logger.info("Enrichment status: %s", enrichment_status)
     if error_details:
-        print(f"Error Details: {'; '.join(error_details)}")
+        logger.warning("Error details: %s", '; '.join(error_details))
 
     response = requests.post(HUBSPOT_WEBHOOK_URL, json=payload, timeout=10)
-    print(f"HubSpot response: {response.status_code}")
+    logger.info("HubSpot response: %d", response.status_code)
 
 
 def import_profiles_to_hubspot(profiles: List[Dict], job_id: str) -> Dict:
@@ -152,7 +155,7 @@ def import_profiles_to_hubspot(profiles: List[Dict], job_id: str) -> Dict:
     skipped_count = 0
     total_batches = (len(contacts) + 99) // 100
 
-    print(f"[HUBSPOT] Importing {len(contacts)} contacts in {total_batches} batches")
+    logger.info("Importing %d contacts in %d batches", len(contacts), total_batches)
 
     for i in range(0, len(contacts), 100):
         batch = contacts[i:i + 100]
@@ -171,7 +174,7 @@ def import_profiles_to_hubspot(profiles: List[Dict], job_id: str) -> Dict:
 
             if resp.status_code == 201:
                 created_count += len(batch)
-                print(f"[HUBSPOT] Batch {batch_num}/{total_batches}: {len(batch)} created")
+                logger.info("Batch %d/%d: %d created", batch_num, total_batches, len(batch))
             elif resp.status_code == 207:
                 result = resp.json()
                 batch_created = len(result.get('results', []))
@@ -179,19 +182,19 @@ def import_profiles_to_hubspot(profiles: List[Dict], job_id: str) -> Dict:
                 batch_skipped = len(batch_errors)
                 created_count += batch_created
                 skipped_count += batch_skipped
-                print(f"[HUBSPOT] Batch {batch_num}/{total_batches}: {batch_created} created, {batch_skipped} duplicates/errors")
+                logger.warning("Batch %d/%d: %d created, %d duplicates/errors", batch_num, total_batches, batch_created, batch_skipped)
                 for err in batch_errors[:3]:
-                    print(f"  Error: {err.get('message', 'Unknown')}")
+                    logger.warning("  Error: %s", err.get('message', 'Unknown'))
             else:
-                print(f"[HUBSPOT] Batch {batch_num} error: {resp.status_code} — {resp.text[:200]}")
+                logger.error("Batch %d error: %d — %s", batch_num, resp.status_code, resp.text[:200])
                 skipped_count += len(batch)
 
         except Exception as e:
-            print(f"[HUBSPOT] Exception on batch {batch_num}: {e}")
+            logger.error("Exception on batch %d: %s", batch_num, e)
             skipped_count += len(batch)
 
         if i + 100 < len(contacts):
             time.sleep(0.5)
 
-    print(f"[HUBSPOT] Import complete: {created_count} created, {skipped_count} skipped")
+    logger.info("Import complete: %d created, %d skipped", created_count, skipped_count)
     return {'created': created_count, 'skipped': skipped_count}

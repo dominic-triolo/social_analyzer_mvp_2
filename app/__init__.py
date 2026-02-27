@@ -33,11 +33,15 @@ def _time_since(iso_str):
 
 def create_app():
     """Create and configure the Flask application."""
+    from app.logging_config import configure_logging
+
     app = Flask(
         __name__,
         template_folder=os.path.join(os.path.dirname(os.path.dirname(__file__)), 'templates'),
         static_folder=os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static'),
     )
+
+    configure_logging(app)
 
     app.jinja_env.filters['time_since'] = _time_since
 

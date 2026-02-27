@@ -8,6 +8,7 @@ Each stage looks up the platform's adapter from the registry, calls adapter.run(
 and feeds the result to the next stage. Progress is tracked on the Run object.
 """
 import json
+import logging
 import traceback
 from typing import Dict, Type
 
@@ -21,6 +22,8 @@ from app.services.db import (
 from app.services.notifications import notify_run_complete, notify_run_failed
 from app.services.benchmarks import persist_metric_snapshot, get_baseline, compute_deviations
 from app.pipeline.cost_config import get_default_budget, get_warning_threshold
+
+logger = logging.getLogger('pipeline.manager')
 
 # Import adapter registries from each stage module
 from app.pipeline import discovery as discovery_mod
@@ -51,7 +54,7 @@ import os
 if os.getenv('MOCK_PIPELINE'):
     from app.pipeline.mock_adapters import MOCK_STAGE_REGISTRY
     STAGE_REGISTRY = MOCK_STAGE_REGISTRY
-    print("[Pipeline] ⚠ MOCK_PIPELINE active — using fake adapters")
+    logger.info("MOCK_PIPELINE active — using fake adapters")
 else:
     STAGE_REGISTRY: Dict[str, Dict[str, Type[StageAdapter]]] = {
         'discovery':   discovery_mod.ADAPTERS,
@@ -131,10 +134,10 @@ def run_pipeline(run_id: str, retry_from_stage: str = None):
     """
     run = Run.load(run_id)
     if not run:
-        print(f"[Pipeline] Run {run_id} not found")
+        logger.error("Run %s not found", run_id)
         return
 
-    print(f"[Pipeline] Starting run {run_id} for platform={run.platform}")
+    logger.info("Starting run %s for platform=%s", run_id, run.platform)
     profiles = []
 
     # Handle retry from checkpoint
@@ -147,9 +150,9 @@ def run_pipeline(run_id: str, retry_from_stage: str = None):
             checkpoint = (run.stage_outputs or {}).get(prev_stage)
             if checkpoint:
                 profiles = checkpoint
-                print(f"[Pipeline] Retrying from '{retry_from_stage}', loaded {len(profiles)} profiles from '{prev_stage}' checkpoint")
+                logger.info("Retrying from '%s', loaded %d profiles from '%s' checkpoint", retry_from_stage, len(profiles), prev_stage)
             else:
-                print(f"[Pipeline] No checkpoint for '{prev_stage}', starting from scratch")
+                logger.info("No checkpoint for '%s', starting from scratch", prev_stage)
                 skipping = False
 
     for stage_name in PIPELINE_STAGES:
@@ -162,14 +165,14 @@ def run_pipeline(run_id: str, retry_from_stage: str = None):
 
         adapters = STAGE_REGISTRY.get(stage_name)
         if not adapters:
-            print(f"[Pipeline] No registry for stage '{stage_name}', skipping")
+            logger.warning("No registry for stage '%s', skipping", stage_name)
             continue
 
         # Get adapter for this platform + stage
         try:
             adapter = get_adapter(adapters, run.platform)
         except ValueError as e:
-            print(f"[Pipeline] {e} — skipping stage '{stage_name}'")
+            logger.warning("%s — skipping stage '%s'", e, stage_name)
             continue
 
         # Cost guardrail: check max_budget before each stage
@@ -181,7 +184,7 @@ def run_pipeline(run_id: str, retry_from_stage: str = None):
             projected = (run.actual_cost or 0) + est
             # Hard stop: projected cost exceeds budget
             if projected > max_budget:
-                print(f"[Pipeline] Budget exceeded: actual={run.actual_cost:.2f} + est={est:.2f} > max={max_budget:.2f}")
+                logger.warning("Budget exceeded: actual=%.2f + est=%.2f > max=%.2f", run.actual_cost, est, max_budget)
                 run.fail(f"Budget limit ${max_budget:.2f} would be exceeded (spent ${run.actual_cost:.2f}, next stage ~${est:.2f})")
                 run.summary = _generate_run_summary(run, failed=True)
                 run.save()
@@ -193,7 +196,7 @@ def run_pipeline(run_id: str, retry_from_stage: str = None):
             if projected > max_budget * warning_ratio:
                 pct = int(warning_ratio * 100)
                 msg = f"Cost at {pct}%+ of budget (${projected:.2f} / ${max_budget:.2f})"
-                print(f"[Pipeline] Warning: {msg}")
+                logger.warning("%s", msg)
                 run.add_error(stage_name, msg)
 
         # Update run status
@@ -212,7 +215,7 @@ def run_pipeline(run_id: str, retry_from_stage: str = None):
 
         # Execute
         try:
-            print(f"[Pipeline] Stage '{stage_name}' — {adapter.__class__.__name__} — {len(profiles)} profiles in")
+            logger.info("Stage '%s' — %s — %d profiles in", stage_name, adapter.__class__.__name__, len(profiles))
             result: StageResult = adapter.run(profiles, run)
 
             # Update progress
@@ -264,14 +267,14 @@ def run_pipeline(run_id: str, retry_from_stage: str = None):
                 run.stage_outputs[stage_name] = checkpoint_profiles
                 run.save()
             except Exception:
-                print(f"[Pipeline] Failed to checkpoint stage '{stage_name}' — continuing")
+                logger.warning("Failed to checkpoint stage '%s' — continuing", stage_name)
 
-            print(f"[Pipeline] Stage '{stage_name}' done — {len(profiles)} profiles out "
-                  f"(processed={result.processed}, failed={result.failed}, skipped={result.skipped})")
+            logger.info("Stage '%s' done — %d profiles out (processed=%d, failed=%d, skipped=%d)",
+                        stage_name, len(profiles), result.processed, result.failed, result.skipped)
 
             # Early exit if no profiles to process
             if not profiles and stage_name != 'crm_sync':
-                print(f"[Pipeline] No profiles after '{stage_name}' — stopping early")
+                logger.warning("No profiles after '%s' — stopping early", stage_name)
                 run.summary = _generate_run_summary(run)
                 run.complete()
                 persist_run(run)
@@ -281,7 +284,7 @@ def run_pipeline(run_id: str, retry_from_stage: str = None):
                 return
 
         except Exception as e:
-            print(f"[Pipeline] Stage '{stage_name}' FAILED: {e}")
+            logger.error("Stage '%s' FAILED: %s", stage_name, e)
             traceback.print_exc()
             run.fail(f"Stage '{stage_name}' failed: {str(e)}")
             run.summary = _generate_run_summary(run, failed=True)
@@ -297,8 +300,8 @@ def run_pipeline(run_id: str, retry_from_stage: str = None):
     persist_lead_results(run, profiles)
     persist_metric_snapshot(run)
     notify_run_complete(run)
-    print(f"[Pipeline] Run {run_id} completed — "
-          f"found={run.profiles_found}, scored={run.profiles_scored}, synced={run.contacts_synced}")
+    logger.info("Run %s completed — found=%s, scored=%s, synced=%s",
+                run_id, run.profiles_found, run.profiles_scored, run.contacts_synced)
 
 
 # ── Run summary generator ────────────────────────────────────────────────────

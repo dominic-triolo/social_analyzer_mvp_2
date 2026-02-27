@@ -5,7 +5,7 @@ All writes are wrapped in try/except so the pipeline never blocks on DB errors.
 """
 import hashlib
 import json
-import traceback
+import logging
 from datetime import datetime
 
 from app.database import get_session
@@ -13,6 +13,8 @@ from app.models.db_run import DbRun
 from app.models.lead import Lead
 from app.models.lead_run import LeadRun
 from app.models.filter_history import FilterHistory
+
+logger = logging.getLogger('services.db')
 
 
 def persist_run(run):
@@ -58,8 +60,7 @@ def persist_run(run):
         session.commit()
     except Exception:
         session.rollback()
-        traceback.print_exc()
-        print(f"[DB] Failed to persist run {run.id}")
+        logger.error("Failed to persist run %s", run.id, exc_info=True)
     finally:
         session.close()
 
@@ -140,8 +141,7 @@ def persist_lead_results(run, profiles):
         session.commit()
     except Exception:
         session.rollback()
-        traceback.print_exc()
-        print(f"[DB] Failed to persist lead results for run {run.id}")
+        logger.error("Failed to persist lead results for run %s", run.id, exc_info=True)
     finally:
         session.close()
 
@@ -176,13 +176,12 @@ def dedup_profiles(profiles, platform):
                 else:
                     new_profiles.append(profile)
 
-            print(f"[Dedup] {len(profiles)} profiles in, {len(new_profiles)} new, {skipped} already in DB")
+            logger.info("%d profiles in, %d new, %d already in DB", len(profiles), len(new_profiles), skipped)
             return new_profiles, skipped
         finally:
             session.close()
     except Exception:
-        traceback.print_exc()
-        print("[Dedup] Failed — returning all profiles unfiltered")
+        logger.error("Dedup failed — returning all profiles unfiltered", exc_info=True)
         return profiles, 0
 
 
@@ -214,8 +213,7 @@ def record_filter_history(run, new_count, total_count):
         finally:
             session.close()
     except Exception:
-        traceback.print_exc()
-        print(f"[DB] Failed to record filter history for run {run.id}")
+        logger.error("Failed to record filter history for run %s", run.id, exc_info=True)
 
 
 def get_filter_staleness(platform, filters):

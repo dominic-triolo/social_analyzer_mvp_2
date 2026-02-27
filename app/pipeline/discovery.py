@@ -4,6 +4,7 @@ Pipeline Stage 1: DISCOVERY — Find profiles from platform APIs.
 Each adapter calls its platform's API and returns raw profiles.
 Filtering, enrichment, and CRM sync happen in later stages.
 """
+import logging
 from typing import Dict, List, Any
 
 from app.config import INSIGHTIQ_CLIENT_ID, INSIGHTIQ_SECRET, APIFY_API_TOKEN
@@ -13,6 +14,8 @@ from app.services.apify import (
     _extract_posts_per_month,
     _extract_member_count,
 )
+
+logger = logging.getLogger('pipeline.discovery')
 
 
 # ── Adapters ──────────────────────────────────────────────────────────────────
@@ -42,16 +45,17 @@ class InstagramDiscovery(StageAdapter):
         if lookalike_type and not lookalike_username:
             raise ValueError("lookalike_username required when lookalike_type is set")
 
-        print(f"[IG Discovery] Starting with filters: {filters}")
+        logger.info("Starting with filters: %s", filters)
 
         client = InsightIQDiscovery(INSIGHTIQ_CLIENT_ID, INSIGHTIQ_SECRET)
         found = client.search_profiles(platform='instagram', user_filters=filters)
 
-        print(f"[IG Discovery] Found {len(found)} profiles")
+        logger.info("Found %d profiles", len(found))
 
         return StageResult(
             profiles=found,
             processed=len(found),
+            cost=len(found) * 0.02,
         )
 
 
@@ -80,7 +84,7 @@ class PatreonDiscovery(StageAdapter):
             raise ValueError("search_keywords required for Patreon discovery")
 
         search_queries = [f"{kw} {location}" for kw in search_keywords] if location else list(search_keywords)
-        print(f"[Patreon Discovery] queries={search_queries}, max={max_results}")
+        logger.info("queries=%s, max=%d", search_queries, max_results)
 
         apify = ApifyClient(APIFY_API_TOKEN)
         run_result = apify.actor("mJiXU9PT4eLHuY0pi").call(run_input={
@@ -92,7 +96,7 @@ class PatreonDiscovery(StageAdapter):
             "requestHandlerTimeoutSecs": 180,
         })
         all_items = list(apify.dataset(run_result["defaultDatasetId"]).iterate_items())
-        print(f"[Patreon Discovery] Apify returned {len(all_items)} items")
+        logger.info("Apify returned %d items", len(all_items))
 
         # Normalize social URL fields
         for p in all_items:
@@ -106,6 +110,7 @@ class PatreonDiscovery(StageAdapter):
         return StageResult(
             profiles=all_items,
             processed=len(all_items),
+            cost=len(all_items) * 0.01,
         )
 
 
@@ -146,7 +151,7 @@ class FacebookDiscovery(StageAdapter):
             google_queries.append(f'site:facebook.com/groups {kw} group{vis_suffix}')
         google_queries = google_queries[:15]
 
-        print(f"[FB Discovery] {len(google_queries)} queries, max={max_results}")
+        logger.info("%d queries, max=%d", len(google_queries), max_results)
 
         apify = ApifyClient(APIFY_API_TOKEN)
         run_result = apify.actor("apify~google-search-scraper").call(run_input={
@@ -196,11 +201,12 @@ class FacebookDiscovery(StageAdapter):
                     '_search_snippet': snippet,
                 })
 
-        print(f"[FB Discovery] Found {len(found)} groups")
+        logger.info("Found %d groups", len(found))
 
         return StageResult(
             profiles=found,
             processed=len(found),
+            cost=len(found) * 0.01,
         )
 
 

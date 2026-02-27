@@ -1,10 +1,13 @@
 """
 Dashboard routes — Home page, stats API, health check, HTMX partials.
 """
+import logging
 from flask import Blueprint, jsonify, render_template
 
 from app.extensions import redis_client as r
 from app.models.run import Run
+
+logger = logging.getLogger('routes.dashboard')
 
 bp = Blueprint('dashboard', __name__)
 
@@ -116,9 +119,7 @@ def get_stats():
         })
 
     except Exception as e:
-        print(f"Error generating stats: {e}")
-        import traceback
-        print(traceback.format_exc())
+        logger.error("Error generating stats: %s", e, exc_info=True)
 
         return jsonify({
             'queue_size': 0,
@@ -180,5 +181,5 @@ def reset_stats():
         r.delete('trovastats:durations')
         return jsonify({'status': 'success', 'message': 'Stats reset successfully'})
     except Exception as e:
-        print(f"Error resetting stats: {e}")
+        logger.error("Error resetting stats: %s", e)
         return jsonify({'status': 'error', 'message': str(e)}), 500

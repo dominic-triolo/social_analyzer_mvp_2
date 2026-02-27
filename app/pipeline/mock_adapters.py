@@ -5,12 +5,15 @@ Activated with MOCK_PIPELINE=1 env var. Every external API call is replaced
 with canned responses that produce a realistic end-to-end flow. Useful for
 UI development, demo runs, and verifying pipeline orchestration.
 """
+import logging
 import time
 import random
 import uuid
 from typing import Dict, List, Any
 
 from app.pipeline.base import StageAdapter, StageResult
+
+logger = logging.getLogger('pipeline.mock')
 
 
 # ── Fake profile data ────────────────────────────────────────────────────────
@@ -75,7 +78,7 @@ class MockInstagramDiscovery(StageAdapter):
             }
             discovered.append(profile)
             run.increment_stage_progress('discovery', 'completed')
-            print(f"[Mock Discovery] Found @{username} ({creator['followers']:,} followers)")
+            logger.info("Found @%s (%s followers)", username, f"{creator['followers']:,}")
 
         return StageResult(
             profiles=discovered,
@@ -174,11 +177,11 @@ class MockInstagramPrescreen(StageAdapter):
                 ]
                 passed.append(profile)
                 run.increment_stage_progress('pre_screen', 'completed')
-                print(f"[Mock Prescreen] PASS @{profile.get('platform_username', '?')}")
+                logger.info("PASS @%s", profile.get('platform_username', '?'))
             else:
                 failed += 1
                 run.increment_stage_progress('pre_screen', 'failed')
-                print(f"[Mock Prescreen] FILTERED @{profile.get('platform_username', '?')} — inactive")
+                logger.info("FILTERED @%s — inactive", profile.get('platform_username', '?'))
 
         return StageResult(
             profiles=passed,
@@ -345,7 +348,7 @@ class MockInstagramAnalysis(StageAdapter):
             profile['_has_travel_experience'] = random.random() < 0.3
 
             run.increment_stage_progress('analysis', 'completed')
-            print(f"[Mock Analysis] @{username}: {category}, niche={niche_score:.2f}")
+            logger.info("@%s: %s, niche=%.2f", username, category, niche_score)
 
         return StageResult(profiles=profiles, processed=len(profiles), cost=len(profiles) * 0.15)
 
@@ -462,7 +465,7 @@ class MockInstagramScoring(StageAdapter):
 
             scored.append(profile)
             run.increment_stage_progress('scoring', 'completed')
-            print(f"[Mock Scoring] @{profile.get('platform_username', '?')}: {full_score:.3f} ({tier})")
+            logger.info("@%s: %.3f (%s)", profile.get('platform_username', '?'), full_score, tier)
 
         return StageResult(profiles=scored, processed=len(profiles), cost=len(profiles) * 0.02)
 
@@ -524,7 +527,7 @@ class MockInstagramCrmSync(StageAdapter):
             profile['_synced_to_crm'] = True
             synced.append(profile)
             run.increment_stage_progress('crm_sync', 'completed')
-            print(f"[Mock CRM] Synced @{profile.get('platform_username', '?')} → HubSpot")
+            logger.info("Synced @%s to HubSpot", profile.get('platform_username', '?'))
 
         run.contacts_synced = len(synced)
         run.save()

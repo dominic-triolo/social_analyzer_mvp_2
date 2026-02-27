@@ -4,6 +4,7 @@ Pipeline Stage 6: CRM SYNC — HubSpot import + BDR assignment.
 Instagram: Single contact update (send_to_hubspot per profile).
 Patreon/Facebook: Batch import (standardize → BDR assign → import_profiles_to_hubspot).
 """
+import logging
 from typing import Dict, List, Any
 
 from app.config import BDR_OWNER_IDS
@@ -15,6 +16,8 @@ from app.services.apify import (
     standardize_facebook_profiles,
 )
 from app.pipeline.base import StageAdapter, StageResult
+
+logger = logging.getLogger('pipeline.crm')
 
 
 class InstagramCrmSync(StageAdapter):
@@ -54,10 +57,10 @@ class InstagramCrmSync(StageAdapter):
 
                 synced.append(profile)
                 run.increment_stage_progress('crm_sync', 'completed')
-                print(f"[IG CRM] Synced {contact_id}: score={lead_analysis.get('lead_score', 0):.3f}")
+                logger.info("Synced %s: score=%.3f", contact_id, lead_analysis.get('lead_score', 0))
 
             except Exception as e:
-                print(f"[IG CRM] Error syncing {contact_id}: {e}")
+                logger.error("Error syncing %s: %s", contact_id, e)
                 errors.append(f"{contact_id}: {str(e)}")
                 run.increment_stage_progress('crm_sync', 'failed')
 
@@ -96,7 +99,7 @@ class PatreonCrmSync(StageAdapter):
         run.duplicates_skipped = import_results.get('skipped', 0)
         run.save()
 
-        print(f"[Patreon CRM] Created: {import_results['created']}, Skipped: {import_results['skipped']}")
+        logger.info("Created: %d, Skipped: %d", import_results['created'], import_results['skipped'])
 
         return StageResult(
             profiles=standardized,
@@ -130,7 +133,7 @@ class FacebookCrmSync(StageAdapter):
         run.duplicates_skipped = import_results.get('skipped', 0)
         run.save()
 
-        print(f"[FB CRM] Created: {import_results['created']}, Skipped: {import_results['skipped']}")
+        logger.info("Created: %d, Skipped: %d", import_results['created'], import_results['skipped'])
 
         return StageResult(
             profiles=standardized,

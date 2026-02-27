@@ -4,6 +4,7 @@ Cloudflare R2 media operations — upload, rehost, cache.
 import io
 import json
 import hashlib
+import logging
 import requests
 import concurrent.futures
 from datetime import datetime
@@ -12,6 +13,8 @@ from PIL import Image
 
 from app.config import R2_BUCKET_NAME, R2_PUBLIC_URL
 from app.extensions import r2_client
+
+logger = logging.getLogger('services.r2')
 
 
 def rehost_media_on_r2(media_url: str, contact_id: str, media_format: str) -> str:
@@ -28,9 +31,9 @@ def rehost_media_on_r2(media_url: str, contact_id: str, media_format: str) -> st
                 break
             except requests.exceptions.Timeout:
                 if attempt == max_retries - 1:
-                    print(f"Media download timed out after {max_retries} attempts, using original URL")
+                    logger.warning("Media download timed out after %d attempts, using original URL", max_retries)
                     return media_url
-                print(f"Download timeout, retrying... (attempt {attempt + 1}/{max_retries})")
+                logger.warning("Download timeout, retrying (attempt %d/%d)", attempt + 1, max_retries)
 
         url_hash = hashlib.md5(media_url.encode()).hexdigest()
         extension = 'mp4' if media_format == 'VIDEO' else 'jpg'
@@ -44,11 +47,11 @@ def rehost_media_on_r2(media_url: str, contact_id: str, media_format: str) -> st
         )
 
         rehosted_url = f"{R2_PUBLIC_URL}/{object_key}"
-        print(f"Successfully re-hosted to R2: {object_key}")
+        logger.info("Successfully re-hosted to R2: %s", object_key)
         return rehosted_url
 
     except Exception as e:
-        print(f"ERROR re-hosting media: {e}")
+        logger.error("Error re-hosting media: %s", e)
         return media_url
 
 
@@ -60,7 +63,7 @@ def create_thumbnail_grid(thumbnail_urls: List[str], contact_id: str) -> str:
             img = Image.open(io.BytesIO(response.content))
             return img.resize((400, 400), Image.Resampling.LANCZOS)
         except Exception as e:
-            print(f"Error loading thumbnail {url}: {e}")
+            logger.error("Error loading thumbnail %s: %s", url, e)
             return Image.new('RGB', (400, 400), color='gray')
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
@@ -89,14 +92,14 @@ def create_thumbnail_grid(thumbnail_urls: List[str], contact_id: str) -> str:
     )
 
     grid_url = f"{R2_PUBLIC_URL}/{key}"
-    print(f"Thumbnail grid created: {grid_url}")
+    logger.info("Thumbnail grid created: %s", grid_url)
     return grid_url
 
 
 def save_analysis_cache(contact_id: str, cache_data: dict) -> bool:
     """Save analysis results to R2 for later re-scoring."""
     if not r2_client:
-        print("R2 client not available, skipping cache")
+        logger.warning("R2 client not available, skipping cache")
         return False
 
     try:
@@ -106,10 +109,10 @@ def save_analysis_cache(contact_id: str, cache_data: dict) -> bool:
             Body=json.dumps(cache_data, indent=2),
             ContentType='application/json',
         )
-        print(f"Analysis cached to R2: {key}")
+        logger.info("Analysis cached to R2: %s", key)
         return True
     except Exception as e:
-        print(f"Error caching analysis: {e}")
+        logger.error("Error caching analysis: %s", e)
         return False
 
 
@@ -122,8 +125,8 @@ def load_analysis_cache(contact_id: str) -> dict:
         key = f"analysis-cache/{contact_id}.json"
         obj = r2_client.get_object(Bucket=R2_BUCKET_NAME, Key=key)
         cache_data = json.loads(obj['Body'].read())
-        print(f"Analysis loaded from cache: {key}")
+        logger.info("Analysis loaded from cache: %s", key)
         return cache_data
     except Exception as e:
-        print(f"Error loading cache: {e}")
+        logger.error("Error loading cache: %s", e)
         raise

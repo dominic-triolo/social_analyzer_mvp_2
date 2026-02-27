@@ -2,6 +2,7 @@
 InsightIQ API client — content fetching + discovery.
 """
 import base64
+import logging
 import time
 import requests
 from typing import Dict, List, Any
@@ -11,6 +12,8 @@ from app.config import (
     INSIGHTIQ_WORK_PLATFORM_ID, INSIGHTIQ_API_URL,
     INSIGHTIQ_CLIENT_ID, INSIGHTIQ_SECRET,
 )
+
+logger = logging.getLogger('services.insightiq')
 
 
 def fetch_social_content(profile_url: str) -> Dict[str, Any]:
@@ -30,29 +33,29 @@ def fetch_social_content(profile_url: str) -> Dict[str, Any]:
         "work_platform_id": INSIGHTIQ_WORK_PLATFORM_ID,
     }
 
-    print(f"InsightIQ Request URL: {url}")
-    print(f"Profile URL: {profile_url}")
-    print(f"Work Platform ID: {INSIGHTIQ_WORK_PLATFORM_ID}")
+    logger.debug("Request URL: %s", url)
+    logger.debug("Profile URL: %s", profile_url)
+    logger.debug("Work Platform ID: %s", INSIGHTIQ_WORK_PLATFORM_ID)
 
     try:
         response = requests.post(url, json=payload, headers=headers, timeout=30)
-        print(f"InsightIQ Response Status: {response.status_code}")
+        logger.debug("Response status: %d", response.status_code)
         if response.status_code != 200:
-            print(f"ERROR Response Body: {response.text}")
+            logger.error("Response body: %s", response.text)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
-        print(f"InsightIQ API Error: {e}")
+        logger.error("API error: %s", e)
         if hasattr(e, 'response') and e.response is not None:
-            print(f"Response Status: {e.response.status_code}")
-            print(f"Response Body: {e.response.text}")
+            logger.debug("Response status: %d", e.response.status_code)
+            logger.debug("Response body: %s", e.response.text)
         raise
 
 
 def filter_content_items(content_items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Filter out Stories from content items."""
     filtered = [item for item in content_items if item.get('type') != 'STORY']
-    print(f"Filtered content: {len(content_items)} total → {len(filtered)} after removing Stories")
+    logger.info("Filtered content: %d total, %d after removing Stories", len(content_items), len(filtered))
     return filtered
 
 
@@ -171,7 +174,7 @@ class InsightIQDiscovery:
         elif bio_phrase:
             parameters['bio_phrase'] = bio_phrase
 
-        print(f"Starting {platform} discovery with fixed parameters...")
+        logger.info("Starting %s discovery with fixed parameters", platform)
         job_id = self._start_job(parameters)
         raw_results = self._fetch_results(job_id)
         return self._standardize_results(raw_results, platform)
@@ -185,7 +188,7 @@ class InsightIQDiscovery:
             job_id = response.json().get('id')
             if not job_id:
                 raise Exception("No job ID returned from API")
-            print(f"Job started successfully: {job_id}")
+            logger.info("Job started successfully: %s", job_id)
             return job_id
         except requests.exceptions.RequestException as e:
             raise Exception(f"Failed to connect to InsightIQ API: {e}")
@@ -212,7 +215,7 @@ class InsightIQDiscovery:
                     raise Exception(f"Failed to fetch results: {response.text}")
                 data = response.json()
                 if data.get('status') == 'IN_PROGRESS':
-                    print(f"Job still processing (poll #{poll_count}, elapsed: {int(elapsed)}s), waiting 60 seconds...")
+                    logger.info("Job still processing (poll #%d, elapsed: %ds), waiting 60 seconds", poll_count, int(elapsed))
                     time.sleep(60)
                     continue
                 if data.get('status') == 'FAILED':
@@ -220,14 +223,14 @@ class InsightIQDiscovery:
                 batch_results = data.get('data', [])
                 all_results.extend(batch_results)
                 total_results = data.get('metadata', {}).get('total_results', 0)
-                print(f"Fetched {len(all_results)}/{total_results} profiles")
+                logger.info("Fetched %d/%d profiles", len(all_results), total_results)
                 if offset + limit >= total_results or len(batch_results) == 0:
                     break
                 offset += limit
             except requests.exceptions.RequestException as e:
                 raise Exception(f"Failed to fetch results: {e}")
 
-        print(f"Fetch complete: {len(all_results)} total profiles")
+        logger.info("Fetch complete: %d total profiles", len(all_results))
         return all_results
 
     def _standardize_results(self, raw_results, platform):
@@ -262,8 +265,8 @@ class InsightIQDiscovery:
                     'enrichment_status': 'pending',
                 })
             except Exception as e:
-                print(f"Failed to process profile #{i+1}: {e}")
-        print(f"Successfully processed {len(standardized)} profiles")
+                logger.error("Failed to process profile #%d: %s", i + 1, e)
+        logger.info("Successfully processed %d profiles", len(standardized))
         return standardized
 
     def _extract_contact_details(self, contact_details):
