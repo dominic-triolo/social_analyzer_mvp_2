@@ -269,7 +269,7 @@ class InstagramPrescreen(StageAdapter):
         skipped = 0
 
         for i, profile in enumerate(profiles):
-            profile_url = profile.get('profile_url') or profile.get('url', '')
+            profile_url = profile.get('profile_url') or profile.get('instagram_handle') or profile.get('url', '')
             bio = profile.get('bio', '')
             follower_count = profile.get('follower_count', 0)
 

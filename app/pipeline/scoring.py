@@ -434,7 +434,7 @@ class InstagramScoring(StageAdapter):
         errors = []
 
         for profile in profiles:
-            profile_url = profile.get('profile_url') or profile.get('url', '')
+            profile_url = profile.get('profile_url') or profile.get('instagram_handle') or profile.get('url', '')
             contact_id = profile.get('contact_id') or profile.get('id', '')
 
             try:
