@@ -5,7 +5,7 @@ Creates and configures the Flask app, registers all blueprints.
 """
 import os
 from datetime import datetime, timezone
-from flask import Flask, request, session, redirect, url_for, render_template_string
+from flask import Flask, request, session, redirect, url_for, render_template_string, jsonify
 
 
 def _time_since(iso_str):
@@ -48,8 +48,8 @@ def create_app():
 
     app.jinja_env.filters['time_since'] = _time_since
 
-    # ── Simple password auth ────────────────────────────────────────────
-    from app.config import DASHBOARD_PASSWORD
+    # ── Simple password auth + API key ──────────────────────────────────
+    from app.config import DASHBOARD_PASSWORD, API_KEY
 
     LOGIN_PAGE = '''
     <!DOCTYPE html>
@@ -91,10 +91,16 @@ def create_app():
             return  # No password set — open access (local dev)
         if request.path in OPEN_PATHS or request.path.startswith('/static/'):
             return
+        # API key auth for programmatic access
+        if API_KEY and request.headers.get('X-API-Key') == API_KEY:
+            return
         if session.get('authenticated'):
             return
         if request.method == 'POST' and request.path == '/login':
             return
+        # API routes return 401 JSON, browser routes redirect to login
+        if request.path.startswith('/api/'):
+            return jsonify({'error': 'unauthorized'}), 401
         return redirect('/login')
 
     @app.route('/login', methods=['GET', 'POST'])

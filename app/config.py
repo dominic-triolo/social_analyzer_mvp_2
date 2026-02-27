@@ -54,6 +54,7 @@ SLACK_WEBHOOK_URL = os.getenv('SLACK_WEBHOOK_URL')
 
 # ── Auth ─────────────────────────────────────────────────────────────────────
 DASHBOARD_PASSWORD = os.getenv('DASHBOARD_PASSWORD')
+API_KEY = os.getenv('API_KEY')
 
 # ── BDR Round-Robin — display name → HubSpot owner ID ────────────────────────
 BDR_OWNER_IDS = {
