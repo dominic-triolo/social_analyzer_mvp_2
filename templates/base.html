@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="turbo-cache-control" content="no-cache">
+    <title>{% block title %}TrovaTrip{% endblock %} — Lead Pipeline</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        cream:      '#eeece1',
+                        'cream-d':  '#e4e2d5',
+                        teal:       '#00b2c9',
+                        'teal-dark':'#005c69',
+                        'teal-deep':'#003d47',
+                        coral:      '#f65c4e',
+                        slate:      '#3c4858',
+                        'slate-l':  '#5a6779',
+                        emerald:    '#10b981',
+                        amber:      '#f59e0b',
+                    },
+                    fontFamily: {
+                        sans: ['DM Sans', 'system-ui', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            background-color: #eeece1;
+            color: #3c4858;
+            font-family: 'DM Sans', system-ui, sans-serif;
+            margin: 0;
+        }
+
+        /* ── Sidebar ─────────────────────────────────────── */
+        .sidebar {
+            width: 232px;
+            background: #003d47;
+            color: rgba(255,255,255,0.7);
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            top: 0; left: 0; bottom: 0;
+            z-index: 40;
+            transition: transform 0.2s ease;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+        .sidebar::-webkit-scrollbar { width: 0; }
+        .sidebar-brand {
+            padding: 20px 18px 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        .sidebar-brand img { height: 28px; width: 28px; object-fit: contain; border-radius: 6px; }
+        .sidebar-brand .fallback-icon {
+            width: 28px; height: 28px; background: #00b2c9; border-radius: 6px;
+            display: none; align-items: center; justify-content: center;
+            font-weight: 700; font-size: 13px; color: white;
+        }
+        .sidebar-brand span { font-weight: 600; font-size: 14px; color: white; letter-spacing: -0.02em; }
+
+        .nav-section { padding: 16px 12px 4px; }
+        .nav-section-label {
+            font-size: 10px; font-weight: 600; letter-spacing: 0.08em;
+            text-transform: uppercase; color: rgba(255,255,255,0.35);
+            padding: 0 8px; margin-bottom: 6px;
+        }
+
+        .nav-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 7px 10px; margin: 1px 0;
+            border-radius: 7px; font-size: 13px; font-weight: 450;
+            color: rgba(255,255,255,0.65);
+            text-decoration: none;
+            transition: all 0.12s ease;
+            cursor: pointer;
+        }
+        .nav-item:hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.9); }
+        .nav-item.active {
+            background: rgba(0,178,201,0.18);
+            color: #5ee8f7;
+        }
+        .nav-item .nav-icon {
+            width: 20px; height: 20px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 14px; flex-shrink: 0;
+        }
+        .nav-item .nav-badge {
+            margin-left: auto;
+            font-size: 10px; font-weight: 600;
+            padding: 1px 6px; border-radius: 10px;
+            background: rgba(0,178,201,0.2); color: #5ee8f7;
+        }
+        .nav-item .nav-badge.coral { background: rgba(246,92,78,0.2); color: #ff9a91; }
+
+        /* Live pulse */
+        .live-dot {
+            width: 6px; height: 6px; border-radius: 50%;
+            background: #10b981;
+            animation: live-pulse 2s ease-in-out infinite;
+        }
+        @keyframes live-pulse {
+            0%, 100% { opacity: 1; }
+            50%      { opacity: 0.3; }
+        }
+
+        /* ── Main content ────────────────────────────────── */
+        .main-wrapper {
+            margin-left: 232px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .top-bar {
+            height: 48px;
+            background: rgba(238,236,225,0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(60,72,88,0.08);
+            display: flex; align-items: center;
+            padding: 0 24px; gap: 12px;
+            position: sticky; top: 0; z-index: 30;
+        }
+        .top-bar .breadcrumb {
+            font-size: 12px; color: #5a6779;
+            display: flex; align-items: center; gap: 6px;
+        }
+        .top-bar .breadcrumb a { color: #005c69; text-decoration: none; font-weight: 500; }
+        .top-bar .breadcrumb a:hover { text-decoration: underline; }
+        .top-bar .breadcrumb .sep { color: #d1d5db; }
+
+        .content-area { padding: 24px; flex: 1; }
+
+        /* ── Cards ────────────────────────────────────────── */
+        .card {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.03);
+        }
+        .card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.07), 0 0 0 1px rgba(0,0,0,0.04); }
+
+        /* ── Shared: Section labels ─────────────────────── */
+        .section-label {
+            font-size: 11px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.06em;
+            color: #005c69;
+        }
+
+        /* ── Shared: Inputs ─────────────────────────────── */
+        .input-field {
+            width: 100%; border-radius: 8px;
+            padding: 8px 12px; font-size: 13px;
+            border: 1px solid rgba(60,72,88,0.13);
+            background: white; color: #3c4858;
+            font-family: inherit;
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        .input-field:focus {
+            outline: none;
+            border-color: #00b2c9;
+            box-shadow: 0 0 0 3px rgba(0,178,201,0.12);
+        }
+        .input-field::placeholder { color: #3c4858; opacity: 0.35; }
+
+        /* ── Shared: Buttons ────────────────────────────── */
+        .btn-primary {
+            display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+            font-size: 13px; font-weight: 600; font-family: inherit;
+            padding: 10px 20px; border-radius: 8px;
+            background: #005c69; color: white;
+            border: none; cursor: pointer;
+            transition: all 0.15s;
+        }
+        .btn-primary:hover { background: #004a54; }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .btn-accent {
+            display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+            font-size: 12px; font-weight: 600; font-family: inherit;
+            padding: 6px 14px; border-radius: 8px;
+            background: #00b2c9; color: white;
+            border: none; cursor: pointer;
+            transition: all 0.15s;
+        }
+        .btn-accent:hover { background: #009db2; }
+
+        /* ── Shared: Badges ─────────────────────────────── */
+        .badge {
+            display: inline-flex; align-items: center; gap: 4px;
+            font-size: 11px; font-weight: 600;
+            padding: 2px 10px; border-radius: 20px;
+            white-space: nowrap;
+        }
+        .badge-success { background: #d1fae5; color: #065f46; }
+        .badge-error   { background: #fee2e2; color: #991b1b; }
+        .badge-info    { background: #e0f7fa; color: #005c69; }
+        .badge-muted   { background: #f1f5f9; color: #64748b; }
+        .badge-warning { background: #fef3c7; color: #92400e; }
+
+        /* ── Shared: Platform grid (scales 3→10+) ──────── */
+        .platform-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+            gap: 10px;
+        }
+        .platform-card {
+            display: flex; align-items: center; gap: 10px;
+            padding: 12px 14px;
+            border-radius: 10px;
+            border: 2px solid rgba(60,72,88,0.1);
+            background: white;
+            cursor: pointer;
+            text-align: left;
+            font-family: inherit;
+            transition: all 0.15s;
+            outline: none;
+        }
+        .platform-card:hover { border-color: rgba(0,92,105,0.3); background: #fafaf8; }
+        .platform-card.active { border-color: #005c69; background: #e8f8fa; }
+        .platform-card-icon {
+            width: 34px; height: 34px; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            background: #f0fafb; color: #005c69; flex-shrink: 0;
+        }
+        .platform-card.active .platform-card-icon { background: #c4eef3; }
+        .platform-card-name { font-size: 13px; font-weight: 600; color: #005c69; line-height: 1.2; }
+        .platform-card-source { font-size: 10px; color: #5a6779; margin-top: 1px; }
+
+        /* ── Shared: Filter chips (wrapping) ───────────── */
+        .chip-group {
+            display: flex; flex-wrap: wrap; gap: 6px;
+        }
+        .chip {
+            padding: 5px 12px; font-size: 12px; font-weight: 500;
+            background: white; color: #5a6779;
+            border: 1px solid rgba(60,72,88,0.12);
+            border-radius: 20px;
+            cursor: pointer; font-family: inherit;
+            transition: all 0.15s;
+            display: inline-flex; align-items: center; gap: 5px;
+            white-space: nowrap;
+        }
+        .chip:hover { border-color: rgba(0,92,105,0.3); color: #005c69; background: #fafaf8; }
+        .chip.active { background: #005c69; color: white; border-color: #005c69; }
+        .chip svg { opacity: 0.7; }
+        .chip.active svg { opacity: 1; }
+
+        /* Divider between chip groups */
+        .chip-divider {
+            width: 1px; height: 20px; background: rgba(60,72,88,0.12);
+            align-self: center; margin: 0 4px;
+        }
+
+        /* ── Shared: KPI cards ──────────────────────────── */
+        .kpi-card { padding: 16px; }
+        .kpi-label {
+            font-size: 10px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.05em;
+            color: #00b2c9; margin-bottom: 4px;
+        }
+        .kpi-value { font-size: 24px; font-weight: 700; color: #005c69; line-height: 1.1; }
+        .kpi-sub { font-size: 11px; color: #3c4858; opacity: 0.5; margin-top: 3px; }
+
+        /* ── Shared: Tag pills ──────────────────────────── */
+        .tag-pill {
+            display: inline-flex; align-items: center; gap: 4px;
+            background: #e0f7fa; color: #005c69;
+            font-size: 12px; font-weight: 500;
+            padding: 2px 8px; border-radius: 6px;
+        }
+        .tag-pill button {
+            color: #00b2c9; font-weight: 700; line-height: 1;
+            cursor: pointer; background: none; border: none; font-size: 14px;
+        }
+        .tag-pill button:hover { color: #f65c4e; }
+
+        .suggestion-chip {
+            display: inline-flex; align-items: center; gap: 3px;
+            background: #f0fdf4; color: #005c69;
+            font-size: 12px; font-weight: 400;
+            padding: 2px 6px; border-radius: 6px;
+            border: 1px dashed rgba(0,178,201,0.3);
+        }
+        .suggestion-chip button {
+            color: #00b2c9; font-weight: 700; line-height: 1;
+            cursor: pointer; background: none; border: none; font-size: 13px;
+        }
+        .suggestion-chip button:last-child { color: #9ca3af; }
+        .suggestion-chip button:last-child:hover { color: #f65c4e; }
+        .suggestion-chip button:first-child:hover { color: #10b981; }
+
+        /* ── Pipeline pulse ──────────────────────────────── */
+        .pulse-ring { animation: pulse-ring 1.8s cubic-bezier(0.215,0.61,0.355,1) infinite; }
+        @keyframes pulse-ring {
+            0%   { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0,178,201,0.5); }
+            70%  { transform: scale(1);    box-shadow: 0 0 0 8px rgba(0,178,201,0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0,178,201,0); }
+        }
+
+        /* ── Custom modal ──────────────────────────────────── */
+        .modal-backdrop {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,61,71,0.3);
+            backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+            z-index: 100;
+            align-items: center; justify-content: center;
+        }
+        .modal-backdrop.open { display: flex; }
+        .modal-panel {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 8px 40px rgba(0,61,71,0.16), 0 0 0 1px rgba(0,0,0,0.04);
+            width: 92%; max-width: 380px;
+            overflow: hidden;
+            animation: modal-in 0.15s ease-out;
+        }
+        @keyframes modal-in {
+            from { opacity: 0; transform: translateY(6px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .modal-body {
+            padding: 20px 20px 16px;
+            border-left: 3px solid var(--modal-accent, #005c69);
+        }
+        .modal-title {
+            font-size: 14px; font-weight: 700; color: #005c69;
+            letter-spacing: -0.01em;
+        }
+        .modal-message {
+            font-size: 13px; color: #5a6779; line-height: 1.5;
+            margin-top: 4px;
+        }
+        .modal-actions {
+            display: flex; gap: 8px; justify-content: flex-end;
+            padding: 0 20px 16px;
+        }
+        .modal-btn {
+            font-size: 13px; font-weight: 600; font-family: inherit;
+            padding: 7px 16px; border-radius: 8px;
+            cursor: pointer; border: none;
+            transition: all 0.12s;
+        }
+        .modal-btn:focus-visible {
+            outline: 2px solid #00b2c9; outline-offset: 2px;
+        }
+        .modal-btn-secondary {
+            background: #f1f5f9; color: #64748b;
+        }
+        .modal-btn-secondary:hover { background: #e2e8f0; color: #3c4858; }
+        .modal-btn-primary {
+            background: #005c69; color: white;
+        }
+        .modal-btn-primary:hover { background: #004a54; }
+        .modal-btn-danger {
+            background: #f65c4e; color: white;
+        }
+        .modal-btn-danger:hover { background: #e04a3d; }
+
+        /* ── Mobile overlay ──────────────────────────────────── */
+        .sidebar-overlay {
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.4); z-index: 35;
+        }
+        .mobile-menu-btn { display: none; }
+
+        @media (max-width: 768px) {
+            .sidebar { transform: translateX(-100%); }
+            .sidebar.open { transform: translateX(0); }
+            .sidebar-overlay.open { display: block; }
+            .main-wrapper { margin-left: 0; }
+            .mobile-menu-btn { display: flex; }
+            .content-area { padding: 16px; }
+        }
+
+        /* ── Animations ──────────────────────────────────── */
+        @keyframes fade-in {
+            from { opacity: 0; transform: translateY(6px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .animate-in { animation: fade-in 0.25s ease-out both; }
+    </style>
+    {% block head %}{% endblock %}
+</head>
+<body hx-boost="true">
+
+<!-- Sidebar -->
+<aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+        <img src="/static/logo.png" alt="T"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+        <div class="fallback-icon">T</div>
+        <span>TrovaTrip</span>
+        <div class="ml-auto live-dot" title="System live"></div>
+    </div>
+
+    <!-- Core nav -->
+    <div class="nav-section">
+        <a href="/" class="nav-item {% if active_page == 'home' %}active{% endif %}">
+            <div class="nav-icon">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 6L8 1.5L14 6V13.5C14 14.05 13.55 14.5 13 14.5H3C2.45 14.5 2 14.05 2 13.5V6Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 14.5V8H10V14.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            Dashboard
+        </a>
+        <a href="/discovery" class="nav-item {% if active_page == 'discovery' %}active{% endif %}">
+            <div class="nav-icon">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M14.5 14.5L10.5 10.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </div>
+            New Discovery
+        </a>
+        <a href="/runs" class="nav-item {% if active_page == 'runs' %}active{% endif %}">
+            <div class="nav-icon">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4H14M2 8H14M2 12H10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </div>
+            Pipeline Runs
+            <span class="nav-badge" id="sidebar-runs-badge"
+                  hx-get="/partials/sidebar-badge"
+                  hx-trigger="load, every 8s"
+                  hx-swap="innerHTML"></span>
+        </a>
+        <a href="/evaluation" class="nav-item {% if active_page == 'evaluation' %}active{% endif %}">
+            <div class="nav-icon">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 10L7 7L9.5 9L11 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            Evaluation
+        </a>
+    </div>
+
+</aside>
+
+<!-- Mobile overlay -->
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+<!-- Main wrapper -->
+<div class="main-wrapper">
+    <!-- Top bar -->
+    <div class="top-bar">
+        <button class="mobile-menu-btn items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-200 transition-colors" onclick="openSidebar()">
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M2 4H14M2 8H14M2 12H14" stroke="#3c4858" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </button>
+        <div class="breadcrumb">
+            {% block breadcrumb %}
+            <span style="color:#005c69; font-weight:600;">{% block page_title %}Dashboard{% endblock %}</span>
+            {% endblock %}
+        </div>
+        <div class="ml-auto flex items-center gap-3">
+            {% block top_actions %}{% endblock %}
+        </div>
+    </div>
+
+    <!-- Content -->
+    <main class="content-area">
+        {% block content %}{% endblock %}
+    </main>
+</div>
+
+<script>
+    /* ── Mobile sidebar ────────────────────────────────── */
+    function openSidebar() {
+        document.getElementById('sidebar').classList.add('open');
+        document.getElementById('sidebar-overlay').classList.add('open');
+    }
+    function closeSidebar() {
+        document.getElementById('sidebar').classList.remove('open');
+        document.getElementById('sidebar-overlay').classList.remove('open');
+    }
+
+    /* ── Global SVG icons for stages ───────────────────── */
+    window.STAGE_SVG = {
+        discovery:   '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+        pre_screen:  '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M14 2H2L6.5 7.5V12L9.5 13.5V7.5L14 2Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+        prescreen:   '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M14 2H2L6.5 7.5V12L9.5 13.5V7.5L14 2Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+        enrichment:  '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="5.5" cy="8" r="2.5" stroke="currentColor" stroke-width="1.5"/><circle cx="10.5" cy="8" r="2.5" stroke="currentColor" stroke-width="1.5"/></svg>',
+        analysis:    '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 10L7 7L9.5 9L11 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+        scoring:     '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2L9.8 5.6L14 6.2L11 9.1L11.7 13.3L8 11.4L4.3 13.3L5 9.1L2 6.2L6.2 5.6L8 2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>',
+        crm_sync:    '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M14 10L8 14L2 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 6L8 10L2 6L8 2L14 6Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>',
+    };
+
+    /* ── Global SVG icons for platforms ─────────────────── */
+    window.PLATFORM_SVG = {
+        instagram: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="1.5" width="13" height="13" rx="4" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.3"/><circle cx="11.8" cy="4.2" r="0.8" fill="currentColor"/></svg>',
+        patreon:   '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="10" cy="5.5" r="3.5" stroke="currentColor" stroke-width="1.3"/><rect x="2" y="2" width="2" height="12" rx="1" fill="currentColor" opacity="0.6"/></svg>',
+        facebook:  '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M13 2H3V10C3 10.55 3.45 11 4 11H9L13 14V2Z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+        meetup:    '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="5" cy="6" r="2" stroke="currentColor" stroke-width="1.3"/><circle cx="11" cy="6" r="2" stroke="currentColor" stroke-width="1.3"/><path d="M1 14C1 11.5 3 10 5 10C6.2 10 7 10.4 8 11C9 10.4 9.8 10 11 10C13 10 15 11.5 15 14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>',
+        podcast:   '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 1C5.8 1 4 2.8 4 5V8C4 10.2 5.8 12 8 12C10.2 12 12 10.2 12 8V5C12 2.8 10.2 1 8 1Z" stroke="currentColor" stroke-width="1.3"/><path d="M8 12V15M5 15H11" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>',
+        substack:  '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 3H13M3 6.5H13M3 10L8 13L13 10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    };
+
+    /* ── Global helpers ─────────────────────────────────── */
+    window.timeSince = function(iso) {
+        if (!iso) return '';
+        const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+        if (diff < 60) return 'just now';
+        if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+        if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+        return Math.floor(diff / 86400) + 'd ago';
+    };
+
+    window.escapeHtml = function(s) {
+        return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    };
+
+    /* Sidebar badge is now HTMX-powered (hx-get on #sidebar-runs-badge) */
+
+    /* ── Custom modal API ────────────────────────────────── */
+    window._modalClose = null;
+
+    var MODAL_ACCENTS = {
+        info:    '#005c69',
+        error:   '#f65c4e',
+        warning: '#f59e0b',
+        confirm: '#00b2c9',
+    };
+
+    function _openModal(type, title, message, actions) {
+        var el = document.getElementById('app-modal');
+        var body = document.getElementById('modal-body');
+        body.style.setProperty('--modal-accent', MODAL_ACCENTS[type] || MODAL_ACCENTS.info);
+        document.getElementById('modal-title').textContent = title;
+        document.getElementById('modal-message').textContent = message;
+        document.getElementById('modal-actions').innerHTML = '';
+        actions.forEach(function(a) {
+            var btn = document.createElement('button');
+            btn.className = 'modal-btn ' + (a.cls || 'modal-btn-primary');
+            btn.textContent = a.label;
+            btn.onclick = a.onClick;
+            document.getElementById('modal-actions').appendChild(btn);
+        });
+        el.classList.add('open');
+        var primary = document.querySelector('#modal-actions .modal-btn-primary, #modal-actions .modal-btn-danger');
+        if (primary) setTimeout(function() { primary.focus(); }, 50);
+    }
+
+    function _closeModal() {
+        document.getElementById('app-modal').classList.remove('open');
+        window._modalClose = null;
+    }
+
+    /**
+     * showModal(message, opts) — replaces alert()
+     * opts: { title, type: 'info'|'error'|'warning', buttonLabel }
+     */
+    window.showModal = function(message, opts) {
+        opts = opts || {};
+        var type = opts.type || 'info';
+        var title = opts.title || (type === 'error' ? 'Error' : 'Notice');
+        window._modalClose = _closeModal;
+        _openModal(type, title, message, [
+            { label: opts.buttonLabel || 'OK', cls: 'modal-btn-primary', onClick: _closeModal },
+        ]);
+    };
+
+    /**
+     * showConfirm(message, opts) — replaces confirm(), returns a Promise<boolean>
+     * opts: { title, type: 'confirm'|'warning', confirmLabel, cancelLabel }
+     */
+    window.showConfirm = function(message, opts) {
+        opts = opts || {};
+        return new Promise(function(resolve) {
+            var type = opts.type || 'confirm';
+            var title = opts.title || 'Confirm';
+            var confirmCls = type === 'warning' ? 'modal-btn-danger' : 'modal-btn-primary';
+
+            function done(val) {
+                _closeModal();
+                resolve(val);
+            }
+
+            window._modalClose = function() { done(false); };
+            _openModal(type, title, message, [
+                { label: opts.cancelLabel || 'Cancel', cls: 'modal-btn-secondary', onClick: function() { done(false); } },
+                { label: opts.confirmLabel || 'Confirm', cls: confirmCls, onClick: function() { done(true); } },
+            ]);
+        });
+    };
+
+    /**
+     * showPrompt(message, opts) — replaces prompt(), returns a Promise<string|null>
+     * opts: { title, placeholder, confirmLabel, cancelLabel }
+     */
+    window.showPrompt = function(message, opts) {
+        opts = opts || {};
+        return new Promise(function(resolve) {
+            var el = document.getElementById('app-modal');
+            var body = document.getElementById('modal-body');
+            body.style.setProperty('--modal-accent', MODAL_ACCENTS.confirm);
+            document.getElementById('modal-title').textContent = opts.title || 'Input';
+            document.getElementById('modal-message').innerHTML = '';
+
+            var msg = document.createElement('div');
+            msg.style.cssText = 'font-size:13px;color:#5a6779;line-height:1.5;margin-bottom:10px;';
+            msg.textContent = message;
+            document.getElementById('modal-message').appendChild(msg);
+
+            var inp = document.createElement('input');
+            inp.type = 'text';
+            inp.className = 'input-field';
+            inp.placeholder = opts.placeholder || '';
+            inp.style.marginTop = '4px';
+            document.getElementById('modal-message').appendChild(inp);
+
+            function done(val) {
+                _closeModal();
+                resolve(val);
+            }
+
+            window._modalClose = function() { done(null); };
+
+            document.getElementById('modal-actions').innerHTML = '';
+            var cancelBtn = document.createElement('button');
+            cancelBtn.className = 'modal-btn modal-btn-secondary';
+            cancelBtn.textContent = opts.cancelLabel || 'Cancel';
+            cancelBtn.onclick = function() { done(null); };
+            document.getElementById('modal-actions').appendChild(cancelBtn);
+
+            var okBtn = document.createElement('button');
+            okBtn.className = 'modal-btn modal-btn-primary';
+            okBtn.textContent = opts.confirmLabel || 'Save';
+            okBtn.onclick = function() { done(inp.value.trim() || null); };
+            document.getElementById('modal-actions').appendChild(okBtn);
+
+            el.classList.add('open');
+            setTimeout(function() { inp.focus(); }, 50);
+
+            inp.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') { e.preventDefault(); done(inp.value.trim() || null); }
+            });
+        });
+    };
+
+    /* Close modal on Escape */
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && window._modalClose) window._modalClose();
+    });
+</script>
+<!-- Custom modal -->
+<div class="modal-backdrop" id="app-modal" onclick="if(event.target===this)window._modalClose&&window._modalClose()">
+    <div class="modal-panel">
+        <div class="modal-body" id="modal-body">
+            <div class="modal-title" id="modal-title"></div>
+            <div class="modal-message" id="modal-message"></div>
+        </div>
+        <div class="modal-actions" id="modal-actions"></div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/htmx.org@2.0.4"></script>
+<script src="https://unpkg.com/htmx-ext-sse@2.2.2/sse.js"></script>
+<script src="https://unpkg.com/idiomorph@0.3.0/dist/idiomorph-ext.min.js"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

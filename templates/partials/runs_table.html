@@ -1,0 +1,82 @@
+{% set status_colors = {'completed': 'badge-success', 'failed': 'badge-error', 'queued': 'badge-muted'} %}
+{% set stage_svg = {
+    'discovery':  '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+    'pre_screen': '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M14 2H2L6.5 7.5V12L9.5 13.5V7.5L14 2Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    'prescreen':  '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M14 2H2L6.5 7.5V12L9.5 13.5V7.5L14 2Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    'enrichment': '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="5.5" cy="8" r="2.5" stroke="currentColor" stroke-width="1.5"/><circle cx="10.5" cy="8" r="2.5" stroke="currentColor" stroke-width="1.5"/></svg>',
+    'analysis':   '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 10L7 7L9.5 9L11 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    'scoring':    '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2L9.8 5.6L14 6.2L11 9.1L11.7 13.3L8 11.4L4.3 13.3L5 9.1L2 6.2L6.2 5.6L8 2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>',
+    'crm_sync':   '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M14 10L8 14L2 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 6L8 10L2 6L8 2L14 6Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>',
+} %}
+
+<span class="text-xs" style="color:#3c4858;opacity:0.4;"
+      id="runs-count-label"
+      hx-swap-oob="true">
+    {% if filtered_count == total_count %}{{ total_count }} runs{% else %}{{ filtered_count }} of {{ total_count }} runs{% endif %}
+</span>
+
+{% if not runs %}
+<div class="text-center py-12">
+    <div class="mb-3" style="color:#005c69;opacity:0.15;">
+        <svg style="display:inline;" width="44" height="44" viewBox="0 0 16 16" fill="none"><path d="M2 4H14M2 8H14M2 12H10" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg>
+    </div>
+    <div class="text-sm font-medium" style="color:#005c69;">No runs match filters</div>
+    <div class="text-xs mt-1" style="color:#3c4858;opacity:0.45;">Try a different filter or start a new discovery</div>
+</div>
+{% else %}
+<table class="w-full text-left">
+    <thead><tr class="text-xs uppercase tracking-wide" style="color:#3c4858;opacity:0.35;">
+        <th class="pb-2 px-5 pt-4 font-medium">Run</th>
+        <th class="pb-2 px-4 pt-4 font-medium">Platform</th>
+        <th class="pb-2 px-4 pt-4 font-medium">Stage</th>
+        <th class="pb-2 px-4 pt-4 font-medium">Found</th>
+        <th class="pb-2 px-4 pt-4 font-medium">Synced</th>
+        <th class="pb-2 px-4 pt-4 font-medium">Dupes</th>
+        <th class="pb-2 px-4 pt-4 font-medium">Cost</th>
+        <th class="pb-2 px-5 pt-4 font-medium">Status</th>
+    </tr></thead>
+    <tbody>
+    {% for run in runs %}
+        <tr class="border-t cursor-pointer hover:bg-gray-50 transition-colors" style="border-color:#f3f4f6;"
+            onclick="window.location='/runs/{{ run.id }}'">
+            <td class="py-3 px-5">
+                <div class="text-xs font-mono font-medium" style="color:#005c69;">{{ run.id[:8] }}...</div>
+                <div class="text-xs mt-0.5" style="color:#3c4858;opacity:0.4;">{{ run.created_at | time_since }}</div>
+            </td>
+            <td class="py-3 px-4">
+                <span class="inline-flex items-center gap-1.5 text-xs" style="color:#005c69;">
+                    {{ platform_svg.get(run.platform, '') | safe }} {{ run.platform }}
+                </span>
+            </td>
+            <td class="py-3 px-4">
+                {% set stage_key = run.current_stage or 'discovery' %}
+                {% set stage_label = stage_key | replace('_', ' ') %}
+                {% if run.status == 'failed' %}
+                <span class="inline-flex items-center gap-1.5 text-xs" style="color:#f65c4e;">
+                    {{ stage_svg.get(stage_key, stage_svg.discovery) | safe }}
+                    {{ stage_label }}
+                </span>
+                {% elif run.status in ('running', 'queued') or run.status not in ('completed', 'failed') %}
+                <span class="inline-flex items-center gap-1.5 text-xs" style="color:#00b2c9;">
+                    {{ stage_svg.get(stage_key, stage_svg.discovery) | safe }}
+                    {{ stage_label }}
+                </span>
+                {% else %}
+                <span class="inline-flex items-center gap-1.5 text-xs" style="color:#3c4858;opacity:0.45;">
+                    {{ stage_svg.get(stage_key, stage_svg.discovery) | safe }}
+                    {{ stage_label }}
+                </span>
+                {% endif %}
+            </td>
+            <td class="py-3 px-4 text-xs font-mono" style="color:#3c4858;">{{ run.profiles_found or 0 }}</td>
+            <td class="py-3 px-4 text-xs font-mono" style="color:#3c4858;">{{ run.contacts_synced or 0 }}</td>
+            <td class="py-3 px-4 text-xs font-mono" style="color:#3c4858;">{{ run.duplicates_skipped or 0 }}</td>
+            <td class="py-3 px-4 text-xs font-mono" style="color:#3c4858;">{% if run.actual_cost %}${{ '%.2f' | format(run.actual_cost) }}{% else %}-{% endif %}</td>
+            <td class="py-3 px-5">
+                <span class="badge {{ status_colors.get(run.status, 'badge-info') }}">{{ run.status }}</span>
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endif %}

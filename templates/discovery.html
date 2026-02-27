@@ -1,381 +1,1125 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Instagram Discovery</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-gray-100">
-    <div class="container mx-auto p-6 max-w-3xl">
-        <div class="mb-6">
-            <h1 class="text-3xl font-bold text-gray-900">🔍 Instagram Lead Discovery</h1>
-            <p class="text-gray-600 mt-2">Discover and import high-quality Instagram creators</p>
+{% extends 'base.html' %}
+{% set active_page = 'discovery' %}
+{% block title %}New Discovery{% endblock %}
+{% block page_title %}New Discovery{% endblock %}
+
+{% block content %}
+    <div class="max-w-3xl mx-auto" hx-boost="false">
+        <div class="mb-6 animate-in">
+            <h1 class="text-xl font-bold" style="color:#005c69;">New Discovery Run</h1>
+            <p class="mt-1 text-sm" style="color:#3c4858;opacity:0.6;">Configure filters, launch a run, and track it through the 6-stage pipeline</p>
         </div>
-        
-        <!-- Fixed Parameters Banner -->
-        <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6">
-            <div class="flex">
-                <div class="flex-shrink-0">
-                    <svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
-                    </svg>
-                </div>
-                <div class="ml-3">
-                    <p class="text-sm text-blue-800">
-                        <strong>Auto-filters applied:</strong> English creators in USA with 30%+ USA audience, 
-                        email required, sorted by follower count descending
-                    </p>
+
+        <!-- Auto-filters Banner -->
+        <div class="card p-4 mb-5 animate-in" style="animation-delay:0.04s;border-left:3px solid #00b2c9;">
+            <div class="flex items-start gap-3">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" class="flex-shrink-0 mt-0.5" style="color:#00b2c9;">
+                    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/>
+                    <path d="M8 5V8.5M8 11H8.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+                <p class="text-xs" style="color:#3c4858;">
+                    <strong style="color:#005c69;">Auto-filters applied:</strong> English creators in USA with 30%+ USA audience,
+                    email required, sorted by follower count descending
+                </p>
+            </div>
+        </div>
+
+        <!-- Platform Selector -->
+        <div class="card p-5 mb-4 animate-in" style="animation-delay:0.08s;">
+            <h2 class="section-label mb-4">Platform</h2>
+            <div class="platform-grid" id="platform-selector">
+                <button type="button" data-platform="instagram" class="platform-card active">
+                    <div class="platform-card-icon">
+                        <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="1.5" width="13" height="13" rx="4" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.3"/><circle cx="11.8" cy="4.2" r="0.8" fill="currentColor"/></svg>
+                    </div>
+                    <div>
+                        <div class="platform-card-name">Instagram</div>
+                        <div class="platform-card-source">InsightIQ</div>
+                    </div>
+                </button>
+
+                <button type="button" class="platform-card" disabled style="opacity:0.45;cursor:default;">
+                    <div class="platform-card-icon">
+                        <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><circle cx="10" cy="5.5" r="3.5" stroke="currentColor" stroke-width="1.3"/><rect x="2" y="2" width="2" height="12" rx="1" fill="currentColor" opacity="0.6"/></svg>
+                    </div>
+                    <div>
+                        <div class="platform-card-name">Patreon</div>
+                        <div class="platform-card-source">Coming soon</div>
+                    </div>
+                </button>
+
+                <button type="button" class="platform-card" disabled style="opacity:0.45;cursor:default;">
+                    <div class="platform-card-icon">
+                        <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M13 2H3V10C3 10.55 3.45 11 4 11H9L13 14V2Z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </div>
+                    <div>
+                        <div class="platform-card-name">Facebook Groups</div>
+                        <div class="platform-card-source">Coming soon</div>
+                    </div>
+                </button>
+
+                <!-- Future platforms (demo — remove these when real adapters exist) -->
+                <button type="button" class="platform-card" disabled style="opacity:0.45;cursor:default;">
+                    <div class="platform-card-icon">
+                        <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><circle cx="5" cy="6" r="2" stroke="currentColor" stroke-width="1.3"/><circle cx="11" cy="6" r="2" stroke="currentColor" stroke-width="1.3"/><path d="M1 14C1 11.5 3 10 5 10C6.2 10 7 10.4 8 11C9 10.4 9.8 10 11 10C13 10 15 11.5 15 14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+                    </div>
+                    <div>
+                        <div class="platform-card-name">Meetup</div>
+                        <div class="platform-card-source">Coming soon</div>
+                    </div>
+                </button>
+
+                <button type="button" class="platform-card" disabled style="opacity:0.45;cursor:default;">
+                    <div class="platform-card-icon">
+                        <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M8 1C5.8 1 4 2.8 4 5V8C4 10.2 5.8 12 8 12C10.2 12 12 10.2 12 8V5C12 2.8 10.2 1 8 1Z" stroke="currentColor" stroke-width="1.3"/><path d="M8 12V15M5 15H11" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+                    </div>
+                    <div>
+                        <div class="platform-card-name">Podcasts</div>
+                        <div class="platform-card-source">Coming soon</div>
+                    </div>
+                </button>
+
+                <button type="button" class="platform-card" disabled style="opacity:0.45;cursor:default;">
+                    <div class="platform-card-icon">
+                        <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M3 3H13M3 6.5H13M3 10L8 13L13 10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </div>
+                    <div>
+                        <div class="platform-card-name">Substack</div>
+                        <div class="platform-card-source">Coming soon</div>
+                    </div>
+                </button>
+
+                <button type="button" class="platform-card" disabled style="opacity:0.45;cursor:default;">
+                    <div class="platform-card-icon">
+                        <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M2 8C2 4.7 4.7 2 8 2C11.3 2 14 4.7 14 8L14 14H8C4.7 14 2 11.3 2 8Z" stroke="currentColor" stroke-width="1.3"/><circle cx="6" cy="8" r="1" fill="currentColor"/><circle cx="10" cy="8" r="1" fill="currentColor"/></svg>
+                    </div>
+                    <div>
+                        <div class="platform-card-name">Reddit</div>
+                        <div class="platform-card-source">Coming soon</div>
+                    </div>
+                </button>
+
+                <button type="button" class="platform-card" disabled style="opacity:0.45;cursor:default;">
+                    <div class="platform-card-icon">
+                        <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><polygon points="6.5,2 6.5,14 13,8" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linejoin="round"/><line x1="3" y1="2" x2="3" y2="14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+                    </div>
+                    <div>
+                        <div class="platform-card-name">YouTube</div>
+                        <div class="platform-card-source">Coming soon</div>
+                    </div>
+                </button>
+
+                <button type="button" class="platform-card" disabled style="opacity:0.45;cursor:default;">
+                    <div class="platform-card-icon">
+                        <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M2 4L8 8L14 4M2 4V12H14V4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </div>
+                    <div>
+                        <div class="platform-card-name">Newsletters</div>
+                        <div class="platform-card-source">Coming soon</div>
+                    </div>
+                </button>
+
+                <button type="button" class="platform-card" disabled style="opacity:0.45;cursor:default;">
+                    <div class="platform-card-icon">
+                        <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M8 2C6 5 6 11 8 14M8 2C10 5 10 11 8 14M2.5 6H13.5M2.5 10H13.5" stroke="currentColor" stroke-width="1.3"/></svg>
+                    </div>
+                    <div>
+                        <div class="platform-card-name">Blogs/SEO</div>
+                        <div class="platform-card-source">Coming soon</div>
+                    </div>
+                </button>
+            </div>
+        </div>
+
+        <!-- Pipeline Diagram (HTMX) -->
+        <div class="card p-5 mb-4 animate-in" style="animation-delay:0.1s;">
+            <h2 class="section-label mb-4">Pipeline Preview</h2>
+            <div id="pipeline-stages-list"
+                 hx-get="/partials/pipeline-preview?platform=instagram"
+                 hx-trigger="load"
+                 hx-swap="innerHTML">
+            </div>
+        </div>
+
+        <!-- Staleness Warning (hidden by default) -->
+        <div id="staleness-warning" class="card p-4 mb-4 animate-in hidden" style="border-left:3px solid #f59e0b;">
+            <div class="flex items-start gap-3">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" class="flex-shrink-0 mt-0.5" style="color:#f59e0b;">
+                    <path d="M8 1L15 14H1L8 1Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                    <path d="M8 6V9M8 11.5H8.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+                <p class="text-xs" style="color:#3c4858;">
+                    <strong style="color:#92400e;">Low novelty:</strong>
+                    <span id="staleness-text"></span>
+                </p>
+            </div>
+        </div>
+
+        <!-- Similar Search Warning (hidden by default) -->
+        <div id="similarity-warning" class="card p-4 mb-4 animate-in hidden" style="border-left:3px solid #f59e0b;">
+            <div class="flex items-start gap-3">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" class="flex-shrink-0 mt-0.5" style="color:#f59e0b;">
+                    <path d="M8 1L15 14H1L8 1Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                    <path d="M8 6V9M8 11.5H8.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+                <div class="flex-1 text-xs" style="color:#3c4858;">
+                    <strong style="color:#92400e;">Similar search found:</strong>
+                    <span id="similarity-text"></span>
+                    <div class="flex gap-3 mt-2">
+                        <a id="similarity-link" href="#" class="font-medium" style="color:#00b2c9;">View results</a>
+                        <button type="button" onclick="document.getElementById('similarity-warning').classList.add('hidden')"
+                                class="font-medium" style="color:#3c4858;opacity:0.5;background:none;border:none;cursor:pointer;">
+                            Dismiss
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
-        
+
+        <!-- Presets (hidden — see roadmap dev tasks) -->
+        <div class="card p-5 mb-4 animate-in hidden" id="presets-section" style="animation-delay:0.11s;">
+            <div class="flex items-center justify-between mb-3">
+                <h2 class="section-label">Presets</h2>
+                <button type="button" id="save-preset-btn" onclick="savePreset()"
+                        class="text-xs font-medium" style="color:#00b2c9;cursor:pointer;background:none;border:none;">
+                    Save as preset
+                </button>
+            </div>
+            <select id="preset-select" class="input-field" style="background:white;" onchange="loadPreset(this.value)">
+                <option value="">Select a preset...</option>
+            </select>
+        </div>
+
         <!-- Discovery Form -->
-        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
-            <h2 class="text-xl font-bold mb-4">Start New Discovery</h2>
-            
+        <div class="card p-5 mb-4 animate-in" style="animation-delay:0.12s;">
+            <h2 class="section-label mb-4">Filters</h2>
+
             <form id="discovery-form" class="space-y-5">
-                <!-- Follower Count -->
-                <div>
-                    <label class="block text-sm font-bold text-gray-700 mb-2">Follower Range</label>
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-xs text-gray-600 mb-1">Minimum</label>
-                            <input type="number" id="min-followers" value="20000" step="1000"
-                                   class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                        </div>
-                        <div>
-                            <label class="block text-xs text-gray-600 mb-1">Maximum</label>
-                            <input type="number" id="max-followers" value="900000" step="1000"
-                                   class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                <!-- Instagram Filters (shown by default) -->
+                <div data-filters="instagram">
+                    <div>
+                        <label class="block text-xs font-semibold mb-1.5" style="color:#005c69;">Follower Range</label>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs mb-1" style="color:#3c4858;opacity:0.5;">Minimum</label>
+                                <input type="number" id="min-followers" value="20000" step="1000" class="input-field">
+                            </div>
+                            <div>
+                                <label class="block text-xs mb-1" style="color:#3c4858;opacity:0.5;">Maximum</label>
+                                <input type="number" id="max-followers" value="900000" step="1000" class="input-field">
+                            </div>
                         </div>
                     </div>
-                </div>
-                
-                <!-- Max Results -->
-                <div>
-                    <label class="block text-sm font-bold text-gray-700 mb-2">Max Results</label>
-                    <input type="number" id="max-results" value="500" min="1" max="4000" step="50"
-                           class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                    <p class="text-xs text-gray-500 mt-1">Maximum: 4000 profiles (typical: 100-500)</p>
-                </div>
-                
-                <!-- Lookalike (Mutually Exclusive) -->
-                <div class="border border-gray-200 rounded-lg p-4 bg-gray-50">
-                    <label class="block text-sm font-bold text-gray-700 mb-3">
-                        Lookalike Search <span class="text-gray-500 font-normal">(Optional)</span>
-                    </label>
-                    
-                    <div class="space-y-3">
-                        <label class="flex items-start">
-                            <input type="radio" name="lookalike-type" value="none" checked
-                                   class="mt-1 mr-3 text-blue-600">
-                            <div>
-                                <span class="text-sm font-medium">No lookalike</span>
-                                <p class="text-xs text-gray-600">Search without targeting similar accounts</p>
-                            </div>
-                        </label>
-                        
-                        <label class="flex items-start">
-                            <input type="radio" name="lookalike-type" value="creator"
-                                   class="mt-1 mr-3 text-blue-600">
-                            <div>
-                                <span class="text-sm font-medium">Creator Lookalike</span>
-                                <p class="text-xs text-gray-600">Find creators with similar content/style to a target account</p>
-                            </div>
-                        </label>
-                        
-                        <label class="flex items-start">
-                            <input type="radio" name="lookalike-type" value="audience"
-                                   class="mt-1 mr-3 text-blue-600">
-                            <div>
-                                <span class="text-sm font-medium">Audience Lookalike</span>
-                                <p class="text-xs text-gray-600">Find creators whose audience matches a target account's audience</p>
-                            </div>
-                        </label>
-                        
-                        <input type="text" id="lookalike-username" 
-                               placeholder="@username (required if lookalike selected)"
-                               class="w-full border border-gray-300 rounded-lg px-3 py-2 mt-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                               disabled>
+
+                    <div class="mt-4">
+                        <label class="block text-xs font-semibold mb-1.5" style="color:#005c69;">Max Results</label>
+                        <input type="number" id="instagram-max-results" value="500" min="1" max="4000" step="1" class="input-field">
+                        <p class="text-xs mt-1" style="color:#3c4858;opacity:0.35;">Maximum: 4000 profiles (typical: 100-500)</p>
                     </div>
-                </div>
-                
-                <!-- Optional Advanced Filters -->
-                <details class="border border-gray-200 rounded-lg p-4">
-                    <summary class="font-bold cursor-pointer text-sm text-gray-700 hover:text-gray-900">
-                        Advanced Filters (Optional)
-                    </summary>
-                    
-                    <div class="mt-4 space-y-4">
-                        <div>
-                            <label class="block text-sm font-bold text-gray-700 mb-2">
-                                Creator Interests
+
+                    <!-- Lookalike -->
+                    <div class="rounded-lg p-4 mt-4" style="border:1px solid rgba(60,72,88,0.08);background:#fafaf8;">
+                        <label class="block text-xs font-semibold mb-3" style="color:#005c69;">
+                            Lookalike Search <span style="color:#3c4858;opacity:0.35;font-weight:400;">(Optional)</span>
+                        </label>
+                        <div class="space-y-2">
+                            <label class="flex items-start gap-2 cursor-pointer">
+                                <input type="radio" name="lookalike-type" value="none" checked class="mt-1">
+                                <div>
+                                    <span class="text-xs font-medium" style="color:#005c69;">No lookalike</span>
+                                    <p class="text-xs" style="color:#3c4858;opacity:0.45;">Standard search</p>
+                                </div>
                             </label>
-                            <input type="text" id="creator-interests" 
-                                   placeholder="e.g., Travel, Fitness, Food (comma-separated)"
-                                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                            <p class="text-xs text-gray-500 mt-1">
-                                Leave empty to search all interests
-                            </p>
-                        </div>
-                        
-                        <div>
-                            <label class="block text-sm font-bold text-gray-700 mb-2">
-                                Hashtags
+                            <label class="flex items-start gap-2 cursor-pointer">
+                                <input type="radio" name="lookalike-type" value="creator" class="mt-1">
+                                <div>
+                                    <span class="text-xs font-medium" style="color:#005c69;">Creator Lookalike</span>
+                                    <p class="text-xs" style="color:#3c4858;opacity:0.45;">Similar content/style</p>
+                                </div>
                             </label>
-                            <input type="text" id="hashtags" 
-                                   placeholder="e.g., travel, wanderlust, explore (comma-separated)"
-                                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                            <p class="text-xs text-gray-500 mt-1">
-                                Leave empty to search all hashtags
-                            </p>
+                            <label class="flex items-start gap-2 cursor-pointer">
+                                <input type="radio" name="lookalike-type" value="audience" class="mt-1">
+                                <div>
+                                    <span class="text-xs font-medium" style="color:#005c69;">Audience Lookalike</span>
+                                    <p class="text-xs" style="color:#3c4858;opacity:0.45;">Matching audience</p>
+                                </div>
+                            </label>
+                            <input type="text" id="lookalike-username"
+                                   placeholder="@username (required if lookalike selected)"
+                                   class="input-field mt-1" disabled>
                         </div>
                     </div>
-                </details>
-                
-                <button type="submit" 
-                        class="w-full bg-blue-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-blue-700 transition-colors focus:ring-4 focus:ring-blue-300">
-                    🔍 Start Discovery
+
+                    <!-- Advanced Filters -->
+                    <details class="rounded-lg p-4 mt-4" style="border:1px solid rgba(60,72,88,0.08);">
+                        <summary class="text-xs font-semibold cursor-pointer" style="color:#005c69;">
+                            Advanced Filters (Optional)
+                        </summary>
+                        <div class="mt-4 space-y-4">
+                            <div>
+                                <label class="block text-xs font-semibold mb-1.5" style="color:#005c69;">Creator Interests</label>
+                                <select id="creator-interests" multiple class="input-field" style="height:112px;font-size:12px;">
+                                    <option value="Television & Film">Television & Film</option>
+                                    <option value="Music">Music</option>
+                                    <option value="Shopping & Retail">Shopping & Retail</option>
+                                    <option value="Coffee, Tea & Beverages">Coffee, Tea & Beverages</option>
+                                    <option value="Camera & Photography">Camera & Photography</option>
+                                    <option value="Clothes, Shoes, Handbags & Accessories">Clothes, Shoes, Handbags & Accessories</option>
+                                    <option value="Beer, Wine & Spirits">Beer, Wine & Spirits</option>
+                                    <option value="Sports">Sports</option>
+                                    <option value="Electronics & Computers">Electronics & Computers</option>
+                                    <option value="Gaming">Gaming</option>
+                                    <option value="Activewear">Activewear</option>
+                                    <option value="Art & Design">Art & Design</option>
+                                    <option value="Travel, Tourism & Aviation">Travel, Tourism & Aviation</option>
+                                    <option value="Business & Careers">Business & Careers</option>
+                                    <option value="Beauty & Cosmetics">Beauty & Cosmetics</option>
+                                    <option value="Healthcare & Medicine">Healthcare & Medicine</option>
+                                    <option value="Jewellery & Watches">Jewellery & Watches</option>
+                                    <option value="Restaurants, Food & Grocery">Restaurants, Food & Grocery</option>
+                                    <option value="Toys, Children & Baby">Toys, Children & Baby</option>
+                                    <option value="Fitness & Yoga">Fitness & Yoga</option>
+                                    <option value="Wedding">Wedding</option>
+                                    <option value="Tobacco & Smoking">Tobacco & Smoking</option>
+                                    <option value="Pets">Pets</option>
+                                    <option value="Healthy Lifestyle">Healthy Lifestyle</option>
+                                    <option value="Luxury Goods">Luxury Goods</option>
+                                    <option value="Home Decor, Furniture & Garden">Home Decor, Furniture & Garden</option>
+                                    <option value="Friends, Family & Relationships">Friends, Family & Relationships</option>
+                                    <option value="Cars & Motorbikes">Cars & Motorbikes</option>
+                                </select>
+                                <p class="text-xs mt-1" style="color:#3c4858;opacity:0.35;">Hold Ctrl/Cmd to select multiple</p>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold mb-1.5" style="color:#005c69;">Audience Interests</label>
+                                <select id="audience-interests" multiple class="input-field" style="height:112px;font-size:12px;">
+                                    <option value="Television & Film">Television & Film</option>
+                                    <option value="Music">Music</option>
+                                    <option value="Shopping & Retail">Shopping & Retail</option>
+                                    <option value="Coffee, Tea & Beverages">Coffee, Tea & Beverages</option>
+                                    <option value="Camera & Photography">Camera & Photography</option>
+                                    <option value="Clothes, Shoes, Handbags & Accessories">Clothes, Shoes, Handbags & Accessories</option>
+                                    <option value="Beer, Wine & Spirits">Beer, Wine & Spirits</option>
+                                    <option value="Sports">Sports</option>
+                                    <option value="Electronics & Computers">Electronics & Computers</option>
+                                    <option value="Gaming">Gaming</option>
+                                    <option value="Activewear">Activewear</option>
+                                    <option value="Art & Design">Art & Design</option>
+                                    <option value="Travel, Tourism & Aviation">Travel, Tourism & Aviation</option>
+                                    <option value="Business & Careers">Business & Careers</option>
+                                    <option value="Beauty & Cosmetics">Beauty & Cosmetics</option>
+                                    <option value="Healthcare & Medicine">Healthcare & Medicine</option>
+                                    <option value="Jewellery & Watches">Jewellery & Watches</option>
+                                    <option value="Restaurants, Food & Grocery">Restaurants, Food & Grocery</option>
+                                    <option value="Toys, Children & Baby">Toys, Children & Baby</option>
+                                    <option value="Fitness & Yoga">Fitness & Yoga</option>
+                                    <option value="Wedding">Wedding</option>
+                                    <option value="Tobacco & Smoking">Tobacco & Smoking</option>
+                                    <option value="Pets">Pets</option>
+                                    <option value="Healthy Lifestyle">Healthy Lifestyle</option>
+                                    <option value="Luxury Goods">Luxury Goods</option>
+                                    <option value="Home Decor, Furniture & Garden">Home Decor, Furniture & Garden</option>
+                                    <option value="Friends, Family & Relationships">Friends, Family & Relationships</option>
+                                    <option value="Cars & Motorbikes">Cars & Motorbikes</option>
+                                </select>
+                                <p class="text-xs mt-1" style="color:#3c4858;opacity:0.35;">Hold Ctrl/Cmd to select multiple</p>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold mb-1.5" style="color:#005c69;">Hashtags</label>
+                                <input type="text" id="hashtags" placeholder="e.g., travel, wanderlust (comma-separated)" class="input-field">
+                                <div class="flex items-center gap-2 mt-1.5">
+                                    <button type="button" id="ig-suggest-btn" disabled
+                                            class="text-xs font-medium" style="color:#9ca3af;cursor:default;background:none;border:none;padding:0;">
+                                        Suggest keywords (coming soon)
+                                    </button>
+                                </div>
+                                <div id="ig-suggestions" class="flex flex-wrap gap-1.5 mt-2 hidden">
+                                    <button type="button" onclick="acceptAllSuggestions('instagram')"
+                                            class="text-xs font-medium mr-1" style="color:#00b2c9;background:none;border:none;cursor:pointer;padding:0;">
+                                        Accept all
+                                    </button>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold mb-1" style="color:#005c69;">Bio Phrase Filter</label>
+                                <p class="text-xs mb-2" style="color:#3c4858;opacity:0.35;">Chain up to 15 phrases using AND / OR / NOT.</p>
+                                <div id="bio-phrase-rows" class="space-y-2">
+                                    <div class="flex items-center gap-2" id="bio-row-0">
+                                        <input type="text" id="bio-phrase-0" placeholder="e.g., travel guide" class="input-field">
+                                    </div>
+                                </div>
+                                <button type="button" id="bio-add-btn" onclick="bioAddClause()"
+                                        class="mt-2 text-xs font-medium hidden" style="color:#00b2c9;">
+                                    + Add AND / OR / NOT clause
+                                </button>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+
+                <!-- Patreon Filters (hidden by default) -->
+                <div data-filters="patreon" class="hidden space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold mb-1.5" style="color:#005c69;">Search Keywords</label>
+                        <div id="patreon-keyword-wrapper"
+                             class="rounded-lg p-2 min-h-[42px] flex flex-wrap gap-1 items-start cursor-text"
+                             style="border:1px solid rgba(60,72,88,0.13);background:white;"
+                             onclick="document.getElementById('patreon-keyword-input').focus()">
+                            <input type="text" id="patreon-keyword-input" placeholder="Type keyword and press Enter..."
+                                   class="flex-1 min-w-[180px] outline-none text-sm py-1 bg-transparent">
+                        </div>
+                        <div class="flex items-center gap-2 mt-1">
+                            <p class="text-xs" style="color:#3c4858;opacity:0.35;">Press Enter to add, click x to remove</p>
+                            <button type="button" id="patreon-suggest-btn" onclick="suggestKeywords('patreon')"
+                                    class="text-xs font-medium" style="color:#00b2c9;cursor:pointer;background:none;border:none;padding:0;">
+                                Suggest keywords
+                            </button>
+                        </div>
+                        <div id="patreon-suggestions" class="flex flex-wrap gap-1.5 mt-2 hidden">
+                            <button type="button" onclick="acceptAllSuggestions('patreon')"
+                                    class="text-xs font-medium mr-1" style="color:#00b2c9;background:none;border:none;cursor:pointer;padding:0;">
+                                Accept all
+                            </button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold mb-1.5" style="color:#005c69;">Max Results</label>
+                        <input type="number" id="patreon-max-results" value="100" min="1" max="500" class="input-field">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold mb-1.5" style="color:#005c69;">Location <span style="opacity:0.35;font-weight:400;">(Optional)</span></label>
+                        <input type="text" id="patreon-location" value="United States" placeholder="e.g., United States" class="input-field">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold mb-1.5" style="color:#005c69;">Patron Count <span style="opacity:0.35;font-weight:400;">(Optional)</span></label>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs mb-1" style="color:#3c4858;opacity:0.5;">Minimum</label>
+                                <input type="number" id="patreon-min-patrons" value="" placeholder="e.g. 50" class="input-field">
+                            </div>
+                            <div>
+                                <label class="block text-xs mb-1" style="color:#3c4858;opacity:0.5;">Maximum</label>
+                                <input type="number" id="patreon-max-patrons" value="" placeholder="e.g. 5000" class="input-field">
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold mb-1.5" style="color:#005c69;">Minimum Posts <span style="opacity:0.35;font-weight:400;">(Optional)</span></label>
+                        <input type="number" id="patreon-min-posts" value="" placeholder="e.g. 5" class="input-field">
+                    </div>
+                </div>
+
+                <!-- Facebook Filters (hidden by default) -->
+                <div data-filters="facebook" class="hidden space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold mb-1.5" style="color:#005c69;">Search Keywords</label>
+                        <div id="facebook-keyword-wrapper"
+                             class="rounded-lg p-2 min-h-[42px] flex flex-wrap gap-1 items-start cursor-text"
+                             style="border:1px solid rgba(60,72,88,0.13);background:white;"
+                             onclick="document.getElementById('facebook-keyword-input').focus()">
+                            <input type="text" id="facebook-keyword-input" placeholder="Type keyword and press Enter..."
+                                   class="flex-1 min-w-[180px] outline-none text-sm py-1 bg-transparent">
+                        </div>
+                        <div class="flex items-center gap-2 mt-1">
+                            <p class="text-xs" style="color:#3c4858;opacity:0.35;">Press Enter to add, click x to remove</p>
+                            <button type="button" id="facebook-suggest-btn" onclick="suggestKeywords('facebook')"
+                                    class="text-xs font-medium" style="color:#00b2c9;cursor:pointer;background:none;border:none;padding:0;">
+                                Suggest keywords
+                            </button>
+                        </div>
+                        <div id="facebook-suggestions" class="flex flex-wrap gap-1.5 mt-2 hidden">
+                            <button type="button" onclick="acceptAllSuggestions('facebook')"
+                                    class="text-xs font-medium mr-1" style="color:#00b2c9;background:none;border:none;cursor:pointer;padding:0;">
+                                Accept all
+                            </button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold mb-1.5" style="color:#005c69;">Max Results</label>
+                        <input type="number" id="facebook-max-results" value="100" min="1" max="500" class="input-field">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold mb-1.5" style="color:#005c69;">Member Count <span style="opacity:0.35;font-weight:400;">(Optional)</span></label>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs mb-1" style="color:#3c4858;opacity:0.5;">Minimum</label>
+                                <input type="number" id="facebook-min-members" value="500" class="input-field">
+                            </div>
+                            <div>
+                                <label class="block text-xs mb-1" style="color:#3c4858;opacity:0.5;">Maximum</label>
+                                <input type="number" id="facebook-max-members" value="50000" class="input-field">
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold mb-1.5" style="color:#005c69;">Visibility <span style="opacity:0.35;font-weight:400;">(Optional)</span></label>
+                        <select id="facebook-visibility" class="input-field" style="background:white;">
+                            <option value="all">All groups</option>
+                            <option value="public">Public groups only</option>
+                            <option value="private">Private groups only</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold mb-1.5" style="color:#005c69;">Min Posts / Month <span style="opacity:0.35;font-weight:400;">(Optional)</span></label>
+                        <input type="number" id="facebook-min-posts-month" value="" placeholder="e.g. 10" class="input-field">
+                    </div>
+                    <div class="card p-3" style="border-left:3px solid #00b2c9;">
+                        <p class="text-xs" style="color:#3c4858;">
+                            <strong style="color:#005c69;">Enrichment included:</strong> Website crawl for emails,
+                            social profiles (IG, YouTube, Twitter), Apollo.io contact lookup.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- BDR Round Robin -->
+                <div style="border-top:1px solid rgba(60,72,88,0.06);padding-top:16px;">
+                    <label class="block text-xs font-semibold mb-1.5" style="color:#005c69;">BDR Round Robin</label>
+                    <p class="text-xs mb-3" style="color:#3c4858;opacity:0.35;">Leads distributed equally among selected BDRs.</p>
+                    <div class="grid grid-cols-2 gap-2" id="bdr-checkboxes">
+                        <label class="flex items-center gap-2 text-xs cursor-pointer" style="color:#3c4858;">
+                            <input type="checkbox" class="bdr-checkbox" value="Miriam Plascencia" checked> Miriam Plascencia
+                        </label>
+                        <label class="flex items-center gap-2 text-xs cursor-pointer" style="color:#3c4858;">
+                            <input type="checkbox" class="bdr-checkbox" value="Majo Juarez" checked> Majo Juarez
+                        </label>
+                        <label class="flex items-center gap-2 text-xs cursor-pointer" style="color:#3c4858;">
+                            <input type="checkbox" class="bdr-checkbox" value="Nicole Roma" checked> Nicole Roma
+                        </label>
+                        <label class="flex items-center gap-2 text-xs cursor-pointer" style="color:#3c4858;">
+                            <input type="checkbox" class="bdr-checkbox" value="Salvatore Renteria" checked> Salvatore Renteria
+                        </label>
+                        <label class="flex items-center gap-2 text-xs cursor-pointer" style="color:#3c4858;">
+                            <input type="checkbox" class="bdr-checkbox" value="Sofia Gonzalez" checked> Sofia Gonzalez
+                        </label>
+                        <label class="flex items-center gap-2 text-xs cursor-pointer" style="color:#3c4858;">
+                            <input type="checkbox" class="bdr-checkbox" value="Tanya Pina" checked> Tanya Pina
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Budget & Cost Estimate -->
+                <div class="mt-5 pt-4" style="border-top:1px solid #f3f4f6;">
+                    <h2 class="section-label mb-2">Budget</h2>
+                    <div class="flex items-center gap-3">
+                        <div class="relative flex-1">
+                            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style="color:#3c4858;opacity:0.5;">$</span>
+                            <input type="number" id="budget-input" step="0.01" min="0"
+                                   class="input-field w-full" style="padding-left:1.5rem;"
+                                   placeholder="Platform default">
+                        </div>
+                        <div id="cost-estimate-badge" class="text-xs whitespace-nowrap" style="color:#3c4858;opacity:0.5;"></div>
+                    </div>
+                    <p class="text-xs mt-1.5" style="color:#3c4858;opacity:0.35;">
+                        Leave blank to use platform default. Pipeline stops if cost exceeds budget.
+                    </p>
+                </div>
+
+                <button type="submit" id="submit-btn" class="btn-primary w-full py-3">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M14.5 14.5L10.5 10.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                    Launch Discovery Run
                 </button>
             </form>
         </div>
-        
-        <!-- Job Status (Hidden until job starts) -->
-        <div id="job-status" class="bg-white rounded-lg shadow-md p-6 mb-6 hidden">
-            <h2 class="text-xl font-bold mb-4">Job Status</h2>
-            
-            <div class="space-y-4">
-                <div class="flex items-center justify-between">
-                    <span class="font-bold text-gray-700">Status:</span>
-                    <span id="status-badge" class="px-3 py-1 rounded-full text-sm font-medium"></span>
-                </div>
-                
-                <div class="flex items-center justify-between">
-                    <span class="font-bold text-gray-700">Profiles Found:</span>
-                    <span id="profiles-found" class="text-3xl font-bold text-gray-900">0</span>
-                </div>
-                
-                <div class="flex items-center justify-between">
-                    <span class="font-bold text-gray-700">New Contacts Created:</span>
-                    <span id="contacts-created" class="text-3xl font-bold text-green-600">0</span>
-                </div>
-                
-                <div class="flex items-center justify-between">
-                    <span class="font-bold text-gray-700">Duplicates Skipped:</span>
-                    <span id="duplicates-skipped" class="text-sm text-gray-500">0</span>
-                </div>
-                
-                <!-- Progress indicator for discovering status -->
-                <div id="progress-indicator" class="hidden">
-                    <div class="flex items-center text-sm text-gray-600">
-                        <svg class="animate-spin h-4 w-4 mr-2 text-blue-600" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        <span id="progress-text">Processing...</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Recent Jobs -->
-        <div class="bg-white rounded-lg shadow-md p-6">
-            <h2 class="text-xl font-bold mb-4">Recent Discovery Jobs</h2>
-            <div id="recent-jobs"></div>
-        </div>
     </div>
-    
-    <script>
-        // Enable/disable lookalike username input based on selection
-        document.querySelectorAll('input[name="lookalike-type"]').forEach(radio => {
-            radio.addEventListener('change', (e) => {
-                const usernameInput = document.getElementById('lookalike-username');
-                usernameInput.disabled = e.target.value === 'none';
-                if (e.target.value === 'none') {
-                    usernameInput.value = '';
-                }
-            });
+{% endblock %}
+
+{% block scripts %}
+<script>
+if (!window._discoveryLoaded) {
+window._discoveryLoaded = true;
+(function() {
+// ── Platform switching ───────────────────────────────────────────────
+var selectedPlatform = 'instagram';
+
+document.querySelectorAll('.platform-card').forEach(btn => {
+    btn.addEventListener('click', () => {
+        if (btn.disabled) return;
+        selectedPlatform = btn.dataset.platform;
+        document.querySelectorAll('.platform-card').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        // Generic filter section toggle
+        document.querySelectorAll('[data-filters]').forEach(el => {
+            el.classList.toggle('hidden', el.dataset.filters !== selectedPlatform);
         });
-        
-        // Form submission
-        document.getElementById('discovery-form').addEventListener('submit', async (e) => {
+
+        // Update pipeline diagram via HTMX
+        htmx.ajax('GET', '/partials/pipeline-preview?platform=' + selectedPlatform, {target: '#pipeline-stages-list', swap: 'innerHTML'});
+    });
+});
+
+// ── BDR ──────────────────────────────────────────────────────────────
+function getBdrNames() {
+    return Array.from(document.querySelectorAll('.bdr-checkbox:checked')).map(cb => cb.value);
+}
+
+// ── Tag inputs ───────────────────────────────────────────────────────
+var _tagState = {};
+
+function initTagInput(wrapperId, inputId) {
+    _tagState[wrapperId] = [];
+    const inp = document.getElementById(inputId);
+    inp.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
             e.preventDefault();
-            
-            // Validate lookalike
-            const lookalikeType = document.querySelector('input[name="lookalike-type"]:checked').value;
-            const lookalikeUsername = document.getElementById('lookalike-username').value.trim();
-            
-            if (lookalikeType !== 'none' && !lookalikeUsername) {
-                alert('Please enter a username for lookalike search, or select "No lookalike"');
-                return;
+            const val = this.value.trim();
+            if (val) {
+                _tagState[wrapperId].push(val);
+                this.value = '';
+                _renderTags(wrapperId, inputId);
             }
-            
-            // Build filters
-            const filters = {
-                max_results: parseInt(document.getElementById('max-results').value),
-                follower_count: {
-                    min: parseInt(document.getElementById('min-followers').value),
-                    max: parseInt(document.getElementById('max-followers').value)
-                }
-            };
-            
-            // Validate follower range
-            if (filters.follower_count.min >= filters.follower_count.max) {
-                alert('Minimum followers must be less than maximum followers');
-                return;
-            }
-            
-            // Add lookalike if selected
-            if (lookalikeType !== 'none') {
-                filters.lookalike_type = lookalikeType;
-                filters.lookalike_username = lookalikeUsername;
-            }
-            
-            // Add creator interests if provided
-            const interests = document.getElementById('creator-interests').value.trim();
-            if (interests) {
-                filters.creator_interests = interests.split(',').map(s => s.trim()).filter(Boolean);
-            }
-            
-            // Add hashtags if provided
-            const hashtags = document.getElementById('hashtags').value.trim();
-            if (hashtags) {
-                filters.hashtags = hashtags.split(',').map(h => ({name: h.trim()})).filter(h => h.name);
-            }
-            
-            // Start job
-            try {
-                const response = await fetch('/api/discovery/instagram', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(filters)
-                });
-                
-                const result = await response.json();
-                
-                if (response.ok) {
-                    // Show status section
-                    document.getElementById('job-status').classList.remove('hidden');
-                    
-                    // Start polling
-                    pollJobStatus(result.job_id);
-                } else {
-                    alert('Error: ' + result.error);
-                }
-            } catch (error) {
-                alert('Error starting discovery: ' + error.message);
-            }
+        }
+    });
+}
+
+function _renderTags(wrapperId, inputId) {
+    const wrapper = document.getElementById(wrapperId);
+    const inp = document.getElementById(inputId);
+    Array.from(wrapper.children).forEach(child => { if (child !== inp) child.remove(); });
+    _tagState[wrapperId].forEach((tag, i) => {
+        const span = document.createElement('span');
+        span.className = 'tag-pill';
+        span.innerHTML = `${escapeHtml(tag)} <button type="button" onclick="_removeTag('${wrapperId}','${inputId}',${i})">&times;</button>`;
+        wrapper.insertBefore(span, inp);
+    });
+}
+
+function _removeTag(wrapperId, inputId, index) {
+    _tagState[wrapperId].splice(index, 1);
+    _renderTags(wrapperId, inputId);
+}
+
+function getTagValues(wrapperId) { return (_tagState[wrapperId] || []).slice(); }
+
+initTagInput('patreon-keyword-wrapper', 'patreon-keyword-input');
+initTagInput('facebook-keyword-wrapper', 'facebook-keyword-input');
+
+// ── Bio phrase advanced ──────────────────────────────────────────────
+var BIO_MAX = 15;
+
+document.getElementById('bio-phrase-0').addEventListener('input', function() {
+    const rows = document.querySelectorAll('#bio-phrase-rows .bio-action-row').length + 1;
+    document.getElementById('bio-add-btn').classList.toggle('hidden', !this.value.trim() || rows >= BIO_MAX);
+});
+
+function bioAddClause() {
+    const rows = document.querySelectorAll('#bio-phrase-rows .bio-action-row');
+    if (rows.length + 1 >= BIO_MAX) return;
+    const idx = rows.length + 1;
+    const container = document.getElementById('bio-phrase-rows');
+    const row = document.createElement('div');
+    row.className = 'bio-action-row flex items-center gap-2';
+    row.id = `bio-row-${idx}`;
+    row.innerHTML = `
+        <select id="bio-action-${idx}" class="input-field" style="width:auto;padding:8px;font-size:12px;">
+            <option value="" disabled selected>Action</option>
+            <option value="AND">AND</option>
+            <option value="OR">OR</option>
+            <option value="NOT">NOT</option>
+        </select>
+        <input type="text" id="bio-phrase-${idx}" placeholder="phrase..." class="input-field hidden" style="flex:1;">
+        <button type="button" onclick="this.parentElement.remove();bioRefreshAddBtn()" class="text-xs" style="color:#3c4858;opacity:0.4;">&times;</button>`;
+    row.querySelector('select').addEventListener('change', function() {
+        row.querySelector('input[type=text]').classList.toggle('hidden', !this.value);
+        bioRefreshAddBtn();
+    });
+    container.appendChild(row);
+    bioRefreshAddBtn();
+}
+
+function bioRefreshAddBtn() {
+    const rows = document.querySelectorAll('#bio-phrase-rows .bio-action-row');
+    const total = 1 + rows.length;
+    const base = document.getElementById('bio-phrase-0').value.trim();
+    let lastOk = true;
+    if (rows.length > 0) {
+        const last = rows[rows.length - 1].querySelector('input[type=text]');
+        lastOk = last && !last.classList.contains('hidden');
+    }
+    document.getElementById('bio-add-btn').classList.toggle('hidden', !base || total >= BIO_MAX || !lastOk);
+}
+
+function getBioPhrases() {
+    const base = document.getElementById('bio-phrase-0').value.trim();
+    const advanced = [];
+    document.querySelectorAll('#bio-phrase-rows .bio-action-row').forEach(row => {
+        const idx = row.id.replace('bio-row-', '');
+        const action = document.getElementById(`bio-action-${idx}`)?.value;
+        const phrase = document.getElementById(`bio-phrase-${idx}`)?.value.trim();
+        if (action && phrase) advanced.push({ bio_phrase: phrase, action });
+    });
+    return { base, advanced };
+}
+
+// ── Lookalike toggle ─────────────────────────────────────────────────
+document.querySelectorAll('input[name="lookalike-type"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+        const inp = document.getElementById('lookalike-username');
+        inp.disabled = this.value === 'none';
+        if (this.value === 'none') inp.value = '';
+    });
+});
+
+// ── Form submission → POST /api/runs → redirect to /runs/<id> ────────
+document.getElementById('discovery-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const filters = buildFilters();
+    if (!filters) return; // validation failed
+
+    const bdrNames = getBdrNames();
+    if (bdrNames.length === 0) {
+        showModal('Select at least one BDR', {type: 'warning', title: 'Missing BDR'});
+        return;
+    }
+
+    // Pre-launch cost confirmation (best-effort)
+    try {
+        const estimate = await fetchCostEstimate();
+        if (estimate && estimate.needs_confirmation) {
+            const budgetLabel = filters.max_budget
+                ? '$' + filters.max_budget.toFixed(2)
+                : '$' + estimate.default_budget.toFixed(2) + ' (default)';
+            const ok = await showConfirm(
+                'Estimated cost: $' + estimate.estimated_cost.toFixed(2) + '\nBudget: ' + budgetLabel,
+                {title: 'Confirm launch', confirmLabel: 'Launch'}
+            );
+            if (!ok) return;
+        }
+    } catch(e) { /* don't block launch if estimate fails */ }
+
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true;
+    btn.innerHTML = 'Launching...';
+
+    try {
+        const res = await fetch('/api/runs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                platform: selectedPlatform,
+                filters: filters,
+                bdr_names: bdrNames,
+            }),
         });
-        
-        // Poll job status
-        function pollJobStatus(jobId) {
-            const interval = setInterval(async () => {
-                try {
-                    const response = await fetch(`/api/discovery/jobs/${jobId}`);
-                    const job = await response.json();
-                    
-                    // Update status badge
-                    const statusBadge = document.getElementById('status-badge');
-                    const statusText = job.status.toUpperCase();
-                    statusBadge.textContent = statusText;
-                    
-                    const statusColors = {
-                        'COMPLETED': 'bg-green-100 text-green-800',
-                        'FAILED': 'bg-red-100 text-red-800',
-                        'DISCOVERING': 'bg-blue-100 text-blue-800',
-                        'IMPORTING': 'bg-purple-100 text-purple-800',
-                        'QUEUED': 'bg-yellow-100 text-yellow-800'
-                    };
-                    
-                    statusBadge.className = `px-3 py-1 rounded-full text-sm font-medium ${statusColors[statusText] || 'bg-gray-100 text-gray-800'}`;
-                    
-                    // Show/hide progress indicator
-                    const progressIndicator = document.getElementById('progress-indicator');
-                    const progressText = document.getElementById('progress-text');
-                    
-                    if (job.status === 'discovering') {
-                        progressIndicator.classList.remove('hidden');
-                        progressText.textContent = 'Searching InsightIQ database...';
-                    } else if (job.status === 'importing') {
-                        progressIndicator.classList.remove('hidden');
-                        progressText.textContent = 'Importing to HubSpot...';
-                    } else {
-                        progressIndicator.classList.add('hidden');
-                    }
-                    
-                    // Update counts
-                    document.getElementById('profiles-found').textContent = job.profiles_found || 0;
-                    document.getElementById('contacts-created').textContent = job.new_contacts_created || 0;
-                    document.getElementById('duplicates-skipped').textContent = job.duplicates_skipped || 0;
-                    
-                    // Stop polling when complete
-                    if (job.status === 'completed' || job.status === 'failed') {
-                        clearInterval(interval);
-                        loadRecentJobs();
-                        
-                        if (job.status === 'failed') {
-                            alert('Discovery failed: ' + (job.error || 'Unknown error'));
-                        } else {
-                            // Success notification
-                            if (job.new_contacts_created > 0) {
-                                alert(`✅ Discovery complete! Created ${job.new_contacts_created} new contacts. They will be enriched automatically.`);
-                            } else {
-                                alert('⚠️ Discovery complete, but no new contacts were created (all were duplicates).');
-                            }
-                        }
-                    }
-                } catch (error) {
-                    console.error('Error polling job status:', error);
-                }
-            }, 3000); // Poll every 3 seconds
+
+        const data = await res.json();
+
+        if (res.ok && data.id) {
+            window.location.href = `/runs/${data.id}`;
+        } else {
+            showModal(data.error || 'Unknown error', {type: 'error'});
+            btn.disabled = false;
+            btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M14.5 14.5L10.5 10.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg> Launch Discovery Run';
         }
-        
-        // Load recent jobs
-        async function loadRecentJobs() {
-            try {
-                const response = await fetch('/api/discovery/jobs');
-                const jobs = await response.json();
-                
-                const container = document.getElementById('recent-jobs');
-                
-                if (jobs.length === 0) {
-                    container.innerHTML = '<p class="text-gray-500 text-sm">No recent jobs</p>';
-                    return;
-                }
-                
-                container.innerHTML = jobs.slice(0, 10).map(job => `
-                    <div class="border-b border-gray-200 py-4 last:border-b-0">
-                        <div class="flex justify-between items-start mb-2">
-                            <div>
-                                <span class="font-bold text-sm">Instagram Discovery</span>
-                                <span class="text-xs text-gray-500 ml-2">
-                                    ${new Date(job.started_at).toLocaleString()}
-                                </span>
-                            </div>
-                            <span class="px-2 py-1 rounded text-xs font-medium ${
-                                job.status === 'completed' ? 'bg-green-100 text-green-800' :
-                                job.status === 'failed' ? 'bg-red-100 text-red-800' :
-                                'bg-yellow-100 text-yellow-800'
-                            }">
-                                ${job.status}
-                            </span>
-                        </div>
-                        <div class="text-xs text-gray-600">
-                            Found: ${job.profiles_found || 0} | 
-                            Created: ${job.new_contacts_created || 0} | 
-                            Duplicates: ${job.duplicates_skipped || 0}
-                        </div>
-                    </div>
-                `).join('');
-            } catch (error) {
-                console.error('Error loading recent jobs:', error);
-            }
+    } catch (err) {
+        showModal(err.message, {type: 'error'});
+        btn.disabled = false;
+        btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M14.5 14.5L10.5 10.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg> Launch Discovery Run';
+    }
+});
+
+function buildFilters(opts) {
+    var quiet = opts && opts.quiet;
+    const filters = {};
+
+    if (selectedPlatform === 'instagram') {
+        filters.max_results = parseInt(document.getElementById('instagram-max-results').value);
+        filters.follower_count = {
+            min: parseInt(document.getElementById('min-followers').value),
+            max: parseInt(document.getElementById('max-followers').value),
+        };
+        if (filters.follower_count.min >= filters.follower_count.max) {
+            if (!quiet) showModal('Min followers must be less than max', {type: 'warning', title: 'Invalid range'});
+            return null;
         }
-        
-        // Load on page load
-        loadRecentJobs();
-        setInterval(loadRecentJobs, 30000); // Refresh every 30 seconds
-    </script>
-</body>
-</html>
+
+        const lt = document.querySelector('input[name="lookalike-type"]:checked').value;
+        const lu = document.getElementById('lookalike-username').value.trim();
+        if (lt !== 'none') {
+            if (!lu) { if (!quiet) showModal('Enter a username for lookalike search', {type: 'warning', title: 'Missing username'}); return null; }
+            filters.lookalike_type = lt;
+            filters.lookalike_username = lu;
+        }
+
+        const ci = Array.from(document.getElementById('creator-interests').selectedOptions).map(o => o.value);
+        if (ci.length) filters.creator_interests = ci;
+        const ai = Array.from(document.getElementById('audience-interests').selectedOptions).map(o => o.value);
+        if (ai.length) filters.audience_interests = ai;
+
+        const hashtags = document.getElementById('hashtags').value.trim();
+        if (hashtags) filters.hashtags = hashtags.split(',').map(h => ({name: h.trim()})).filter(h => h.name);
+
+        const { base, advanced } = getBioPhrases();
+        if (base) {
+            filters.bio_phrase = base;
+            if (advanced.length) filters.bio_phrase_advanced = advanced;
+        }
+
+    } else if (selectedPlatform === 'patreon') {
+        const kw = getTagValues('patreon-keyword-wrapper');
+        if (!kw.length) { if (!quiet) showModal('Enter at least one search keyword', {type: 'warning', title: 'Missing keywords'}); return null; }
+        filters.search_keywords = kw;
+        filters.max_results = parseInt(document.getElementById('patreon-max-results').value);
+
+        const loc = document.getElementById('patreon-location').value.trim();
+        if (loc) filters.location = loc;
+
+        const minP = parseInt(document.getElementById('patreon-min-patrons').value) || 0;
+        const maxP = parseInt(document.getElementById('patreon-max-patrons').value) || 0;
+        if (minP > 0) filters.min_patrons = minP;
+        if (maxP > 0) filters.max_patrons = maxP;
+        if (minP > 0 && maxP > 0 && minP >= maxP) { if (!quiet) showModal('Min patrons must be less than max', {type: 'warning', title: 'Invalid range'}); return null; }
+
+        const minPosts = parseInt(document.getElementById('patreon-min-posts').value) || 0;
+        if (minPosts > 0) filters.min_posts = minPosts;
+
+    } else if (selectedPlatform === 'facebook') {
+        const kw = getTagValues('facebook-keyword-wrapper');
+        if (!kw.length) { if (!quiet) showModal('Enter at least one search keyword', {type: 'warning', title: 'Missing keywords'}); return null; }
+        filters.keywords = kw;
+        filters.max_results = parseInt(document.getElementById('facebook-max-results').value);
+
+        const minM = parseInt(document.getElementById('facebook-min-members').value) || 0;
+        const maxM = parseInt(document.getElementById('facebook-max-members').value) || 0;
+        if (minM > 0) filters.min_members = minM;
+        if (maxM > 0) filters.max_members = maxM;
+        if (minM > 0 && maxM > 0 && minM >= maxM) { if (!quiet) showModal('Min members must be less than max', {type: 'warning', title: 'Invalid range'}); return null; }
+
+        const vis = document.getElementById('facebook-visibility').value;
+        if (vis !== 'all') filters.visibility = vis;
+
+        const minPPM = parseInt(document.getElementById('facebook-min-posts-month').value) || 0;
+        if (minPPM > 0) filters.min_posts_per_month = minPPM;
+    }
+
+    // Budget (shared across all platforms)
+    const budgetVal = document.getElementById('budget-input').value.trim();
+    if (budgetVal) filters.max_budget = parseFloat(budgetVal);
+
+    return filters;
+}
+
+// ── Cost estimate ────────────────────────────────────────────────────
+var _costTimer;
+async function fetchCostEstimate() {
+    try {
+        const filters = buildFilters({quiet: true});
+        if (!filters) return;
+        const res = await fetch('/api/cost-estimate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({platform: selectedPlatform, filters}),
+        });
+        const data = await res.json();
+        const badge = document.getElementById('cost-estimate-badge');
+        if (data.estimated_cost !== undefined) {
+            badge.textContent = 'Est. ~$' + data.estimated_cost.toFixed(2);
+            badge.style.color = data.needs_confirmation ? '#f59e0b' : '#3c4858';
+            badge.style.opacity = '1';
+        }
+        // Update placeholder with default budget
+        if (data.default_budget) {
+            document.getElementById('budget-input').placeholder = '$' + data.default_budget.toFixed(2) + ' (default)';
+        }
+        return data;
+    } catch(e) { /* best-effort */ return null; }
+}
+
+function debouncedCostEstimate() {
+    clearTimeout(_costTimer);
+    _costTimer = setTimeout(fetchCostEstimate, 800);
+}
+
+// Trigger cost estimate on filter changes + platform switch
+document.querySelectorAll('.input-field').forEach(el => {
+    el.addEventListener('change', debouncedCostEstimate);
+    el.addEventListener('input', debouncedCostEstimate);
+});
+document.querySelectorAll('.platform-card').forEach(btn => {
+    btn.addEventListener('click', () => { if (!btn.disabled) setTimeout(fetchCostEstimate, 200); });
+});
+// Initial fetch
+setTimeout(fetchCostEstimate, 500);
+
+// ── Presets ──────────────────────────────────────────────────────────
+var _presets = [];
+
+async function loadPresets() {
+    try {
+        const res = await fetch('/api/presets?platform=' + selectedPlatform);
+        _presets = await res.json();
+        const sel = document.getElementById('preset-select');
+        sel.innerHTML = '<option value="">Select a preset...</option>';
+        _presets.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = p.name;
+            sel.appendChild(opt);
+        });
+    } catch(e) { console.error('Failed to load presets:', e); }
+}
+
+function loadPreset(presetId) {
+    if (!presetId) return;
+    const preset = _presets.find(p => String(p.id) === String(presetId));
+    if (!preset) return;
+
+    const f = preset.filters;
+    if (selectedPlatform === 'instagram') {
+        if (f.max_results) document.getElementById('instagram-max-results').value = f.max_results;
+        if (f.follower_count) {
+            document.getElementById('min-followers').value = f.follower_count.min || 20000;
+            document.getElementById('max-followers').value = f.follower_count.max || 900000;
+        }
+        if (f.bio_phrase) document.getElementById('bio-phrase-0').value = f.bio_phrase;
+    } else if (selectedPlatform === 'patreon') {
+        if (f.max_results) document.getElementById('patreon-max-results').value = f.max_results;
+        if (f.location) document.getElementById('patreon-location').value = f.location;
+        if (f.search_keywords && f.search_keywords.length) {
+            _tagState['patreon-keyword-wrapper'] = f.search_keywords.slice();
+            _renderTags('patreon-keyword-wrapper', 'patreon-keyword-input');
+        }
+    } else if (selectedPlatform === 'facebook') {
+        if (f.max_results) document.getElementById('facebook-max-results').value = f.max_results;
+        if (f.keywords && f.keywords.length) {
+            _tagState['facebook-keyword-wrapper'] = f.keywords.slice();
+            _renderTags('facebook-keyword-wrapper', 'facebook-keyword-input');
+        }
+    }
+}
+
+async function savePreset() {
+    const filters = buildFilters();
+    if (!filters) return;
+    const name = await showPrompt('Name this preset:', {title: 'Save Preset', placeholder: 'e.g. Travel micro-influencers'});
+    if (!name) return;
+    try {
+        const res = await fetch('/api/presets', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name, platform: selectedPlatform, filters}),
+        });
+        if (res.ok) loadPresets();
+        else showModal('Failed to save preset', {type: 'error'});
+    } catch(e) { showModal(e.message, {type: 'error'}); }
+}
+
+// Load presets on init + platform switch
+loadPresets();
+document.querySelectorAll('.platform-card').forEach(btn => {
+    btn.addEventListener('click', () => { if (!btn.disabled) setTimeout(loadPresets, 100); });
+});
+
+// ── AI Keyword Suggestions ──────────────────────────────────────────
+var _suggestionState = {};
+
+function _getExistingKeywords(platform) {
+    if (platform === 'instagram') {
+        const hashtags = document.getElementById('hashtags').value.trim();
+        const tags = hashtags ? hashtags.split(',').map(t => t.trim()).filter(Boolean) : [];
+        const bio = document.getElementById('bio-phrase-0').value.trim();
+        if (bio) tags.push(bio);
+        return tags;
+    } else if (platform === 'patreon') {
+        return getTagValues('patreon-keyword-wrapper');
+    } else if (platform === 'facebook') {
+        return getTagValues('facebook-keyword-wrapper');
+    }
+    return [];
+}
+
+function _getSuggestBtn(platform) {
+    const ids = {instagram: 'ig-suggest-btn', patreon: 'patreon-suggest-btn', facebook: 'facebook-suggest-btn'};
+    return document.getElementById(ids[platform]);
+}
+
+function _getSuggestionsContainer(platform) {
+    const ids = {instagram: 'ig-suggestions', patreon: 'patreon-suggestions', facebook: 'facebook-suggestions'};
+    return document.getElementById(ids[platform]);
+}
+
+async function suggestKeywords(platform) {
+    const keywords = _getExistingKeywords(platform);
+    if (!keywords.length) {
+        showModal('Enter at least one keyword first', {type: 'warning', title: 'No keywords'});
+        return;
+    }
+
+    const btn = _getSuggestBtn(platform);
+    const origText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Suggesting...';
+
+    try {
+        const res = await fetch('/api/keyword-suggestions', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({platform, keywords}),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+            showModal(data.error || 'Suggestion failed', {type: 'error'});
+            return;
+        }
+
+        _suggestionState[platform] = data.suggestions || [];
+        _renderSuggestions(platform);
+    } catch (e) {
+        showModal('Failed to get suggestions', {type: 'error'});
+    } finally {
+        btn.disabled = false;
+        btn.textContent = origText;
+    }
+}
+
+function _renderSuggestions(platform) {
+    const container = _getSuggestionsContainer(platform);
+    const suggestions = _suggestionState[platform] || [];
+    if (!suggestions.length) {
+        container.classList.add('hidden');
+        return;
+    }
+
+    // Keep the "Accept all" button, clear chips
+    const acceptAllBtn = container.querySelector('button');
+    container.innerHTML = '';
+    container.appendChild(acceptAllBtn);
+
+    suggestions.forEach((s, i) => {
+        const chip = document.createElement('span');
+        chip.className = 'suggestion-chip';
+        chip.innerHTML = `<button type="button" onclick="acceptSuggestion('${platform}',${i})" title="Accept">+</button> ${escapeHtml(s)} <button type="button" onclick="dismissSuggestion('${platform}',${i})" title="Dismiss">&times;</button>`;
+        container.appendChild(chip);
+    });
+
+    container.classList.remove('hidden');
+}
+
+function acceptSuggestion(platform, index) {
+    const suggestions = _suggestionState[platform] || [];
+    const kw = suggestions[index];
+    if (!kw) return;
+
+    if (platform === 'instagram') {
+        const inp = document.getElementById('hashtags');
+        const cur = inp.value.trim();
+        inp.value = cur ? cur + ', ' + kw : kw;
+    } else {
+        const wrapperId = platform + '-keyword-wrapper';
+        const inputId = platform + '-keyword-input';
+        _tagState[wrapperId].push(kw);
+        _renderTags(wrapperId, inputId);
+    }
+
+    suggestions.splice(index, 1);
+    _renderSuggestions(platform);
+}
+
+function dismissSuggestion(platform, index) {
+    const suggestions = _suggestionState[platform] || [];
+    suggestions.splice(index, 1);
+    _renderSuggestions(platform);
+}
+
+function acceptAllSuggestions(platform) {
+    const suggestions = (_suggestionState[platform] || []).slice();
+    suggestions.forEach(kw => {
+        if (platform === 'instagram') {
+            const inp = document.getElementById('hashtags');
+            const cur = inp.value.trim();
+            inp.value = cur ? cur + ', ' + kw : kw;
+        } else {
+            const wrapperId = platform + '-keyword-wrapper';
+            const inputId = platform + '-keyword-input';
+            _tagState[wrapperId].push(kw);
+            _renderTags(wrapperId, inputId);
+        }
+    });
+    _suggestionState[platform] = [];
+    _renderSuggestions(platform);
+}
+
+// ── Staleness check ──────────────────────────────────────────────────
+async function checkStaleness() {
+    try {
+        const filters = buildFilters({quiet: true});
+        if (!filters) return;
+        const url = '/api/filter-staleness?platform=' + selectedPlatform +
+                    '&filters=' + encodeURIComponent(JSON.stringify(filters));
+        const res = await fetch(url);
+        const data = await res.json();
+        const el = document.getElementById('staleness-warning');
+        if (data.stale) {
+            document.getElementById('staleness-text').textContent =
+                `Last run with these filters: ${data.last_run_days_ago}d ago, ${data.novelty_rate}% novelty. Consider adjusting filters.`;
+            el.classList.remove('hidden');
+        } else {
+            el.classList.add('hidden');
+        }
+    } catch(e) { /* staleness check is best-effort */ }
+}
+
+// Debounced staleness check on filter changes
+var _stalenessTimer;
+function debouncedStaleness() {
+    clearTimeout(_stalenessTimer);
+    _stalenessTimer = setTimeout(checkStaleness, 1500);
+}
+document.querySelectorAll('.input-field').forEach(el => {
+    el.addEventListener('change', debouncedStaleness);
+});
+
+// ── Similar search detection ────────────────────────────────────────
+async function checkSimilarity() {
+    try {
+        const filters = buildFilters({quiet: true});
+        if (!filters) return;
+        const res = await fetch('/api/filter-similarity', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({platform: selectedPlatform, filters}),
+        });
+        const data = await res.json();
+        const el = document.getElementById('similarity-warning');
+        if (data.similar_runs && data.similar_runs.length > 0) {
+            const top = data.similar_runs[0];
+            const pct = Math.round(top.similarity * 100);
+            document.getElementById('similarity-text').textContent =
+                `This looks like a run from ${top.days_ago}d ago (${pct}% similar). Found ${top.profiles_found} profiles, ${top.contacts_synced} synced.`;
+            document.getElementById('similarity-link').href = '/runs/' + top.run_id;
+            el.classList.remove('hidden');
+        } else {
+            el.classList.add('hidden');
+        }
+    } catch(e) { /* best-effort */ }
+}
+
+// Debounced similarity check on filter changes
+var _similarityTimer;
+function debouncedSimilarity() {
+    clearTimeout(_similarityTimer);
+    _similarityTimer = setTimeout(checkSimilarity, 2000);
+}
+document.querySelectorAll('.input-field').forEach(el => {
+    el.addEventListener('change', debouncedSimilarity);
+});
+document.querySelectorAll('.platform-card').forEach(btn => {
+    btn.addEventListener('click', () => { if (!btn.disabled) setTimeout(checkSimilarity, 300); });
+});
+
+// Expose functions used by inline onclick/onchange handlers
+window.bioAddClause = bioAddClause;
+window.bioRefreshAddBtn = bioRefreshAddBtn;
+window._removeTag = _removeTag;
+window.loadPreset = loadPreset;
+window.savePreset = savePreset;
+window.suggestKeywords = suggestKeywords;
+window.acceptSuggestion = acceptSuggestion;
+window.dismissSuggestion = dismissSuggestion;
+window.acceptAllSuggestions = acceptAllSuggestions;
+})();
+}
+</script>
+{% endblock %}

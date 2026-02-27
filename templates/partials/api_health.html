@@ -1,0 +1,23 @@
+<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+{% for svc in services %}
+    <div class="card p-3 text-center" style="border-top:3px solid {{ '#10b981' if svc.state == 'closed' else '#f59e0b' if svc.state == 'half_open' else '#f65c4e' }};">
+        <div class="text-xs font-semibold mb-1" style="color:#005c69;">{{ svc.name | title }}</div>
+        <div class="text-xs font-mono mb-1"
+             style="color:{{ '#10b981' if svc.state == 'closed' else '#f59e0b' if svc.state == 'half_open' else '#f65c4e' }};">
+            {% if svc.state == 'closed' %}OK{% elif svc.state == 'half_open' %}RECOVERING{% elif svc.state == 'open' %}DOWN{% else %}--{% endif %}
+        </div>
+        <div class="text-xs" style="color:#3c4858;opacity:0.4;">
+            {{ svc.total_success }}&#10003; {{ svc.total_failure }}&#10007;
+        </div>
+        {% if svc.state == 'open' %}
+        <button onclick="resetCircuit('{{ svc.name }}')"
+                class="text-xs mt-1 font-medium" style="color:#00b2c9;background:none;border:none;cursor:pointer;">
+            Reset
+        </button>
+        {% endif %}
+    </div>
+{% endfor %}
+</div>
+{% if not services %}
+<div class="card p-3 text-center text-xs" style="color:#3c4858;opacity:0.4;">No services tracked yet</div>
+{% endif %}

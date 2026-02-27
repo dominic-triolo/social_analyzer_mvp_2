@@ -1,0 +1,54 @@
+{#
+    Pipeline preview partial — rendered via HTMX for the discovery page.
+    Receives: stages (list of dicts), all_apis (sorted list), total_est (int or None)
+#}
+{% set STAGE_LABELS = {
+    'discovery': 'Discovery',
+    'pre_screen': 'Pre-screen',
+    'enrichment': 'Enrichment',
+    'analysis': 'Analysis',
+    'scoring': 'Scoring',
+    'crm_sync': 'CRM Sync'
+} %}
+
+{% set STAGE_SVG = {
+    'discovery': '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+    'pre_screen': '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M14 2H2L6.5 7.5V12L9.5 13.5V7.5L14 2Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    'enrichment': '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="5.5" cy="8" r="2.5" stroke="currentColor" stroke-width="1.5"/><circle cx="10.5" cy="8" r="2.5" stroke="currentColor" stroke-width="1.5"/></svg>',
+    'analysis': '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 10L7 7L9.5 9L11 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    'scoring': '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2L9.8 5.6L14 6.2L11 9.1L11.7 13.3L8 11.4L4.3 13.3L5 9.1L2 6.2L6.2 5.6L8 2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>',
+    'crm_sync': '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M14 10L8 14L2 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 6L8 10L2 6L8 2L14 6Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>'
+} %}
+
+<div class="space-y-0">
+{% for stage in stages %}
+    <div class="flex gap-3">
+        <div class="flex flex-col items-center" style="width:28px;flex-shrink:0;">
+            <div class="w-6 h-6 rounded-full flex items-center justify-center" style="background:#e8f8fa;color:#005c69;border:1.5px solid #c4eef3;">
+                {{ STAGE_SVG.get(stage.key, '') | safe }}
+            </div>
+            {% if not loop.last %}
+            <div class="flex-1 w-px my-0.5" style="background:#e0e7eb;min-height:12px;"></div>
+            {% endif %}
+        </div>
+        <div class="flex-1 pb-2.5">
+            <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-xs font-semibold" style="color:#005c69;">{{ STAGE_LABELS.get(stage.key, stage.key) }}</span>
+                {% for api in stage.get('apis', []) %}
+                <span class="text-xs font-mono px-1.5 py-0.5 rounded" style="background:#f0fafb;color:#005c69;font-size:10px;">{{ api }}</span>
+                {% endfor %}
+            </div>
+            <div class="text-xs mt-0.5" style="color:#3c4858;opacity:0.55;">{{ stage.description }}</div>
+        </div>
+    </div>
+{% endfor %}
+</div>
+
+<div class="flex items-center gap-3 mt-4 pt-3" style="border-top:1px solid #f3f4f6;">
+    <span class="text-xs" style="color:#3c4858;opacity:0.4;">
+        Est. <span class="font-mono">{% if total_est is not none %}{{ total_est }}s{% else %}??{% endif %}</span> / profile
+    </span>
+    <span class="text-xs ml-auto" style="color:#3c4858;opacity:0.35;">
+        APIs: <span class="font-mono">{{ all_apis | join(', ') }}</span>
+    </span>
+</div>

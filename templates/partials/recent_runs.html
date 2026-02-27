@@ -1,0 +1,23 @@
+{% if not runs %}
+<div class="text-center py-8 text-xs" style="color:#3c4858;opacity:0.3;">
+    No runs yet. Start a discovery to create your first run.
+</div>
+{% else %}
+<div class="divide-y" style="border-color:#f3f4f6;">
+    {% for run in runs %}
+    <a href="/runs/{{ run.id }}" class="flex items-center gap-3 py-3 px-5 hover:bg-gray-50 transition-colors">
+        {% set status_colors = {'completed': '#10b981', 'failed': '#f65c4e', 'queued': '#94a3b8'} %}
+        {% set dot_color = status_colors.get(run.status, '#00b2c9') %}
+        {% set pulse = '' if run.status in ['completed', 'failed', 'queued'] else 'pulse-ring' %}
+        <span class="inline-block w-2 h-2 rounded-full {{ pulse }}" style="background:{{ dot_color }};"></span>
+        <span class="text-xs font-mono font-medium" style="color:#005c69;min-width:64px;">{{ run.id[:8] }}</span>
+        <span class="inline-flex items-center gap-1 text-xs" style="color:#005c69;">
+            {{ platform_svg.get(run.platform, '') | safe }} {{ run.platform }}
+        </span>
+        <span class="text-xs" style="color:#3c4858;opacity:0.4;min-width:70px;">{{ run.current_stage or 'queued' }}</span>
+        <span class="ml-auto text-xs" style="color:#3c4858;opacity:0.3;">{{ run.created_at | time_since }}</span>
+        <span class="text-xs font-mono font-medium" style="color:#005c69;">{{ run.profiles_found or 0 }} found</span>
+    </a>
+    {% endfor %}
+</div>
+{% endif %}

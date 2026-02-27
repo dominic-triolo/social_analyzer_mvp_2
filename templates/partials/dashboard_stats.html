@@ -1,0 +1,16 @@
+<div class="card kpi-card">
+    <div class="kpi-label">Total Runs</div>
+    <div class="kpi-value">{{ stats.total }}</div>
+</div>
+<div class="card kpi-card">
+    <div class="kpi-label">Active Now</div>
+    <div class="kpi-value" style="color:#00b2c9;">{{ stats.active }}</div>
+</div>
+<div class="card kpi-card">
+    <div class="kpi-label">Profiles Found</div>
+    <div class="kpi-value">{{ '{:,}'.format(stats.found) }}</div>
+</div>
+<div class="card kpi-card">
+    <div class="kpi-label">Synced to CRM</div>
+    <div class="kpi-value">{{ '{:,}'.format(stats.synced) }}</div>
+</div>

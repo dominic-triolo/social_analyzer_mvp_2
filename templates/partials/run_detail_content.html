@@ -1,0 +1,346 @@
+{# ── Stage definitions ──────────────────────────────────────────────── #}
+{% set STAGE_DEFS = [
+    {'key': 'discovery',   'label': 'Discovery',  'sub': 'Find profiles from platforms'},
+    {'key': 'pre_screen',  'label': 'Pre-screen', 'sub': 'Quick disqualification check'},
+    {'key': 'enrichment',  'label': 'Enrichment', 'sub': 'Contact info + social data'},
+    {'key': 'analysis',    'label': 'Analysis',   'sub': 'AI content analysis'},
+    {'key': 'scoring',     'label': 'Scoring',    'sub': 'Evidence-based scoring'},
+    {'key': 'crm_sync',    'label': 'CRM Sync',   'sub': 'HubSpot import + BDR assign'},
+] %}
+
+{# ── Stage SVG icons ──────────────────────────────────────────────── #}
+{% set STAGE_SVG = {
+    'discovery':  '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+    'pre_screen': '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M14 2H2L6.5 7.5V12L9.5 13.5V7.5L14 2Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    'enrichment': '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="5.5" cy="8" r="2.5" stroke="currentColor" stroke-width="1.5"/><circle cx="10.5" cy="8" r="2.5" stroke="currentColor" stroke-width="1.5"/></svg>',
+    'analysis':   '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 10L7 7L9.5 9L11 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    'scoring':    '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2L9.8 5.6L14 6.2L11 9.1L11.7 13.3L8 11.4L4.3 13.3L5 9.1L2 6.2L6.2 5.6L8 2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>',
+    'crm_sync':   '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M14 10L8 14L2 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 6L8 10L2 6L8 2L14 6Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>',
+} %}
+
+{% set CHECK_SVG = '<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 8.5L6.5 12L13 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' %}
+{% set X_SVG = '<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 4L12 12M12 4L4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>' %}
+
+{# ── Status color/bg/label helpers ─────────────────────────────────── #}
+{% set STATUS_COLOR = {'completed': '#10b981', 'running': '#00b2c9', 'failed': '#f65c4e', 'pending': '#d1d5db', 'skipped': '#94a3b8'} %}
+{% set STATUS_BG    = {'completed': '#d1fae5', 'running': '#e0f7fa', 'failed': '#fee2e2', 'pending': '#f9fafb', 'skipped': '#f1f5f9'} %}
+{% set STATUS_LABEL = {'completed': 'Done', 'running': 'Running...', 'failed': 'Failed', 'pending': 'Pending', 'skipped': 'Skipped'} %}
+
+{# ── OOB: Status badge in breadcrumb ──────────────────────────────── #}
+{% set badge_class = {'completed': 'badge-success', 'failed': 'badge-error', 'queued': 'badge-muted'} %}
+<span id="run-status-badge"
+      class="badge {{ badge_class.get(run.status, 'badge-info') }} ml-2"
+      hx-swap-oob="true">{{ run.status }}</span>
+
+{# ── Run summary card ────────────────────────────────────────────── #}
+{# ── Retry indicator (shown when this run was created via retry) ──── #}
+{% set retry_from = run.get('filters', {}).get('_retry_from') %}
+{% set parent_id = run.get('filters', {}).get('_parent_run_id') %}
+{% if retry_from %}
+<div class="card px-4 py-2 mb-4 flex items-center gap-2" style="border-left:3px solid #00b2c9;">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="color:#00b2c9;flex-shrink:0;">
+        <path d="M2 8a6 6 0 0 1 10.2-4.3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="M14 8a6 6 0 0 1-10.2 4.3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="M12 1v3.5h-3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M4 15v-3.5h3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span class="text-xs" style="color:#3c4858;">
+        Retried from <strong>{{ retry_from | replace('_', ' ') | title }}</strong>
+        {% if parent_id %}&middot; <a href="/runs/{{ parent_id }}" class="link" style="color:#00b2c9;">parent run</a>{% endif %}
+    </span>
+</div>
+{% endif %}
+
+{% if run.summary %}
+<div class="card p-4 mb-4" style="border-left:3px solid #10b981;">
+    <div class="flex items-start gap-3">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" class="flex-shrink-0 mt-0.5" style="color:#10b981;">
+            <path d="M2 3H14M2 7H10M2 11H12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <p class="text-xs" style="color:#3c4858;">{{ run.summary }}</p>
+    </div>
+</div>
+{% endif %}
+
+{# ── Deviation lookup helper ──────────────────────────────────────── #}
+{% set devs = deviations if deviations is defined else [] %}
+{% set dev_map = {} %}
+{% for d in devs %}
+    {% if dev_map.update({d.metric: d}) %}{% endif %}
+{% endfor %}
+
+{# ── KPI row ──────────────────────────────────────────────────────── #}
+<div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6" >
+    <div class="card kpi-card">
+        <div class="kpi-label">Found</div>
+        <div class="kpi-value">{{ run.profiles_found or 0 }}</div>
+        {% if dev_map.get('avg_found') %}
+        {% set d = dev_map['avg_found'] %}
+        <div class="text-xs mt-1 font-medium" style="color:{{ '#10b981' if d.direction == 'above' else '#f65c4e' }};">
+            {{ d.pct_change|abs|round|int }}% {{ d.direction }} avg
+        </div>
+        {% endif %}
+    </div>
+    <div class="card kpi-card">
+        <div class="kpi-label">Pre-screened</div>
+        <div class="kpi-value">{{ run.profiles_pre_screened or 0 }}</div>
+        {% if dev_map.get('yield_rate') %}
+        {% set d = dev_map['yield_rate'] %}
+        <div class="text-xs mt-1 font-medium" style="color:{{ '#10b981' if d.direction == 'above' else '#f65c4e' }};">
+            yield {{ d.pct_change|abs|round|int }}% {{ d.direction }} avg
+        </div>
+        {% endif %}
+    </div>
+    <div class="card kpi-card">
+        <div class="kpi-label">Enriched</div>
+        <div class="kpi-value">{{ run.profiles_enriched or 0 }}</div>
+    </div>
+    <div class="card kpi-card">
+        <div class="kpi-label">Scored</div>
+        <div class="kpi-value">{{ run.profiles_scored or 0 }}</div>
+        {% if dev_map.get('avg_scored') %}
+        {% set d = dev_map['avg_scored'] %}
+        <div class="text-xs mt-1 font-medium" style="color:{{ '#10b981' if d.direction == 'above' else '#f65c4e' }};">
+            {{ d.pct_change|abs|round|int }}% {{ d.direction }} avg
+        </div>
+        {% endif %}
+    </div>
+    <div class="card kpi-card">
+        <div class="kpi-label">Synced</div>
+        <div class="kpi-value">{{ run.contacts_synced or 0 }}</div>
+        <div class="kpi-sub">{{ run.duplicates_skipped or 0 }} dupes skipped</div>
+        {% if dev_map.get('avg_synced') %}
+        {% set d = dev_map['avg_synced'] %}
+        <div class="text-xs mt-1 font-medium" style="color:{{ '#10b981' if d.direction == 'above' else '#f65c4e' }};">
+            {{ d.pct_change|abs|round|int }}% {{ d.direction }} avg
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{# ── Cost info (if available) ─────────────────────────────────────── #}
+{% set est_cost = run.estimated_cost or 0 %}
+{% set act_cost = run.actual_cost or 0 %}
+{% set budget = run.get('filters', {}).get('max_budget') %}
+{% if est_cost or act_cost or budget %}
+<div class="card p-4 mb-4">
+    <div class="flex items-center gap-4 flex-wrap">
+        {% if est_cost %}
+        <div class="flex items-center gap-2">
+            <span class="text-xs font-medium" style="color:#3c4858;opacity:0.5;">Estimated</span>
+            <span class="text-sm font-semibold font-mono" style="color:#005c69;">${{ '%.2f' | format(est_cost) }}</span>
+        </div>
+        {% endif %}
+        {% if act_cost %}
+        <div class="flex items-center gap-2">
+            <span class="text-xs font-medium" style="color:#3c4858;opacity:0.5;">Actual</span>
+            <span class="text-sm font-semibold font-mono" style="color:#005c69;">${{ '%.2f' | format(act_cost) }}</span>
+        </div>
+        {% endif %}
+        {% if budget %}
+        <div class="flex items-center gap-2">
+            <span class="text-xs font-medium" style="color:#3c4858;opacity:0.5;">Budget</span>
+            <span class="text-sm font-semibold font-mono" style="color:#005c69;">${{ '%.2f' | format(budget) }}</span>
+        </div>
+        {% endif %}
+    </div>
+    {% if budget and budget > 0 %}
+    {% set usage_pct = ((act_cost / budget) * 100) | round | int %}
+    {% set bar_pct = [usage_pct, 100] | min %}
+    {% if usage_pct >= 100 %}
+        {% set bar_color = '#ef4444' %}
+    {% elif usage_pct >= 80 %}
+        {% set bar_color = '#f59e0b' %}
+    {% else %}
+        {% set bar_color = '#10b981' %}
+    {% endif %}
+    <div class="mt-3">
+        <div class="flex justify-between text-xs mb-1">
+            <span style="color:#3c4858;opacity:0.5;">Budget usage</span>
+            <span class="font-mono font-semibold" style="color:{{ bar_color }};">{{ usage_pct }}%</span>
+        </div>
+        <div class="h-2 rounded-full" style="background:#f1f5f9;">
+            <div class="h-2 rounded-full transition-all" style="background:{{ bar_color }};width:{{ bar_pct }}%"></div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+{# ── Two-col: Pipeline + Tier distribution ────────────────────────── #}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6" >
+
+    {# ── Pipeline stages (2/3 width) ─────────────────────────────── #}
+    <div class="card p-6 lg:col-span-2">
+        <h2 class="section-label mb-5">Pipeline Stages</h2>
+        <div class="space-y-0">
+            {% for stage in stages %}
+            {% set def = STAGE_DEFS[loop.index0] %}
+            {% set s = stage.status %}
+            {% set color = STATUS_COLOR.get(s, '#d1d5db') %}
+            {% set bg = STATUS_BG.get(s, '#f9fafb') %}
+            {% set label = STATUS_LABEL.get(s, 'Pending') %}
+            <div class="flex gap-4">
+                <div class="flex flex-col items-center" style="width:40px;flex-shrink:0;">
+                    <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm {{ 'pulse-ring' if s == 'running' else '' }} transition-all"
+                         style="background:{{ bg }};border:2px solid {{ color }};color:{{ color }};">
+                        {% if s == 'completed' %}
+                            {{ CHECK_SVG | safe }}
+                        {% elif s == 'failed' %}
+                            {{ X_SVG | safe }}
+                        {% else %}
+                            {{ STAGE_SVG.get(stage.key, '') | safe }}
+                        {% endif %}
+                    </div>
+                    {% if not loop.last %}
+                    <div class="flex-1 w-0.5 my-1" style="background:{{ '#10b981' if s == 'completed' else '#e5e7eb' }};min-height:24px;"></div>
+                    {% endif %}
+                </div>
+                <div class="flex-1 pb-4">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <span class="font-semibold text-sm" style="color:#005c69;">{{ def.label }}</span>
+                        <span class="badge" style="background:{{ bg }};color:{{ color }};">{{ label }}</span>
+                        {% if s == 'failed' and is_terminal %}
+                        <button onclick="retryFromStage('{{ stage.key }}')"
+                                class="text-xs font-medium px-2 py-0.5 rounded"
+                                style="background:#fee2e2;color:#991b1b;cursor:pointer;border:none;">
+                            Retry from {{ def.label }}
+                        </button>
+                        {% elif s == 'completed' and is_terminal and run.status == 'failed' %}
+                        <button onclick="retryFromStage('{{ stage.key }}')"
+                                class="text-xs font-medium px-2 py-0.5 rounded"
+                                style="background:#f1f5f9;color:#64748b;cursor:pointer;border:1px solid #e2e8f0;">
+                            Retry from here
+                        </button>
+                        {% endif %}
+                    </div>
+                    <div class="text-xs mt-0.5" style="color:#3c4858;opacity:0.45;">{{ def.sub }}</div>
+                    {% set progress = run.get('stage_progress', {}).get(stage.key) if run.get('stage_progress') else None %}
+                    {% if progress and (progress.get('completed', 0) > 0 or progress.get('total', 0) > 0) %}
+                    <div class="flex flex-wrap gap-1 mt-1.5">
+                        {% if progress.get('total', 0) > 0 %}
+                        <span class="badge badge-muted">{{ progress.completed }}/{{ progress.total }}</span>
+                        {% elif progress.get('completed', 0) > 0 %}
+                        <span class="badge badge-muted">{{ progress.completed }} found</span>
+                        {% endif %}
+                        {% if progress.get('failed', 0) > 0 %}
+                        <span class="badge badge-error">{{ progress.failed }} {{ 'filtered' if stage.key == 'pre_screen' else 'failed' }}</span>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    {# ── Tier distribution (1/3 width) ───────────────────────────── #}
+    {% set dist = run.get('tier_distribution', {}) or {} %}
+    {% set auto_val = dist.get('auto_enroll', 0) or 0 %}
+    {% set high_val = dist.get('high_priority_review', 0) or 0 %}
+    {% set std_val  = dist.get('standard_priority_review', 0) or 0 %}
+    {% set low_val  = dist.get('low_priority_review', 0) or 0 %}
+    {% set tier_total = auto_val + high_val + std_val + low_val %}
+    {% set tier_div = tier_total if tier_total > 0 else 1 %}
+    <div class="card p-5">
+        <h2 class="section-label mb-4">Tier Distribution</h2>
+        <div class="space-y-3">
+            <div>
+                <div class="flex justify-between text-xs mb-1">
+                    <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full inline-block" style="background:#10b981;"></span> Auto-Enroll</span>
+                    <span class="font-semibold font-mono" style="color:#3c4858;">{{ auto_val }}</span>
+                </div>
+                <div class="h-2 rounded-full" style="background:#f1f5f9;">
+                    <div class="h-2 rounded-full transition-all" style="background:#10b981;width:{{ ((auto_val / tier_div) * 100) | round | int }}%"></div>
+                </div>
+            </div>
+            <div>
+                <div class="flex justify-between text-xs mb-1">
+                    <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full inline-block" style="background:#f59e0b;"></span> High Priority</span>
+                    <span class="font-semibold font-mono" style="color:#3c4858;">{{ high_val }}</span>
+                </div>
+                <div class="h-2 rounded-full" style="background:#f1f5f9;">
+                    <div class="h-2 rounded-full transition-all" style="background:#f59e0b;width:{{ ((high_val / tier_div) * 100) | round | int }}%"></div>
+                </div>
+            </div>
+            <div>
+                <div class="flex justify-between text-xs mb-1">
+                    <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full inline-block" style="background:#00b2c9;"></span> Standard</span>
+                    <span class="font-semibold font-mono" style="color:#3c4858;">{{ std_val }}</span>
+                </div>
+                <div class="h-2 rounded-full" style="background:#f1f5f9;">
+                    <div class="h-2 rounded-full transition-all" style="background:#00b2c9;width:{{ ((std_val / tier_div) * 100) | round | int }}%"></div>
+                </div>
+            </div>
+            <div>
+                <div class="flex justify-between text-xs mb-1">
+                    <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full inline-block" style="background:#94a3b8;"></span> Low Priority</span>
+                    <span class="font-semibold font-mono" style="color:#3c4858;">{{ low_val }}</span>
+                </div>
+                <div class="h-2 rounded-full" style="background:#f1f5f9;">
+                    <div class="h-2 rounded-full transition-all" style="background:#94a3b8;width:{{ ((low_val / tier_div) * 100) | round | int }}%"></div>
+                </div>
+            </div>
+        </div>
+
+        {# BDR assignment #}
+        <div class="mt-5 pt-4" style="border-top:1px solid #f3f4f6;">
+            <div class="section-label mb-2">BDR Assignment</div>
+            <div class="text-sm" style="color:#3c4858;">{{ run.bdr_assignment or 'Round-robin' }}</div>
+        </div>
+    </div>
+
+</div>
+
+{# ── Error log ────────────────────────────────────────────────────── #}
+{% set errors = run.get('errors', []) or [] %}
+<div class="card p-5" >
+    <h2 class="section-label mb-3">
+        Error Log <span class="font-normal text-xs" style="opacity:0.4;">({{ errors | length }})</span>
+    </h2>
+    <div class="space-y-2">
+        {% if errors %}
+            {% for e in errors %}
+            <div class="flex gap-3 p-2.5 rounded-lg" style="background:#fef2f2;">
+                <span class="badge badge-error" style="flex-shrink:0;">{{ e.stage }}</span>
+                <div class="flex-1 min-w-0">
+                    <div class="text-xs" style="color:#991b1b;">{{ e.message }}</div>
+                    {% if e.profile_id %}
+                    <div class="text-xs mt-0.5" style="color:#3c4858;opacity:0.45;">Profile: {{ e.profile_id }}</div>
+                    {% endif %}
+                </div>
+                <span class="text-xs flex-shrink-0" style="color:#3c4858;opacity:0.35;">
+                    {% if e.timestamp %}{{ e.timestamp | time_since }}{% endif %}
+                </span>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="text-center py-4 text-xs" style="color:#3c4858;opacity:0.35;">No errors</div>
+        {% endif %}
+    </div>
+</div>
+
+{# ── Retry from stage JS ─────────────────────────────────────────── #}
+<script>
+function retryFromStage(stage) {
+    var label = stage.replace('_', ' ');
+    showConfirm('A new run will be created starting from the ' + label + ' stage.', {
+        title: 'Retry from ' + label + '?',
+        confirmLabel: 'Retry',
+    }).then(function(ok) {
+        if (!ok) return;
+        var runId = '{{ run.id }}';
+        fetch('/api/runs/' + runId + '/retry', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({from_stage: stage}),
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.id) window.location.href = '/runs/' + data.id;
+            else showModal(data.error || 'Unknown error', {type: 'error'});
+        })
+        .catch(function(err) { showModal(err.message, {type: 'error'}); });
+    });
+}
+</script>

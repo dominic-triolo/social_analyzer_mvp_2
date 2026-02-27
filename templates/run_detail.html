@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% set active_page = "runs" %}
+
+{% block title %}Run {{ run.id[:8] }}...{% endblock %}
+{% block page_title %}Run {{ run.id[:8] }}...{% endblock %}
+
+{% block breadcrumb %}
+<a href="/runs">Runs</a>
+<span class="sep">/</span>
+<span class="font-mono" style="color:#005c69; font-weight:500;">{{ run.id[:8] }}</span>
+<span id="run-status-badge" class="badge badge-info ml-2">{{ run.status }}</span>
+{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="mb-5 animate-in">
+    <h1 class="text-xl font-bold" style="color:#005c69;">
+        Run <span class="font-mono text-base" style="opacity:0.6;">{{ run.id[:8] }}...</span>
+    </h1>
+    <p class="text-sm mt-0.5" style="color:#3c4858;opacity:0.6;">
+        <span class="inline-flex items-center gap-1" style="color:#005c69;">
+            {{ run.platform | capitalize }}
+        </span>
+        discovery &middot; Started {{ run.created_at[:19] | replace('T', ' ') }}
+    </p>
+</div>
+
+<!-- Run detail content — SSE only for active runs -->
+{% if is_terminal %}
+<div id="run-detail-live">
+    {{ initial_html | safe }}
+</div>
+{% else %}
+<div id="run-detail-live"
+     hx-ext="sse"
+     sse-connect="/stream/run/{{ run.id }}"
+     sse-swap="message"
+     hx-swap="innerHTML">
+    {{ initial_html | safe }}
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,55 @@
+# Scoring configuration — v1.0
+# Edit weights, thresholds, and penalties without code changes.
+version: "1.0"
+
+# Dimension weights (must sum to 1.0)
+weights:
+  niche_and_audience_identity: 0.30
+  creator_authenticity_and_presence: 0.30
+  monetization_and_business_mindset: 0.20
+  community_infrastructure: 0.15
+  engagement_and_connection: 0.05
+
+# Category penalties applied to manual_score
+category_penalties:
+  Entertainment: -0.10
+
+# Follower boost tiers (checked top-down, first match wins)
+follower_boosts:
+  - min_followers: 100000
+    boost: 0.15
+  - min_followers: 75000
+    boost: 0.10
+  - min_followers: 50000
+    boost: 0.05
+
+# Engagement adjustment per post above/below threshold
+engagement:
+  above_threshold_per_post: 0.03
+  below_threshold_per_post: 0.03
+  hidden_penalty_per_post: 0.05
+  max_adjustment: 0.20
+
+# Tier boundaries
+tiers:
+  auto_enroll:
+    manual_score_threshold: 0.65
+    manual_score_precision: 0.833
+    full_score_threshold: 0.80
+    full_score_precision: 0.705
+  standard_priority_review:
+    full_score_threshold: 0.25
+    precision: 0.681
+
+# Travel experience floor
+travel_experience_floor: 0.50
+
+# Engagement penalty thresholds (prescreen/analysis)
+engagement_penalties:
+  hidden_engagement_cap: 0.15
+  low_engagement_cap: 0.15
+  total_cap: 0.20
+  hidden_penalty_per_post: 0.05
+  low_penalty_per_post: 0.03
+  like_threshold: 150
+  comment_threshold: 10

@@ -1,0 +1,15 @@
+<div class="card kpi-card">
+    <div class="kpi-label">Total Scored</div>
+    <div class="kpi-value">{{ '{:,}'.format(total_scored) }}</div>
+    <div class="kpi-sub">{% if total_scored == 0 %}no runs completed yet{% else %}across all runs{% endif %}</div>
+</div>
+<div class="card kpi-card">
+    <div class="kpi-label">Avg Lead Score</div>
+    <div class="kpi-value">{% if total_scored == 0 %}&mdash;{% else %}{{ '%.3f' | format(avg_score) }}{% endif %}</div>
+    <div class="kpi-sub">0.0 &ndash; 1.0 scale</div>
+</div>
+<div class="card kpi-card">
+    <div class="kpi-label">Auto-Enroll Rate</div>
+    <div class="kpi-value">{% if total_scored == 0 %}&mdash;{% else %}{{ auto_rate }}%{% endif %}</div>
+    <div class="kpi-sub">top-tier leads</div>
+</div>
