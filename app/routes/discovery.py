@@ -189,6 +189,24 @@ def keyword_suggestions():
         return jsonify({'error': 'Failed to generate suggestions'}), 500
 
 
+# ── Similar search detection ─────────────────────────────────────────────────
+
+@bp.route('/api/filter-similarity', methods=['POST'])
+def filter_similarity():
+    """Find completed runs with similar filters."""
+    from app.services.filter_similarity import find_similar_runs
+
+    data = request.json or {}
+    platform = data.get('platform', 'instagram')
+    filters = data.get('filters')
+
+    if not filters:
+        return jsonify({'error': 'Filters are required'}), 400
+
+    similar = find_similar_runs(platform, filters)
+    return jsonify({'similar_runs': similar})
+
+
 # ── Staleness check ──────────────────────────────────────────────────────────
 
 @bp.route('/api/filter-staleness')

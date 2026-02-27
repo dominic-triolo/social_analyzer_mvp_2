@@ -155,6 +155,27 @@
             </div>
         </div>
 
+        <!-- Similar Search Warning (hidden by default) -->
+        <div id="similarity-warning" class="card p-4 mb-4 animate-in hidden" style="border-left:3px solid #f59e0b;">
+            <div class="flex items-start gap-3">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" class="flex-shrink-0 mt-0.5" style="color:#f59e0b;">
+                    <path d="M8 1L15 14H1L8 1Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                    <path d="M8 6V9M8 11.5H8.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+                <div class="flex-1 text-xs" style="color:#3c4858;">
+                    <strong style="color:#92400e;">Similar search found:</strong>
+                    <span id="similarity-text"></span>
+                    <div class="flex gap-3 mt-2">
+                        <a id="similarity-link" href="#" class="font-medium" style="color:#00b2c9;">View results</a>
+                        <button type="button" onclick="document.getElementById('similarity-warning').classList.add('hidden')"
+                                class="font-medium" style="color:#3c4858;opacity:0.5;background:none;border:none;cursor:pointer;">
+                            Dismiss
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Presets -->
         <div class="card p-5 mb-4 animate-in" style="animation-delay:0.11s;">
             <div class="flex items-center justify-between mb-3">
@@ -1044,6 +1065,44 @@ function debouncedStaleness() {
 }
 document.querySelectorAll('.input-field').forEach(el => {
     el.addEventListener('change', debouncedStaleness);
+});
+
+// ── Similar search detection ────────────────────────────────────────
+async function checkSimilarity() {
+    try {
+        const filters = buildFilters();
+        if (!filters) return;
+        const res = await fetch('/api/filter-similarity', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({platform: selectedPlatform, filters}),
+        });
+        const data = await res.json();
+        const el = document.getElementById('similarity-warning');
+        if (data.similar_runs && data.similar_runs.length > 0) {
+            const top = data.similar_runs[0];
+            const pct = Math.round(top.similarity * 100);
+            document.getElementById('similarity-text').textContent =
+                `This looks like a run from ${top.days_ago}d ago (${pct}% similar). Found ${top.profiles_found} profiles, ${top.contacts_synced} synced.`;
+            document.getElementById('similarity-link').href = '/runs/' + top.run_id;
+            el.classList.remove('hidden');
+        } else {
+            el.classList.add('hidden');
+        }
+    } catch(e) { /* best-effort */ }
+}
+
+// Debounced similarity check on filter changes
+let _similarityTimer;
+function debouncedSimilarity() {
+    clearTimeout(_similarityTimer);
+    _similarityTimer = setTimeout(checkSimilarity, 2000);
+}
+document.querySelectorAll('.input-field').forEach(el => {
+    el.addEventListener('change', debouncedSimilarity);
+});
+document.querySelectorAll('.platform-card').forEach(btn => {
+    btn.addEventListener('click', () => { if (!btn.disabled) setTimeout(checkSimilarity, 300); });
 });
 </script>
 {% endblock %}
