@@ -24,6 +24,7 @@ INSIGHTIQ_WORK_PLATFORM_ID = os.getenv('INSIGHTIQ_WORK_PLATFORM_ID')
 INSIGHTIQ_API_URL = os.getenv('INSIGHTIQ_API_URL', 'https://api.staging.insightiq.ai')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 HUBSPOT_WEBHOOK_URL = os.getenv('HUBSPOT_WEBHOOK_URL')
+HUBSPOT_REWARM_WEBHOOK_URL = os.getenv('HUBSPOT_REWARM_WEBHOOK_URL')
 INSIGHTIQ_CLIENT_ID = os.getenv('INSIGHTIQ_CLIENT_ID')
 INSIGHTIQ_SECRET = os.getenv('INSIGHTIQ_SECRET')
 HUBSPOT_API_KEY = os.getenv('HUBSPOT_API_KEY')
@@ -1351,7 +1352,7 @@ RESPOND ONLY with JSON (no preamble):
         priority_tier = "auto_enroll"
         expected_precision = 0.833
         tier_reasoning = "Manual score ≥0.65 (83% precision)"
-    elif full_score >= 0.49:
+    elif full_score >= 0.8:
         priority_tier = "auto_enroll"
         expected_precision = 0.705
         tier_reasoning = "Full score ≥0.80 (70% precision)"
@@ -1360,7 +1361,7 @@ RESPOND ONLY with JSON (no preamble):
         expected_precision = 0.681
         tier_reasoning = "Full score ≥0.45 (68% precision)"
     else:
-        priority_tier = "auto_enroll"
+        priority_tier = "low_priority_review"
         expected_precision = 0.0
         tier_reasoning = "Below review thresholds"
     
@@ -1699,6 +1700,72 @@ def send_to_hubspot(contact_id: str, lead_score: float, section_scores: Dict, sc
     
     response = requests.post(HUBSPOT_WEBHOOK_URL, json=payload, timeout=10)
     print(f"HubSpot response: {response.status_code}")
+
+
+def send_rewarm_to_hubspot(contact_id: str, creator_profile: Dict, content_analyses: List[Dict],
+                           first_name: str = 'there'):
+    """Send rewarm enrichment fields to HubSpot via the dedicated rewarm webhook."""
+
+    def safe_str(value):
+        if value is None:
+            return ''
+        if isinstance(value, list):
+            return ', '.join(str(item) for item in value if item is not None)
+        if isinstance(value, dict):
+            return json.dumps(value)
+        return str(value)
+
+    # Build content_summary_structured from analyzed items
+    content_summaries = [
+        f"Content {idx} ({item['type']}): {item['summary']}"
+        for idx, item in enumerate(content_analyses, 1)
+    ]
+    content_summary_structured = "\n\n".join(content_summaries)
+
+    # Build score_reasoning as a qualitative narrative — no extra GPT call needed
+    category    = safe_str(creator_profile.get('primary_category') or creator_profile.get('content_category'))
+    content_cat = safe_str(creator_profile.get('content_category'))
+    monetization = safe_str(creator_profile.get('monetization'))
+    community   = safe_str(creator_profile.get('community_building'))
+    engagement  = safe_str(creator_profile.get('audience_engagement'))
+    score_reasoning = (
+        f"{category} creator. Content: {content_cat}. "
+        f"Monetization: {monetization}. "
+        f"Community: {community}. "
+        f"Engagement: {engagement}."
+    )
+
+    # Validation
+    enrichment_status = "success"
+    error_details = []
+    if not content_analyses:
+        enrichment_status = "error"
+        error_details.append("No content analyzed")
+    if not creator_profile.get('content_category'):
+        enrichment_status = "warning" if enrichment_status == "success" else enrichment_status
+        error_details.append("Missing content category")
+
+    payload = {
+        "contact_id":                 contact_id,
+        "first_name":                 first_name,
+        "content_summary_structured": content_summary_structured,
+        "profile_category":           safe_str(creator_profile.get('content_category')),
+        "profile_monetization":       safe_str(creator_profile.get('monetization')),
+        "profile_community_building": safe_str(creator_profile.get('community_building')),
+        "profile_engagement":         safe_str(creator_profile.get('audience_engagement')),
+        "score_reasoning":            score_reasoning,
+        "enrichment_status":          enrichment_status,
+        "enrichment_error_details":   "; ".join(error_details) if error_details else "",
+        "analyzed_at":                datetime.now().isoformat(),
+    }
+
+    print(f"[REWARM] Sending to HubSpot: {HUBSPOT_REWARM_WEBHOOK_URL}")
+    print(f"[REWARM] Enrichment status: {enrichment_status}")
+    if error_details:
+        print(f"[REWARM] Error details: {'; '.join(error_details)}")
+
+    response = requests.post(HUBSPOT_REWARM_WEBHOOK_URL, json=payload, timeout=10)
+    print(f"[REWARM] HubSpot response: {response.status_code}")
 
 
 @celery_app.task(bind=True, name='tasks.process_creator_profile')
@@ -2063,6 +2130,152 @@ def process_creator_profile(self, contact_id: str, profile_url: str, bio: str = 
         import traceback
         print(f"Traceback: {traceback.format_exc()}")
         
+        return {
+            "status": "error",
+            "contact_id": contact_id,
+            "message": str(e)
+        }
+
+
+@celery_app.task(bind=True, name='tasks.process_rewarm_profile',
+                 queue='rewarm', time_limit=3600, soft_time_limit=3540)
+def process_rewarm_profile(self, contact_id: str, profile_url: str,
+                           bio: str = '', follower_count: int = 0):
+    """
+    Enrichment-only pipeline for rewarm contacts (existing HubSpot leads).
+
+    Skips: post-frequency check, profile snapshot, pre-screening, travel experience
+           check, evidence gathering (bio/caption/thumbnail), lead scoring.
+
+    Populates: content_summary_structured, profile_category, profile_monetization,
+               profile_community_building, profile_engagement, score_reasoning.
+    """
+    import time
+    import random
+
+    start_time = time.time()
+    time.sleep(random.uniform(3, 5))
+
+    try:
+        print(f"=== [REWARM] PROCESSING: {contact_id} ===")
+
+        # Step 1: Fetch content from InsightIQ
+        self.update_state(state='PROGRESS', meta={'stage': 'Fetching content from InsightIQ'})
+        social_data = fetch_social_content(profile_url)
+        content_items = social_data.get('data', [])
+
+        if not content_items:
+            return {"status": "error", "contact_id": contact_id, "message": "No content found"}
+
+        print(f"[REWARM] Fetched {len(content_items)} content items")
+
+        # Step 2: Filter out Stories
+        self.update_state(state='PROGRESS', meta={'stage': 'Filtering content'})
+        filtered_items = filter_content_items(content_items)
+
+        if not filtered_items:
+            return {"status": "error", "contact_id": contact_id,
+                    "message": "No content after filtering Stories"}
+
+        # Step 3: Analyze first 3 content items
+        # No pre-screening, so we default to indices [0, 1, 2]
+        self.update_state(state='PROGRESS', meta={'stage': 'Analyzing content'})
+        content_analyses = []
+
+        for idx in range(min(3, len(filtered_items))):
+            item = filtered_items[idx]
+            content_format = item.get('format')
+            media_url = None
+            media_format = None
+
+            if content_format == 'VIDEO':
+                media_url = item.get('media_url')
+                media_format = 'VIDEO'
+            elif content_format == 'COLLECTION':
+                content_group_media = item.get('content_group_media', [])
+                media_url = (content_group_media[0].get('media_url')
+                             if content_group_media else item.get('thumbnail_url'))
+                media_format = 'IMAGE'
+            else:
+                media_url = item.get('media_url') or item.get('thumbnail_url')
+                media_format = 'IMAGE'
+
+            if not media_url:
+                print(f"[REWARM] Item {idx}: No media URL, skipping")
+                continue
+
+            media_url = media_url.rstrip('.')
+
+            if media_format == 'VIDEO':
+                try:
+                    head_response = requests.head(media_url, timeout=10)
+                    content_length = int(head_response.headers.get('content-length', 0))
+                    if content_length > 25 * 1024 * 1024:
+                        print(f"[REWARM] Item {idx}: Video too large "
+                              f"({content_length / 1024 / 1024:.1f}MB), skipping")
+                        continue
+                except Exception as e:
+                    print(f"[REWARM] Item {idx}: Could not check video size: {e}, attempting anyway")
+
+            try:
+                rehosted_url = rehost_media_on_r2(media_url, contact_id, media_format)
+                analysis = analyze_content_item(rehosted_url, media_format)
+                analysis['description'] = item.get('description', '')
+                analysis['is_pinned'] = item.get('is_pinned', False)
+                analysis['likes_and_views_disabled'] = item.get('likes_and_views_disabled', False)
+                analysis['engagement'] = item.get('engagement', {})
+                content_analyses.append(analysis)
+                print(f"[REWARM] Item {idx}: Analyzed successfully")
+            except Exception as e:
+                print(f"[REWARM] Item {idx}: Error analyzing: {e}")
+                continue
+
+        if not content_analyses:
+            return {"status": "error", "contact_id": contact_id,
+                    "message": "Could not analyze any content items"}
+
+        print(f"[REWARM] Analyzed {len(content_analyses)} items")
+
+        # Step 4: Generate creator profile
+        self.update_state(state='PROGRESS', meta={'stage': 'Generating creator profile'})
+        creator_profile = generate_creator_profile(content_analyses)
+
+        # Step 5: Extract first name
+        self.update_state(state='PROGRESS', meta={'stage': 'Extracting first name'})
+        _profile_info = social_data.get('data', [{}])[0].get('profile', {})
+        ig_username = (_profile_info.get('platform_username', '')
+                       or _profile_info.get('username', '')
+                       or profile_url.rstrip('/').split('/')[-1])
+        ig_full_name = (_profile_info.get('full_name', '')
+                        or _profile_info.get('fullName', '')
+                        or _profile_info.get('name', ''))
+        ig_bio = bio if bio else (_profile_info.get('introduction', '')
+                                  or _profile_info.get('biography', '')
+                                  or _profile_info.get('bio', ''))
+        first_name = extract_first_names_from_instagram_profile(
+            ig_username, ig_full_name, ig_bio, content_analyses
+        )
+        print(f"[REWARM] First name: '{first_name}'")
+
+        # Step 6: Send enrichment fields to HubSpot
+        self.update_state(state='PROGRESS', meta={'stage': 'Sending to HubSpot'})
+        send_rewarm_to_hubspot(contact_id, creator_profile, content_analyses, first_name=first_name)
+
+        duration = time.time() - start_time
+        print(f"=== [REWARM] COMPLETE: {contact_id} — {duration:.1f}s ===")
+
+        return {
+            "status": "success",
+            "contact_id": contact_id,
+            "items_analyzed": len(content_analyses),
+            "processing_duration": duration,
+        }
+
+    except Exception as e:
+        print(f"=== [REWARM] ERROR: {contact_id} ===")
+        print(f"Error: {str(e)}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
         return {
             "status": "error",
             "contact_id": contact_id,
