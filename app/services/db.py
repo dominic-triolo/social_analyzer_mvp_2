@@ -77,6 +77,7 @@ def persist_lead_results(run, profiles):
         for profile in profiles:
             platform_id = _extract_platform_id(profile, run.platform)
             if not platform_id:
+                logger.warning("Could not extract platform_id for profile keys: %s", list(profile.keys())[:10])
                 continue
 
             # Upsert lead
@@ -85,26 +86,42 @@ def persist_lead_results(run, profiles):
                 platform_id=platform_id,
             ).first()
 
+            # Resolve fields — canonical keys first, then InsightIQ-style
+            name = (profile.get('name', '')
+                    or profile.get('first_and_last_name', '')
+                    or profile.get('_first_name', ''))
+            bio = (profile.get('introduction', '')
+                   or profile.get('bio', '')
+                   or profile.get('instagram_bio', ''))
+            follower_count = (profile.get('follower_count', 0)
+                              or _parse_int(profile.get('instagram_followers'))
+                              or 0)
+            email = profile.get('email', '')
+            profile_url = (profile.get('url', '')
+                           or profile.get('profile_url', '')
+                           or profile.get('instagram_handle', ''))
+            website = profile.get('website', '') or ''
+
             if lead is None:
                 lead = Lead(
                     platform=run.platform,
                     platform_id=platform_id,
-                    name=profile.get('name', '') or profile.get('_first_name', ''),
-                    profile_url=profile.get('url', '') or profile.get('profile_url', ''),
-                    bio=profile.get('introduction', '') or profile.get('bio', ''),
-                    follower_count=profile.get('follower_count', 0) or 0,
-                    email=profile.get('email', ''),
-                    website=profile.get('website', '') or profile.get('url', ''),
+                    name=name,
+                    profile_url=profile_url,
+                    bio=bio,
+                    follower_count=follower_count,
+                    email=email,
+                    website=website,
                     social_urls=profile.get('_social_urls', {}),
                 )
                 session.add(lead)
                 session.flush()  # get lead.id
             else:
                 # Update existing lead with latest data
-                lead.name = profile.get('name', '') or profile.get('_first_name', '') or lead.name
-                lead.bio = profile.get('introduction', '') or profile.get('bio', '') or lead.bio
-                lead.follower_count = profile.get('follower_count', 0) or lead.follower_count
-                lead.email = profile.get('email', '') or lead.email
+                lead.name = name or lead.name
+                lead.bio = bio or lead.bio
+                lead.follower_count = follower_count or lead.follower_count
+                lead.email = email or lead.email
                 lead.last_seen_at = datetime.now()
 
             # Extract scoring data
@@ -249,14 +266,37 @@ def get_filter_staleness(platform, filters):
 # ── Private helpers ──────────────────────────────────────────────────────────
 
 def _extract_platform_id(profile, platform):
-    """Get the unique identifier for a profile based on platform."""
+    """Get the unique identifier for a profile based on platform.
+
+    Handles both canonical keys (platform_username) and InsightIQ-style
+    keys (instagram_handle — a full URL).
+    """
     if platform == 'instagram':
-        return profile.get('platform_username') or profile.get('username') or profile.get('handle')
+        # Try canonical keys first, then InsightIQ-style URL
+        pid = (profile.get('platform_username')
+               or profile.get('username')
+               or profile.get('handle'))
+        if not pid:
+            ig_handle = profile.get('instagram_handle', '')
+            # instagram_handle may be a full URL like https://www.instagram.com/mollyyeh/
+            if ig_handle:
+                pid = ig_handle.rstrip('/').split('/')[-1]
+        return pid
     elif platform == 'patreon':
         return profile.get('slug') or profile.get('id') or profile.get('vanity')
     elif platform == 'facebook':
         return profile.get('group_id') or profile.get('id')
     return profile.get('id') or profile.get('platform_id')
+
+
+def _parse_int(value):
+    """Safely parse an int from a string or number. Returns 0 on failure."""
+    if value is None:
+        return 0
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return 0
 
 
 def _determine_stage_reached(profile):

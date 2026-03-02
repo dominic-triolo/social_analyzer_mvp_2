@@ -275,6 +275,41 @@ class TestPersistLeadResults:
 
         assert db_session.query(Lead).count() == 0
 
+    def test_insightiq_style_profile_persists(self, db_session, make_run):
+        """InsightIQ profiles use instagram_handle (URL), first_and_last_name,
+        instagram_bio, instagram_followers — all non-canonical keys."""
+        run = make_run()
+        persist_run(run)
+
+        profiles = [{
+            'first_and_last_name': 'molly yeh',
+            'instagram_handle': 'https://www.instagram.com/mollyyeh/',
+            'instagram_bio': 'cookbook author & farmer',
+            'instagram_followers': '899579',
+            'email': 'hello@mynameisyeh.com',
+            '_first_name': 'molly',
+            '_lead_analysis': {
+                'lead_score': 0.92,
+                'priority_tier': 'auto_enroll',
+                'score_reasoning': 'Strong travel content creator',
+            },
+            '_synced_to_crm': True,
+        }]
+        persist_lead_results(run, profiles)
+
+        lead = db_session.query(Lead).filter_by(platform_id='mollyyeh').first()
+        assert lead is not None, "Lead should be created from instagram_handle URL"
+        assert lead.name == 'molly yeh'
+        assert lead.bio == 'cookbook author & farmer'
+        assert lead.follower_count == 899579
+        assert lead.email == 'hello@mynameisyeh.com'
+
+        lr = db_session.query(LeadRun).filter_by(lead_id=lead.id).first()
+        assert lr is not None
+        assert lr.lead_score == 0.92
+        assert lr.priority_tier == 'auto_enroll'
+        assert lr.synced_to_crm is True
+
     def test_empty_profiles_list(self, db_session, make_run):
         run = make_run()
         persist_run(run)
@@ -582,6 +617,25 @@ class TestExtractPlatformId:
 
     def test_unknown_platform_falls_back_to_platform_id(self):
         assert _extract_platform_id({'platform_id': 'pid'}, 'tiktok') == 'pid'
+
+    def test_instagram_extracts_from_insightiq_url(self):
+        """InsightIQ profiles use instagram_handle as a full URL."""
+        profile = {'instagram_handle': 'https://www.instagram.com/mollyyeh/'}
+        assert _extract_platform_id(profile, 'instagram') == 'mollyyeh'
+
+    def test_instagram_insightiq_url_no_trailing_slash(self):
+        profile = {'instagram_handle': 'https://www.instagram.com/travelblogger'}
+        assert _extract_platform_id(profile, 'instagram') == 'travelblogger'
+
+    def test_instagram_insightiq_bare_handle(self):
+        """instagram_handle might be a bare username."""
+        profile = {'instagram_handle': 'wanderlust_jane'}
+        assert _extract_platform_id(profile, 'instagram') == 'wanderlust_jane'
+
+    def test_instagram_canonical_takes_priority_over_insightiq(self):
+        """platform_username should win over instagram_handle."""
+        profile = {'platform_username': 'canonical', 'instagram_handle': 'https://www.instagram.com/insightiq/'}
+        assert _extract_platform_id(profile, 'instagram') == 'canonical'
 
     def test_returns_none_when_no_id_found(self):
         assert _extract_platform_id({'name': 'No ID here'}, 'instagram') is None
