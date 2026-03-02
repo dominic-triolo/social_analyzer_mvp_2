@@ -2095,6 +2095,85 @@ def enrich_profiles_full_pipeline(profiles: List[Dict], job_id: str,
 
 
 # ============================================================================
+# STANDARDIZE: INSTAGRAM → HUBSPOT
+# ============================================================================
+
+def standardize_instagram_profiles(profiles: List[Dict]) -> List[Dict]:
+    """
+    Map enriched Instagram profiles to the exact HubSpot contact property names
+    required for batch-create. Unknown / None / empty values are dropped.
+
+    Instagram profiles from InsightIQ already use HubSpot-compatible keys
+    (instagram_handle, instagram_bio, etc). We add scoring data and strip
+    internal underscore-prefixed pipeline keys.
+    """
+    standardized = []
+
+    for i, profile in enumerate(profiles):
+        try:
+            lead_analysis = profile.get('_lead_analysis', {})
+            creator_profile = profile.get('_creator_profile', {})
+
+            props = {
+                # ── Contact info ──────────────────────────────────────
+                'firstname':            profile.get('_first_name', ''),
+                'lastname':             '',  # InsightIQ gives full name, not split
+                'email':                profile.get('email'),
+                'phone':                profile.get('phone'),
+
+                # ── Social links ──────────────────────────────────────
+                'instagram_handle':     profile.get('instagram_handle'),
+                'instagram_bio':        profile.get('instagram_bio'),
+                'instagram_followers':  profile.get('instagram_followers'),
+                'average_engagement':   profile.get('average_engagement'),
+                'youtube_profile_link': profile.get('youtube_profile_link'),
+                'tiktok_handle':        profile.get('tiktok_handle'),
+                'facebook_profile_link': profile.get('facebook_profile_link'),
+                'patreon_link':         profile.get('patreon_link'),
+                'pinterest_profile_link': profile.get('pinterest_profile_link'),
+
+                # ── Location ──────────────────────────────────────────
+                'city':                 profile.get('city'),
+                'state':                profile.get('state'),
+                'country':              profile.get('country'),
+
+                # ── Scoring ───────────────────────────────────────────
+                'lead_score':           lead_analysis.get('lead_score'),
+                'manual_score':         lead_analysis.get('manual_score'),
+                'priority_tier':        lead_analysis.get('priority_tier'),
+                'score_reasoning':      lead_analysis.get('score_reasoning'),
+                'score_niche_and_audience': lead_analysis.get('section_scores', {}).get('niche_and_audience_identity'),
+                'score_host_likeability': lead_analysis.get('section_scores', {}).get('creator_authenticity_and_presence'),
+                'score_monetization':   lead_analysis.get('section_scores', {}).get('monetization_and_business_mindset'),
+                'score_community_infrastructure': lead_analysis.get('section_scores', {}).get('community_infrastructure'),
+                'score_trip_fit':       lead_analysis.get('section_scores', {}).get('engagement_and_connection'),
+
+                # ── Creator profile ───────────────────────────────────
+                'profile_category':     creator_profile.get('content_category'),
+                'primary_category':     creator_profile.get('primary_category'),
+
+                # ── Metadata / channel tracking ───────────────────────
+                'flagship_social_platform': 'instagram',
+                'channel':                  profile.get('channel', 'Outbound'),
+                'channel_host_prospected':  profile.get('channel_host_prospected', 'Phyllo'),
+                'funnel':                   profile.get('funnel', 'Community'),
+            }
+
+            # Drop None / empty-string / zero values
+            props = {k: v for k, v in props.items()
+                     if v is not None and v != '' and v != 0}
+
+            standardized.append(props)
+
+        except Exception as e:
+            logger.error("Instagram profile #%d error: %s", i+1, e)
+            continue
+
+    logger.info("%d Instagram profiles ready for HubSpot", len(standardized))
+    return standardized
+
+
+# ============================================================================
 # STANDARDIZE: PATREON → HUBSPOT
 # ============================================================================
 

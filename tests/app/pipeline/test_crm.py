@@ -34,7 +34,7 @@ class TestAdaptersRegistry:
 # ── InstagramCrmSync ───────────────────────────────────────────────────────
 
 class TestInstagramCrmSync:
-    """InstagramCrmSync batch-creates HubSpot contacts from discovery leads."""
+    """InstagramCrmSync standardizes, assigns BDR, and batch-imports to HubSpot."""
 
     def test_is_stage_adapter_subclass(self):
         assert issubclass(InstagramCrmSync, StageAdapter)
@@ -51,163 +51,152 @@ class TestInstagramCrmSync:
         assert adapter.estimate_cost(100) == 0.0
         assert adapter.estimate_cost(9999) == 0.0
 
-    def test_run_syncs_all_profiles_without_contact_id(self, make_run):
-        """All profiles are synced regardless of contact_id presence."""
-        profiles = [
-            {
-                '_lead_analysis': {'lead_score': 0.85},
-                '_profile_data': {'username': 'creator_a'},
-            },
-            {
-                '_lead_analysis': {'lead_score': 0.60},
-                '_profile_data': {'username': 'creator_b'},
-            },
-        ]
-        run = make_run(platform='instagram')
+    @patch('app.pipeline.crm.import_profiles_to_hubspot')
+    @patch('app.pipeline.crm.assign_bdr_round_robin')
+    @patch('app.pipeline.crm.standardize_instagram_profiles')
+    def test_run_full_pipeline(self, mock_standardize, mock_bdr, mock_import, make_run):
+        """Runs standardize -> BDR assign -> HubSpot import in order."""
+        standardized = [{'instagram_handle': 'https://instagram.com/creator_a', 'email': 'a@test.com'}]
+        bdr_assigned = [{'instagram_handle': 'https://instagram.com/creator_a', 'email': 'a@test.com', 'bdr_': '12345'}]
+
+        mock_standardize.return_value = standardized
+        mock_bdr.return_value = bdr_assigned
+        mock_import.return_value = {'created': 1, 'skipped': 0, 'errors': []}
+
+        profiles = [{'_lead_analysis': {'lead_score': 0.85}, 'instagram_handle': 'https://instagram.com/creator_a'}]
+        run = make_run(id='run-ig1', platform='instagram', filters={})
 
         adapter = InstagramCrmSync()
         result = adapter.run(profiles, run)
 
         assert isinstance(result, StageResult)
-        assert len(result.profiles) == 2
-        assert result.processed == 2
-        assert result.failed == 0
-        assert result.errors == []
+        assert result.profiles == profiles
+        assert result.processed == 1
+        assert result.skipped == 0
+        assert result.meta == {'created': 1, 'skipped': 0, 'errors': []}
 
-    def test_run_no_contact_id_required(self, make_run):
-        """Profiles without contact_id or id are still synced successfully."""
-        profiles = [
-            {'_lead_analysis': {'lead_score': 0.9}},
-        ]
-        run = make_run(platform='instagram')
+        mock_standardize.assert_called_once_with(profiles)
+        mock_bdr.assert_called_once_with(standardized, list(BDR_OWNER_IDS.keys()))
+        mock_import.assert_called_once_with(bdr_assigned, 'run-ig1')
 
-        adapter = InstagramCrmSync()
-        result = adapter.run(profiles, run)
-
-        assert len(result.profiles) == 1
-        assert result.failed == 0
-
-    def test_run_increments_progress_on_success(self, make_run):
-        """Each synced profile triggers a 'completed' progress increment."""
-        profiles = [
-            {'_lead_analysis': {}, '_profile_data': {'username': 'a'}},
-            {'_lead_analysis': {}, '_profile_data': {'username': 'b'}},
-        ]
-        run = make_run(platform='instagram')
-
-        adapter = InstagramCrmSync()
-        adapter.run(profiles, run)
-
-        completed_calls = [
-            c for c in run.increment_stage_progress.call_args_list
-            if c == call('crm_sync', 'completed')
-        ]
-        assert len(completed_calls) == 2
-
-    def test_run_updates_run_contacts_synced(self, make_run):
-        """run.contacts_synced is set to the number of synced profiles."""
-        profiles = [
-            {'_lead_analysis': {}, '_profile_data': {'username': 'a'}},
-            {'_lead_analysis': {}, '_profile_data': {'username': 'b'}},
-        ]
-        run = make_run(platform='instagram')
-
-        adapter = InstagramCrmSync()
-        adapter.run(profiles, run)
-
-        assert run.contacts_synced == 2
-        run.save.assert_called_once()
-
-    def test_run_saves_run_after_sync(self, make_run):
-        """run.save() is called after processing all profiles."""
-        profiles = [{'_lead_analysis': {}}]
-        run = make_run(platform='instagram')
-
-        adapter = InstagramCrmSync()
-        adapter.run(profiles, run)
-
-        run.save.assert_called_once()
-
-    def test_run_empty_profiles(self, make_run):
-        """Empty input produces empty output and zero synced count."""
-        run = make_run(platform='instagram')
+    @patch('app.pipeline.crm.import_profiles_to_hubspot')
+    @patch('app.pipeline.crm.assign_bdr_round_robin')
+    @patch('app.pipeline.crm.standardize_instagram_profiles')
+    def test_run_empty_profiles_short_circuits(self, mock_std, mock_bdr, mock_import, make_run):
+        """Empty input returns immediately without calling any service."""
+        run = make_run(platform='instagram', filters={})
 
         adapter = InstagramCrmSync()
         result = adapter.run([], run)
 
         assert result.profiles == []
         assert result.processed == 0
-        assert result.failed == 0
-        assert run.contacts_synced == 0
+        mock_std.assert_not_called()
+        mock_bdr.assert_not_called()
+        mock_import.assert_not_called()
 
-    def test_run_meta_contains_stub_mode(self, make_run):
-        """StageResult meta indicates stub mode and synced count."""
-        profiles = [
-            {'_lead_analysis': {'lead_score': 0.85}, '_profile_data': {'username': 'test'}},
-        ]
-        run = make_run(platform='instagram')
+    @patch('app.pipeline.crm.import_profiles_to_hubspot')
+    @patch('app.pipeline.crm.assign_bdr_round_robin')
+    @patch('app.pipeline.crm.standardize_instagram_profiles')
+    def test_run_uses_custom_bdr_names(self, mock_std, mock_bdr, mock_import, make_run):
+        """bdr_names from run.filters overrides the default BDR list."""
+        mock_std.return_value = [{'instagram_handle': 'x'}]
+        mock_bdr.return_value = [{'instagram_handle': 'x', 'bdr_': '99999'}]
+        mock_import.return_value = {'created': 1, 'skipped': 0}
 
-        adapter = InstagramCrmSync()
-        result = adapter.run(profiles, run)
-
-        assert result.meta['mode'] == 'stub'
-        assert result.meta['synced_count'] == 1
-
-    def test_run_tier_auto_enroll(self, make_run):
-        """Score >= 0.8 maps to auto_enroll tier."""
-        profiles = [{'_lead_analysis': {'lead_score': 0.85}, '_profile_data': {'username': 'high'}}]
-        run = make_run(platform='instagram')
+        custom_bdrs = ['Alice Smith', 'Bob Jones']
+        run = make_run(id='run-ig-custom', platform='instagram', filters={'bdr_names': custom_bdrs})
 
         adapter = InstagramCrmSync()
-        result = adapter.run(profiles, run)
+        adapter.run([{'_lead_analysis': {}}], run)
 
-        assert len(result.profiles) == 1
+        mock_bdr.assert_called_once_with(mock_std.return_value, custom_bdrs)
 
-    def test_run_tier_high_priority(self, make_run):
-        """Score >= 0.5 and < 0.8 maps to high_priority tier."""
-        profiles = [{'_lead_analysis': {'lead_score': 0.65}, '_profile_data': {'username': 'mid'}}]
-        run = make_run(platform='instagram')
+    @patch('app.pipeline.crm.import_profiles_to_hubspot')
+    @patch('app.pipeline.crm.assign_bdr_round_robin')
+    @patch('app.pipeline.crm.standardize_instagram_profiles')
+    def test_run_defaults_bdr_names_to_all_bdr_owners(self, mock_std, mock_bdr, mock_import, make_run):
+        """When bdr_names is not in filters, uses all BDR_OWNER_IDS keys."""
+        mock_std.return_value = [{'instagram_handle': 'x'}]
+        mock_bdr.return_value = [{'instagram_handle': 'x'}]
+        mock_import.return_value = {'created': 1, 'skipped': 0}
 
-        adapter = InstagramCrmSync()
-        result = adapter.run(profiles, run)
-
-        assert len(result.profiles) == 1
-
-    def test_run_tier_review(self, make_run):
-        """Score < 0.5 maps to review tier."""
-        profiles = [{'_lead_analysis': {'lead_score': 0.3}, '_profile_data': {'username': 'low'}}]
-        run = make_run(platform='instagram')
+        run = make_run(id='run-ig-default', platform='instagram', filters={})
 
         adapter = InstagramCrmSync()
-        result = adapter.run(profiles, run)
+        adapter.run([{'_lead_analysis': {}}], run)
 
-        assert len(result.profiles) == 1
+        expected_bdrs = list(BDR_OWNER_IDS.keys())
+        mock_bdr.assert_called_once_with(mock_std.return_value, expected_bdrs)
 
-    def test_run_logs_each_profile(self, make_run, caplog):
-        """Each profile is logged with name, score, and tier."""
-        profiles = [
-            {'_lead_analysis': {'lead_score': 0.9}, '_profile_data': {'username': 'star_creator'}},
-        ]
-        run = make_run(platform='instagram')
+    @patch('app.pipeline.crm.import_profiles_to_hubspot')
+    @patch('app.pipeline.crm.assign_bdr_round_robin')
+    @patch('app.pipeline.crm.standardize_instagram_profiles')
+    def test_run_updates_run_contacts_synced(self, mock_std, mock_bdr, mock_import, make_run):
+        """run.contacts_synced and run.duplicates_skipped are set from import results."""
+        mock_std.return_value = []
+        mock_bdr.return_value = []
+        mock_import.return_value = {'created': 5, 'skipped': 3}
 
-        adapter = InstagramCrmSync()
-        with caplog.at_level(logging.INFO, logger='pipeline.crm'):
-            adapter.run(profiles, run)
-
-        assert 'star_creator' in caplog.text
-        assert 'auto_enroll' in caplog.text
-
-    def test_run_fallback_name_from_profile_url(self, make_run):
-        """When _profile_data has no username, falls back to profile_url."""
-        profiles = [
-            {'_lead_analysis': {'lead_score': 0.5}, 'profile_url': 'https://instagram.com/fallback'},
-        ]
-        run = make_run(platform='instagram')
+        run = make_run(id='run-ig-counts', platform='instagram', filters={})
 
         adapter = InstagramCrmSync()
-        result = adapter.run(profiles, run)
+        adapter.run([{'_lead_analysis': {}}], run)
 
-        assert len(result.profiles) == 1
+        assert run.contacts_synced == 5
+        assert run.duplicates_skipped == 3
+        run.save.assert_called_once()
+
+    @patch('app.pipeline.crm.import_profiles_to_hubspot')
+    @patch('app.pipeline.crm.assign_bdr_round_robin')
+    @patch('app.pipeline.crm.standardize_instagram_profiles')
+    def test_run_sets_synced_to_crm_flag(self, mock_std, mock_bdr, mock_import, make_run):
+        """Each original profile gets _synced_to_crm=True for lead persistence."""
+        mock_std.return_value = []
+        mock_bdr.return_value = []
+        mock_import.return_value = {'created': 2, 'skipped': 0}
+
+        profiles = [{'_lead_analysis': {}}, {'_lead_analysis': {}}]
+        run = make_run(id='run-ig-flag', platform='instagram', filters={})
+
+        adapter = InstagramCrmSync()
+        adapter.run(profiles, run)
+
+        assert all(p.get('_synced_to_crm') is True for p in profiles)
+
+    @patch('app.pipeline.crm.import_profiles_to_hubspot')
+    @patch('app.pipeline.crm.assign_bdr_round_robin')
+    @patch('app.pipeline.crm.standardize_instagram_profiles')
+    def test_run_skipped_in_result(self, mock_std, mock_bdr, mock_import, make_run):
+        """StageResult.skipped reflects the skipped count from import."""
+        mock_std.return_value = []
+        mock_bdr.return_value = []
+        mock_import.return_value = {'created': 2, 'skipped': 8}
+
+        run = make_run(id='run-ig-skip', platform='instagram', filters={})
+
+        adapter = InstagramCrmSync()
+        result = adapter.run([{'_lead_analysis': {}}, {'_lead_analysis': {}}], run)
+
+        assert result.skipped == 8
+        assert result.processed == 2
+
+    @patch('app.pipeline.crm.import_profiles_to_hubspot')
+    @patch('app.pipeline.crm.assign_bdr_round_robin')
+    @patch('app.pipeline.crm.standardize_instagram_profiles')
+    def test_run_import_results_in_meta(self, mock_std, mock_bdr, mock_import, make_run):
+        """Full import_results dict is stored in StageResult.meta."""
+        import_data = {'created': 3, 'skipped': 1, 'errors': ['dup@test.com']}
+        mock_std.return_value = []
+        mock_bdr.return_value = []
+        mock_import.return_value = import_data
+
+        run = make_run(id='run-ig-meta', platform='instagram', filters={})
+
+        adapter = InstagramCrmSync()
+        result = adapter.run([{'_lead_analysis': {}}], run)
+
+        assert result.meta == import_data
 
 
 # ── PatreonCrmSync ─────────────────────────────────────────────────────────
