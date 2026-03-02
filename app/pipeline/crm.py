@@ -50,6 +50,7 @@ class InstagramCrmSync(StageAdapter):
                 tier = 'review'
 
             logger.info("Would create HubSpot contact: %s (score=%.3f, tier=%s)", name, score, tier)
+            profile['_synced_to_crm'] = True
             synced.append(profile)
             run.increment_stage_progress('crm_sync', 'completed')
 
@@ -85,6 +86,8 @@ class PatreonCrmSync(StageAdapter):
         standardized = assign_bdr_round_robin(standardized, bdr_names)
         import_results = import_profiles_to_hubspot(standardized, run.id)
 
+        for p in standardized:
+            p['_synced_to_crm'] = True
         run.contacts_synced = import_results.get('created', 0)
         run.duplicates_skipped = import_results.get('skipped', 0)
         run.save()
@@ -119,6 +122,8 @@ class FacebookCrmSync(StageAdapter):
         standardized = assign_bdr_round_robin(standardized, bdr_names)
         import_results = import_profiles_to_hubspot(standardized, run.id)
 
+        for p in standardized:
+            p['_synced_to_crm'] = True
         run.contacts_synced = import_results.get('created', 0)
         run.duplicates_skipped = import_results.get('skipped', 0)
         run.save()
