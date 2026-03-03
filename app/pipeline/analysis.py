@@ -9,6 +9,8 @@ All adapters attach analysis results to profiles for the scoring stage.
 """
 import json
 import logging
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Any
 
 import requests
@@ -105,65 +107,79 @@ Respond ONLY with JSON:
     return result
 
 
+def _analyze_single_content(idx, item, contact_id):
+    """Analyze a single content item (rehost + GPT-4.1/Whisper). Thread-safe."""
+    content_format = item.get('format')
+    media_url = None
+    media_format = None
+
+    if content_format == 'VIDEO':
+        media_url = item.get('media_url')
+        media_format = 'VIDEO'
+    elif content_format == 'COLLECTION':
+        content_group_media = item.get('content_group_media', [])
+        if content_group_media:
+            media_url = content_group_media[0].get('media_url')
+        else:
+            media_url = item.get('thumbnail_url')
+        media_format = 'IMAGE'
+    else:
+        media_url = item.get('media_url') or item.get('thumbnail_url')
+        media_format = 'IMAGE'
+
+    if not media_url:
+        logger.warning("Item at index %d: No media URL, skipping", idx)
+        return None
+
+    media_url = media_url.rstrip('.')
+
+    if media_format == 'VIDEO':
+        try:
+            head_response = requests.head(media_url, timeout=10)
+            content_length = int(head_response.headers.get('content-length', 0))
+            if content_length > 25 * 1024 * 1024:
+                logger.warning("Item %d: Video too large (%.1fMB), skipping", idx, content_length / 1024 / 1024)
+                return None
+        except Exception as e:
+            logger.warning("Item %d: Could not check video size: %s, attempting anyway", idx, e)
+
+    try:
+        rehosted_url = rehost_media_on_r2(media_url, contact_id, media_format)
+        analysis = analyze_content_item(rehosted_url, media_format)
+        analysis['description'] = item.get('description', '')
+        analysis['is_pinned'] = item.get('is_pinned', False)
+        analysis['likes_and_views_disabled'] = item.get('likes_and_views_disabled', False)
+        analysis['engagement'] = item.get('engagement', {})
+        logger.debug("Item %d: Successfully analyzed", idx)
+        return analysis
+    except Exception as e:
+        logger.error("Item %d: Error analyzing: %s", idx, e)
+        return None
+
+
 def analyze_selected_content(
     filtered_items: List[Dict],
     selected_indices: List[int],
     contact_id: str,
 ) -> List[Dict[str, Any]]:
-    """Analyze 3 selected content items (rehost + GPT-4.1/Whisper)."""
-    content_analyses = []
-
+    """Analyze 3 selected content items in parallel (rehost + GPT-4.1/Whisper)."""
+    tasks = []
     for idx in selected_indices[:3]:
         if idx >= len(filtered_items):
             logger.warning("Index %d out of range, skipping", idx)
             continue
+        tasks.append((idx, filtered_items[idx]))
 
-        item = filtered_items[idx]
-        content_format = item.get('format')
-        media_url = None
-        media_format = None
+    if not tasks:
+        return []
 
-        if content_format == 'VIDEO':
-            media_url = item.get('media_url')
-            media_format = 'VIDEO'
-        elif content_format == 'COLLECTION':
-            content_group_media = item.get('content_group_media', [])
-            if content_group_media:
-                media_url = content_group_media[0].get('media_url')
-            else:
-                media_url = item.get('thumbnail_url')
-            media_format = 'IMAGE'
-        else:
-            media_url = item.get('media_url') or item.get('thumbnail_url')
-            media_format = 'IMAGE'
-
-        if not media_url:
-            logger.warning("Item at index %d: No media URL, skipping", idx)
-            continue
-
-        media_url = media_url.rstrip('.')
-
-        if media_format == 'VIDEO':
-            try:
-                head_response = requests.head(media_url, timeout=10)
-                content_length = int(head_response.headers.get('content-length', 0))
-                if content_length > 25 * 1024 * 1024:
-                    logger.warning("Item %d: Video too large (%.1fMB), skipping", idx, content_length / 1024 / 1024)
-                    continue
-            except Exception as e:
-                logger.warning("Item %d: Could not check video size: %s, attempting anyway", idx, e)
-
-        try:
-            rehosted_url = rehost_media_on_r2(media_url, contact_id, media_format)
-            analysis = analyze_content_item(rehosted_url, media_format)
-            analysis['description'] = item.get('description', '')
-            analysis['is_pinned'] = item.get('is_pinned', False)
-            analysis['likes_and_views_disabled'] = item.get('likes_and_views_disabled', False)
-            analysis['engagement'] = item.get('engagement', {})
-            content_analyses.append(analysis)
-            logger.debug("Item %d: Successfully analyzed", idx)
-        except Exception as e:
-            logger.error("Item %d: Error analyzing: %s", idx, e)
+    content_analyses = []
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        futures = {pool.submit(_analyze_single_content, idx, item, contact_id): idx for idx, item in tasks}
+        for future in as_completed(futures):
+            result = future.result()
+            if result:
+                content_analyses.append(result)
 
     return content_analyses
 
@@ -189,9 +205,14 @@ def gather_evidence(filtered_items: List[Dict], bio: str, contact_id: str):
 
     logger.info("Gathering evidence from: %d thumbnails, %d captions", len(thumbnail_urls), len(captions))
 
-    bio_evidence = analyze_bio_evidence(bio)
-    caption_evidence = analyze_caption_evidence(captions)
-    thumbnail_evidence = analyze_thumbnail_evidence(thumbnail_urls, engagement_data, contact_id)
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        bio_future = pool.submit(analyze_bio_evidence, bio)
+        caption_future = pool.submit(analyze_caption_evidence, captions)
+        thumb_future = pool.submit(analyze_thumbnail_evidence, thumbnail_urls, engagement_data, contact_id)
+
+        bio_evidence = bio_future.result()
+        caption_evidence = caption_future.result()
+        thumbnail_evidence = thumb_future.result()
 
     logger.info("Evidence gathering complete")
     return bio_evidence, caption_evidence, thumbnail_evidence
@@ -228,19 +249,29 @@ class InstagramAnalysis(StageAdapter):
                 continue
 
             try:
-                # Deep analysis of 3 selected posts
-                content_analyses = analyze_selected_content(filtered_items, selected_indices, contact_id)
-                if not content_analyses:
-                    errors.append(f"Could not analyze content for {profile_url}")
-                    continue
+                t0 = time.monotonic()
 
-                # Evidence gathering (bio + captions + thumbnail grid)
-                bio_evidence, caption_evidence, thumbnail_evidence = gather_evidence(
-                    filtered_items, bio, contact_id
-                )
+                # Content analysis + evidence gathering in parallel
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    content_future = pool.submit(analyze_selected_content, filtered_items, selected_indices, contact_id)
+                    evidence_future = pool.submit(gather_evidence, filtered_items, bio, contact_id)
 
-                # Creator profile synthesis
+                    content_analyses = content_future.result()
+                    if not content_analyses:
+                        evidence_future.cancel()
+                        errors.append(f"Could not analyze content for {profile_url}")
+                        continue
+
+                    bio_evidence, caption_evidence, thumbnail_evidence = evidence_future.result()
+
+                t1 = time.monotonic()
+
+                # Creator profile synthesis (needs content_analyses)
                 creator_profile = generate_creator_profile(content_analyses)
+
+                elapsed = time.monotonic() - t0
+                logger.info("%s: analysis %.1fs (parallel %.1fs + profile %.1fs)",
+                            profile_url, elapsed, t1 - t0, elapsed - (t1 - t0))
 
                 # Attach results
                 profile['_content_analyses'] = content_analyses
