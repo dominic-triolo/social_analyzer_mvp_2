@@ -345,7 +345,7 @@ def _generate_run_summary(run, failed: bool = False) -> str:
     synced = run.contacts_synced or 0
     tier = run.tier_distribution or {}
     auto = tier.get('auto_enroll', 0)
-    high_pri = tier.get('high_priority_review', 0)
+    standard = tier.get('standard_review', 0)
     estimated = run.estimated_cost or 0.0
     actual = run.actual_cost or 0.0
     platform = (run.platform or 'unknown').capitalize()
@@ -384,15 +384,15 @@ def _generate_run_summary(run, failed: bool = False) -> str:
     if prescreened > 0 and enriched > 0 and enriched < prescreened:
         lines.append(f"{enriched} of {prescreened} enriched successfully.")
 
-    # Scoring + CRM sync line — "42 synced to CRM — 8 auto-enroll, 18 high priority."
+    # Scoring + CRM sync line — "42 synced to CRM — 8 auto-enroll, 34 standard review."
     crm_parts = []
     if synced:
         crm_parts.append(f"{synced} synced to CRM")
     tier_details = []
     if auto:
         tier_details.append(f"{auto} auto-enroll")
-    if high_pri:
-        tier_details.append(f"{high_pri} high priority")
+    if standard:
+        tier_details.append(f"{standard} standard review")
     if crm_parts:
         line = crm_parts[0]
         if tier_details:

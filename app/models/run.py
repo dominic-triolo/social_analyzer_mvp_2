@@ -51,9 +51,7 @@ class Run:
         self.errors: List[Dict] = []
         self.tier_distribution = {
             'auto_enroll': 0,
-            'high_priority_review': 0,
-            'standard_priority_review': 0,
-            'low_priority_review': 0,
+            'standard_review': 0,
         }
         self.summary = ''
         self.estimated_cost = 0.0

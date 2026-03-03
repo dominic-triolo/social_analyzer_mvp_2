@@ -37,7 +37,7 @@ tiers:
     manual_score_precision: 0.833
     full_score_threshold: 0.80
     full_score_precision: 0.705
-  standard_priority_review:
+  standard_review:
     full_score_threshold: 0.25
     precision: 0.681
 

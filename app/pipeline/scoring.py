@@ -58,7 +58,7 @@ def _default_config():
                 'full_score_threshold': 0.80,
                 'full_score_precision': 0.705,
             },
-            'standard_priority_review': {
+            'standard_review': {
                 'full_score_threshold': 0.25,
                 'precision': 0.681,
             },
@@ -353,7 +353,7 @@ RESPOND ONLY with JSON:
 
     # Tier assignment from config
     ae_cfg = tiers_cfg.get('auto_enroll', {})
-    spr_cfg = tiers_cfg.get('standard_priority_review', {})
+    sr_cfg = tiers_cfg.get('standard_review', {})
 
     if manual_score_with_penalty >= ae_cfg.get('manual_score_threshold', 0.65):
         priority_tier = "auto_enroll"
@@ -363,14 +363,10 @@ RESPOND ONLY with JSON:
         priority_tier = "auto_enroll"
         expected_precision = ae_cfg.get('full_score_precision', 0.705)
         tier_reasoning = f"Full score >={ae_cfg.get('full_score_threshold', 0.80)} ({int(expected_precision*100)}% precision)"
-    elif full_score >= spr_cfg.get('full_score_threshold', 0.25):
-        priority_tier = "standard_priority_review"
-        expected_precision = spr_cfg.get('precision', 0.681)
-        tier_reasoning = f"Full score >={spr_cfg.get('full_score_threshold', 0.25)} ({int(expected_precision*100)}% precision)"
     else:
-        priority_tier = "low_priority_review"
+        priority_tier = "standard_review"
         expected_precision = 0.0
-        tier_reasoning = "Below review thresholds"
+        tier_reasoning = "Below auto-enroll thresholds"
 
     score_reasoning = result.get('score_reasoning', '')
     adjustments = []
@@ -465,7 +461,7 @@ def _score_instagram_profile(profile):
     profile['_lead_analysis'] = lead_analysis
     profile['_first_name'] = first_name
 
-    tier = lead_analysis.get('priority_tier', 'low_priority_review')
+    tier = lead_analysis.get('priority_tier', 'standard_review')
     logger.info("[%s] score=%.3f (%s)", tag, lead_analysis['lead_score'], tier)
     return profile, None
 
@@ -486,7 +482,7 @@ def _score_patreon_profile(profile):
 
     profile['_lead_analysis'] = lead_analysis
 
-    tier = lead_analysis.get('priority_tier', 'low_priority_review')
+    tier = lead_analysis.get('priority_tier', 'standard_review')
     logger.info("[%s] score=%.3f (%s)", tag, lead_analysis['lead_score'], tier)
     return profile, None
 
@@ -507,7 +503,7 @@ def _score_facebook_profile(profile):
 
     profile['_lead_analysis'] = lead_analysis
 
-    tier = lead_analysis.get('priority_tier', 'low_priority_review')
+    tier = lead_analysis.get('priority_tier', 'standard_review')
     logger.info("[%s] score=%.3f (%s)", tag, lead_analysis['lead_score'], tier)
     return profile, None
 
@@ -527,7 +523,7 @@ def _run_scoring_pool(score_fn, profiles, run, get_name_fn):
                     run.increment_stage_progress('scoring', 'failed')
                 elif result:
                     scored.append(result)
-                    tier = result.get('_lead_analysis', {}).get('priority_tier', 'low_priority_review')
+                    tier = result.get('_lead_analysis', {}).get('priority_tier', 'standard_review')
                     if tier in run.tier_distribution:
                         run.tier_distribution[tier] += 1
                     run.increment_stage_progress('scoring', 'completed')

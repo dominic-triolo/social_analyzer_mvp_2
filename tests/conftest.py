@@ -96,8 +96,7 @@ def make_run():
             duplicates_skipped=0,
             tier_distribution={
                 'auto_enroll': 0,
-                'standard_priority_review': 0,
-                'low_priority_review': 0,
+                'standard_review': 0,
             },
             error_count=0,
             errors=[],

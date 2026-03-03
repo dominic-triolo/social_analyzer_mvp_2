@@ -436,10 +436,8 @@ class MockInstagramScoring(StageAdapter):
                 tier = 'auto_enroll'
             elif full_score >= 0.80:
                 tier = 'auto_enroll'
-            elif full_score >= 0.25:
-                tier = 'standard_priority_review'
             else:
-                tier = 'low_priority_review'
+                tier = 'standard_review'
 
             profile['_lead_analysis'] = {
                 'section_scores': {
@@ -483,7 +481,7 @@ class MockPatreonScoring(StageAdapter):
         for p in profiles:
             _simulate_delay()
             score = random.uniform(0.3, 0.85)
-            tier = 'auto_enroll' if score >= 0.65 else 'standard_priority_review' if score >= 0.25 else 'low_priority_review'
+            tier = 'auto_enroll' if score >= 0.65 else 'standard_review'
             p['_lead_analysis'] = {'lead_score': round(score, 3), 'priority_tier': tier, 'section_scores': {}, 'score_reasoning': 'Mock score.'}
             if tier in run.tier_distribution:
                 run.tier_distribution[tier] += 1
@@ -504,7 +502,7 @@ class MockFacebookScoring(StageAdapter):
         for p in profiles:
             _simulate_delay()
             score = random.uniform(0.3, 0.85)
-            tier = 'auto_enroll' if score >= 0.65 else 'standard_priority_review' if score >= 0.25 else 'low_priority_review'
+            tier = 'auto_enroll' if score >= 0.65 else 'standard_review'
             p['_lead_analysis'] = {'lead_score': round(score, 3), 'priority_tier': tier, 'section_scores': {}, 'score_reasoning': 'Mock score.'}
             if tier in run.tier_distribution:
                 run.tier_distribution[tier] += 1

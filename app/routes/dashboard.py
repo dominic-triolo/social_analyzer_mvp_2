@@ -45,9 +45,11 @@ def get_stats():
 
         tier_counts = r.hgetall('trovastats:priority_tiers') or {}
         auto_enroll = int(tier_counts.get('auto_enroll', 0))
-        high_priority = int(tier_counts.get('high_priority_review', 0))
-        standard_priority = int(tier_counts.get('standard_priority_review', 0))
-        low_priority = int(tier_counts.get('low_priority_review', 0))
+        standard_review = int(tier_counts.get('standard_review', 0))
+        # Backwards compat: fold old tier names into standard_review
+        standard_review += int(tier_counts.get('high_priority_review', 0))
+        standard_review += int(tier_counts.get('standard_priority_review', 0))
+        standard_review += int(tier_counts.get('low_priority_review', 0))
 
         total_completed = post_frequency + pre_screened + enriched
         total_errors = errors
@@ -70,16 +72,12 @@ def get_stats():
         if total_passed > 0:
             tier_percentages = {
                 'auto_enroll': (auto_enroll / total_passed * 100),
-                'high_priority_review': (high_priority / total_passed * 100),
-                'standard_priority_review': (standard_priority / total_passed * 100),
-                'low_priority_review': (low_priority / total_passed * 100),
+                'standard_review': (standard_review / total_passed * 100),
             }
         else:
             tier_percentages = {
                 'auto_enroll': 0,
-                'high_priority_review': 0,
-                'standard_priority_review': 0,
-                'low_priority_review': 0,
+                'standard_review': 0,
             }
 
         return jsonify({
@@ -102,18 +100,14 @@ def get_stats():
             },
             'priority_tiers': {
                 'auto_enroll': auto_enroll,
-                'high_priority_review': high_priority,
-                'standard_priority_review': standard_priority,
-                'low_priority_review': low_priority,
+                'standard_review': standard_review,
                 'total': total_passed,
             },
             'batch_quality': {
                 'pass_rate': round(pass_rate, 1),
                 'tier_percentages': {
                     'auto_enroll': round(tier_percentages['auto_enroll'], 1),
-                    'high_priority_review': round(tier_percentages['high_priority_review'], 1),
-                    'standard_priority_review': round(tier_percentages['standard_priority_review'], 1),
-                    'low_priority_review': round(tier_percentages['low_priority_review'], 1),
+                    'standard_review': round(tier_percentages['standard_review'], 1),
                 },
             },
         })
@@ -131,14 +125,12 @@ def get_stats():
             'breakdown': {'post_frequency': 0, 'pre_screened': 0, 'enriched': 0, 'errors': 0},
             'pre_screening': {'total_pre_screened': 0, 'low_post_frequency': 0, 'outside_icp': 0},
             'priority_tiers': {
-                'auto_enroll': 0, 'high_priority_review': 0,
-                'standard_priority_review': 0, 'low_priority_review': 0, 'total': 0,
+                'auto_enroll': 0, 'standard_review': 0, 'total': 0,
             },
             'batch_quality': {
                 'pass_rate': 0,
                 'tier_percentages': {
-                    'auto_enroll': 0, 'high_priority_review': 0,
-                    'standard_priority_review': 0, 'low_priority_review': 0,
+                    'auto_enroll': 0, 'standard_review': 0,
                 },
             },
         }), 200

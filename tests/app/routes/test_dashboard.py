@@ -102,30 +102,36 @@ class TestGetStats:
     def test_priority_tiers(self, client, mock_dashboard_redis):
         mock_dashboard_redis.hgetall.side_effect = [
             {'enriched': '20'},
-            {'auto_enroll': '5', 'high_priority_review': '8',
-             'standard_priority_review': '4', 'low_priority_review': '3'},
+            {'auto_enroll': '5', 'standard_review': '15'},
         ]
 
         data = client.get('/api/stats').json
         assert data['priority_tiers']['auto_enroll'] == 5
-        assert data['priority_tiers']['high_priority_review'] == 8
-        assert data['priority_tiers']['standard_priority_review'] == 4
-        assert data['priority_tiers']['low_priority_review'] == 3
-        assert data['priority_tiers']['total'] == 20  # enriched = total_passed
+        assert data['priority_tiers']['standard_review'] == 15
+        assert data['priority_tiers']['total'] == 20
+
+    def test_priority_tiers_folds_old_names(self, client, mock_dashboard_redis):
+        """Old tier names (high_priority_review, etc.) fold into standard_review."""
+        mock_dashboard_redis.hgetall.side_effect = [
+            {'enriched': '20'},
+            {'auto_enroll': '5', 'high_priority_review': '3',
+             'standard_priority_review': '7', 'low_priority_review': '5'},
+        ]
+
+        data = client.get('/api/stats').json
+        assert data['priority_tiers']['auto_enroll'] == 5
+        assert data['priority_tiers']['standard_review'] == 15  # 3+7+5
 
     def test_tier_percentages_when_total_passed_nonzero(self, client, mock_dashboard_redis):
         mock_dashboard_redis.hgetall.side_effect = [
             {'enriched': '100'},
-            {'auto_enroll': '25', 'high_priority_review': '25',
-             'standard_priority_review': '25', 'low_priority_review': '25'},
+            {'auto_enroll': '50', 'standard_review': '50'},
         ]
 
         data = client.get('/api/stats').json
         pcts = data['batch_quality']['tier_percentages']
-        assert pcts['auto_enroll'] == 25.0
-        assert pcts['high_priority_review'] == 25.0
-        assert pcts['standard_priority_review'] == 25.0
-        assert pcts['low_priority_review'] == 25.0
+        assert pcts['auto_enroll'] == 50.0
+        assert pcts['standard_review'] == 50.0
 
     def test_tier_percentages_zero_when_no_passed(self, client, mock_dashboard_redis):
         mock_dashboard_redis.hgetall.side_effect = [
@@ -136,9 +142,7 @@ class TestGetStats:
         data = client.get('/api/stats').json
         pcts = data['batch_quality']['tier_percentages']
         assert pcts['auto_enroll'] == 0
-        assert pcts['high_priority_review'] == 0
-        assert pcts['standard_priority_review'] == 0
-        assert pcts['low_priority_review'] == 0
+        assert pcts['standard_review'] == 0
 
     def test_avg_duration_calculation(self, client, mock_dashboard_redis):
         mock_dashboard_redis.lrange.return_value = ['10', '20', '30']

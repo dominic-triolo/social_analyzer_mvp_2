@@ -533,8 +533,8 @@ class TestGenerateEvidenceBasedScore:
 
         assert result['priority_tier'] == 'auto_enroll'
 
-    def test_tier_standard_priority_review(self, evidence_inputs, mock_openai):
-        """Full score >= 0.25 but below auto_enroll -> standard_priority_review."""
+    def test_tier_standard_review(self, evidence_inputs, mock_openai):
+        """Below auto_enroll thresholds -> standard_review."""
         with patch('app.pipeline.scoring.client', mock_openai(
             niche_and_audience_identity=0.3,
             creator_authenticity_and_presence=0.3,
@@ -548,10 +548,10 @@ class TestGenerateEvidenceBasedScore:
             }
             result = generate_evidence_based_score(**evidence_inputs)
 
-        assert result['priority_tier'] == 'standard_priority_review'
+        assert result['priority_tier'] == 'standard_review'
 
-    def test_tier_low_priority_review(self, evidence_inputs, mock_openai):
-        """Full score < 0.25 -> low_priority_review."""
+    def test_tier_standard_review_low_scores(self, evidence_inputs, mock_openai):
+        """Very low scores also get standard_review (no separate low tier)."""
         with patch('app.pipeline.scoring.client', mock_openai(
             niche_and_audience_identity=0.1,
             creator_authenticity_and_presence=0.1,
@@ -565,7 +565,7 @@ class TestGenerateEvidenceBasedScore:
             }
             result = generate_evidence_based_score(**evidence_inputs)
 
-        assert result['priority_tier'] == 'low_priority_review'
+        assert result['priority_tier'] == 'standard_review'
         assert result['expected_precision'] == 0.0
 
     def test_score_reasoning_includes_adjustments(self, evidence_inputs, mock_openai):
@@ -821,7 +821,7 @@ class TestIntegration:
             result = generate_evidence_based_score(**evidence_inputs)
 
         assert 0.0 <= result['lead_score'] <= 1.0
-        assert result['priority_tier'] in ('auto_enroll', 'standard_priority_review', 'low_priority_review')
+        assert result['priority_tier'] in ('auto_enroll', 'standard_review')
         assert all(dim in result['section_scores'] for dim in [
             'niche_and_audience_identity', 'creator_authenticity_and_presence',
             'monetization_and_business_mindset', 'community_infrastructure',

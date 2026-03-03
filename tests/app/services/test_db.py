@@ -93,7 +93,7 @@ class TestPersistRun:
         run.profiles_scored = 28
         run.contacts_synced = 20
         run.duplicates_skipped = 5
-        run.tier_distribution = {'auto_enroll': 10, 'high_priority_review': 10}
+        run.tier_distribution = {'auto_enroll': 10, 'standard_review': 10}
         run.errors = [{'msg': 'timeout'}]
         run.summary = 'Run completed successfully'
         run.actual_cost = 2.50
@@ -108,7 +108,7 @@ class TestPersistRun:
         assert row.profiles_scored == 28
         assert row.contacts_synced == 20
         assert row.duplicates_skipped == 5
-        assert row.tier_distribution == {'auto_enroll': 10, 'high_priority_review': 10}
+        assert row.tier_distribution == {'auto_enroll': 10, 'standard_review': 10}
         assert row.error_count == 1
         assert row.summary == 'Run completed successfully'
         assert row.actual_cost == 2.50

@@ -170,7 +170,7 @@ class TestPersistMetricSnapshot:
     def _make_run(platform='instagram'):
         run = MagicMock()
         run.platform = platform
-        run.tier_distribution = {'auto_enroll': 5, 'high_priority_review': 10}
+        run.tier_distribution = {'auto_enroll': 5, 'standard_review': 10}
         return run
 
 

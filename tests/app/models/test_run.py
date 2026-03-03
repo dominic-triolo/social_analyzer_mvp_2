@@ -159,17 +159,15 @@ class TestTierDistribution:
         run = _make_run()
         assert run.tier_distribution == {
             'auto_enroll': 0,
-            'high_priority_review': 0,
-            'standard_priority_review': 0,
-            'low_priority_review': 0,
+            'standard_review': 0,
         }
 
     def test_tier_distribution_is_mutable(self):
         run = _make_run()
         run.tier_distribution['auto_enroll'] = 5
-        run.tier_distribution['high_priority_review'] = 12
+        run.tier_distribution['standard_review'] = 12
         assert run.tier_distribution['auto_enroll'] == 5
-        assert run.tier_distribution['high_priority_review'] == 12
+        assert run.tier_distribution['standard_review'] == 12
 
 
 # ── Profile counters ─────────────────────────────────────────────────────────

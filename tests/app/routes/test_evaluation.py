@@ -55,11 +55,11 @@ def seed_scored_leads(patch_eval_session):
         LeadRun(lead_id=lead.id, run_id='r1', lead_score=0.85,
                 priority_tier='auto_enroll'),
         LeadRun(lead_id=lead.id, run_id='r2', lead_score=0.65,
-                priority_tier='high_priority_review'),
+                priority_tier='auto_enroll'),
         LeadRun(lead_id=lead.id, run_id='r3', lead_score=0.45,
-                priority_tier='standard_priority_review'),
+                priority_tier='standard_review'),
         LeadRun(lead_id=lead.id, run_id='r4', lead_score=0.25,
-                priority_tier='low_priority_review'),
+                priority_tier='standard_review'),
     ]
     session.add_all(lead_runs)
     session.commit()
@@ -104,8 +104,8 @@ class TestEvalKpisPartial:
 
     def test_auto_rate_calculated(self, client, seed_scored_leads):
         resp = client.get('/partials/eval-kpis')
-        # 1 out of 4 is auto_enroll = 25%
-        assert b'25.0%' in resp.data
+        # 2 out of 4 is auto_enroll = 50%
+        assert b'50.0%' in resp.data
 
 
 # ---------------------------------------------------------------------------
@@ -206,10 +206,8 @@ class TestApiScoring:
         resp = client.get('/api/evaluation/scoring')
         assert resp.status_code == 200
         tiers = resp.json['tier_distribution']
-        assert tiers['auto_enroll'] == 1
-        assert tiers['high_priority_review'] == 1
-        assert tiers['standard_priority_review'] == 1
-        assert tiers['low_priority_review'] == 1
+        assert tiers['auto_enroll'] == 2
+        assert tiers['standard_review'] == 2
 
     def test_returns_avg_lead_score(self, client, seed_scored_leads):
         resp = client.get('/api/evaluation/scoring')

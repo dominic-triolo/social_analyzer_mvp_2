@@ -79,7 +79,7 @@ def _make_run(**overrides):
         profiles_scored=0,
         contacts_synced=0,
         duplicates_skipped=0,
-        tier_distribution={'auto_enroll': 0, 'standard_priority_review': 0, 'low_priority_review': 0},
+        tier_distribution={'auto_enroll': 0, 'standard_review': 0},
         error_count=0,
         errors=[],
         summary='',
@@ -928,7 +928,7 @@ class TestRunSummaryDeviations:
         run = _make_run(
             profiles_found=200, profiles_pre_screened=150,
             profiles_scored=100, contacts_synced=50,
-            tier_distribution={'auto_enroll': 5, 'high_priority_review': 10},
+            tier_distribution={'auto_enroll': 5, 'standard_review': 10},
             actual_cost=2.0,
         )
         summary = _generate_run_summary(run)
