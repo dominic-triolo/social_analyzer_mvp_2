@@ -75,6 +75,150 @@ def filter_content_items(content_items: List[Dict[str, Any]]) -> List[Dict[str, 
 # InsightIQ Discovery Class
 # ──────────────────────────────────────────────────────────────────────────────
 
+# ── InsightIQ valid interest categories ────────────────────────────────────
+# Discovered by probing the API — these are the exact string values accepted.
+VALID_INTERESTS = frozenset({
+    'Travel, Tourism & Aviation',
+    'Fitness & Yoga',
+    'Sports',
+    'Music',
+    'Gaming',
+    'Clothes, Shoes, Handbags & Accessories',
+    'Art & Design',
+    'Business & Careers',
+    'Healthy Lifestyle',
+    'Beauty & Cosmetics',
+    'Television & Film',
+    'Camera & Photography',
+    'Pets',
+    'Cars & Motorbikes',
+    'Shopping & Retail',
+    'Toys, Children & Baby',
+    'Activewear',
+    'Wedding',
+    'Tobacco & Smoking',
+    'Luxury Goods',
+    'Jewellery & Watches',
+    'Electronics & Computers',
+    'Coffee, Tea & Beverages',
+    'Beer, Wine & Spirits',
+    'Restaurants, Food & Grocery',
+    'Healthcare & Medicine',
+})
+
+# Short-name aliases so users don't need exact API strings.
+INTEREST_ALIASES = {
+    'travel': 'Travel, Tourism & Aviation',
+    'fitness': 'Fitness & Yoga',
+    'yoga': 'Fitness & Yoga',
+    'sports': 'Sports',
+    'music': 'Music',
+    'gaming': 'Gaming',
+    'fashion': 'Clothes, Shoes, Handbags & Accessories',
+    'clothing': 'Clothes, Shoes, Handbags & Accessories',
+    'art': 'Art & Design',
+    'design': 'Art & Design',
+    'business': 'Business & Careers',
+    'careers': 'Business & Careers',
+    'health': 'Healthy Lifestyle',
+    'healthy lifestyle': 'Healthy Lifestyle',
+    'beauty': 'Beauty & Cosmetics',
+    'cosmetics': 'Beauty & Cosmetics',
+    'makeup': 'Beauty & Cosmetics',
+    'tv': 'Television & Film',
+    'film': 'Television & Film',
+    'television': 'Television & Film',
+    'movies': 'Television & Film',
+    'photography': 'Camera & Photography',
+    'camera': 'Camera & Photography',
+    'pets': 'Pets',
+    'animals': 'Pets',
+    'cars': 'Cars & Motorbikes',
+    'automotive': 'Cars & Motorbikes',
+    'shopping': 'Shopping & Retail',
+    'retail': 'Shopping & Retail',
+    'kids': 'Toys, Children & Baby',
+    'children': 'Toys, Children & Baby',
+    'baby': 'Toys, Children & Baby',
+    'activewear': 'Activewear',
+    'wedding': 'Wedding',
+    'luxury': 'Luxury Goods',
+    'jewellery': 'Jewellery & Watches',
+    'jewelry': 'Jewellery & Watches',
+    'watches': 'Jewellery & Watches',
+    'electronics': 'Electronics & Computers',
+    'computers': 'Electronics & Computers',
+    'technology': 'Electronics & Computers',
+    'tech': 'Electronics & Computers',
+    'coffee': 'Coffee, Tea & Beverages',
+    'tea': 'Coffee, Tea & Beverages',
+    'beverages': 'Coffee, Tea & Beverages',
+    'beer': 'Beer, Wine & Spirits',
+    'wine': 'Beer, Wine & Spirits',
+    'spirits': 'Beer, Wine & Spirits',
+    'alcohol': 'Beer, Wine & Spirits',
+    'food': 'Restaurants, Food & Grocery',
+    'food & drink': 'Restaurants, Food & Grocery',
+    'restaurants': 'Restaurants, Food & Grocery',
+    'grocery': 'Restaurants, Food & Grocery',
+    'cooking': 'Restaurants, Food & Grocery',
+    'healthcare': 'Healthcare & Medicine',
+    'medicine': 'Healthcare & Medicine',
+}
+
+
+def _normalize_interests(raw_interests):
+    """Map user-provided interest strings to valid InsightIQ values.
+
+    Accepts exact API values, short aliases, or case-insensitive matches.
+    Logs a warning for any unrecognised values (dropped).
+    """
+    if not raw_interests or not isinstance(raw_interests, list):
+        return []
+
+    normalised = []
+    for interest in raw_interests:
+        if not isinstance(interest, str) or not interest.strip():
+            continue
+        val = interest.strip()
+        # Exact match
+        if val in VALID_INTERESTS:
+            normalised.append(val)
+            continue
+        # Alias lookup (case-insensitive)
+        mapped = INTEREST_ALIASES.get(val.lower())
+        if mapped:
+            normalised.append(mapped)
+            continue
+        # Case-insensitive exact match
+        lower_map = {v.lower(): v for v in VALID_INTERESTS}
+        if val.lower() in lower_map:
+            normalised.append(lower_map[val.lower()])
+            continue
+        logger.warning("Dropping unknown interest %r — not in InsightIQ enum", val)
+
+    return list(dict.fromkeys(normalised))  # deduplicate, preserve order
+
+
+def _normalize_hashtags(raw_hashtags):
+    """Ensure hashtags are in InsightIQ dict format: [{'name': 'tag'}].
+
+    Accepts:
+      - ['#travel', 'hiking']         → [{'name': 'travel'}, {'name': 'hiking'}]
+      - [{'name': 'travel'}]          → [{'name': 'travel'}]  (passthrough)
+    """
+    if not raw_hashtags or not isinstance(raw_hashtags, list):
+        return []
+
+    normalised = []
+    for tag in raw_hashtags:
+        if isinstance(tag, dict) and 'name' in tag:
+            normalised.append(tag)
+        elif isinstance(tag, str) and tag.strip():
+            normalised.append({'name': tag.strip().lstrip('#')})
+    return normalised
+
+
 class InsightIQDiscovery:
     """
     InsightIQ discovery client with fixed base parameters.
@@ -161,13 +305,17 @@ class InsightIQDiscovery:
         elif lookalike_type == 'audience' and lookalike_username:
             parameters['audience_lookalikes'] = lookalike_username
 
-        # Optional filters
+        # Optional filters — normalise before sending to API
         if user_filters.get('creator_interests'):
-            parameters['creator_interests'] = user_filters['creator_interests']
+            interests = _normalize_interests(user_filters['creator_interests'])
+            if interests:
+                parameters['creator_interests'] = interests
         if user_filters.get('audience_interests'):
-            parameters['audience_interests'] = user_filters['audience_interests']
+            interests = _normalize_interests(user_filters['audience_interests'])
+            if interests:
+                parameters['audience_interests'] = interests
         if user_filters.get('hashtags'):
-            parameters['hashtags'] = user_filters['hashtags']
+            parameters['hashtags'] = _normalize_hashtags(user_filters['hashtags'])
 
         # Bio phrase filtering
         bio_phrase = (user_filters.get('bio_phrase') or '').strip()
