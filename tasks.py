@@ -6,7 +6,7 @@ import base64
 import hashlib
 import time
 from typing import Dict, List, Any, Tuple, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import boto3
 from botocore.client import Config
 from celery_app import celery_app
@@ -5510,3 +5510,542 @@ def import_profiles_to_hubspot(profiles: List[Dict], job_id: str) -> Dict:
 
     print(f"[HUBSPOT] Import complete: {created_count} created, {skipped_count} skipped")
     return {'created': created_count, 'skipped': skipped_count}
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  ENROLLMENT DISPATCHER
+#  Runs Mon–Fri at 9 AM PST; throttles Reply.io enrollments across 4 inboxes
+# ─────────────────────────────────────────────────────────────────────────────
+
+try:
+    import holidays as holidays_lib
+    _HOLIDAYS_AVAILABLE = True
+except ImportError:
+    _HOLIDAYS_AVAILABLE = False
+    print("[DISPATCHER] 'holidays' library not installed — US holiday exclusion disabled")
+
+# ── Inbox roster ─────────────────────────────────────────────────────────────
+ENROLLMENT_INBOXES = {
+    'Dom':     '75772233',
+    'Jenn':    '1377426260',
+    'Kendall': '271269536',
+    'Ryan':    '583796152',
+}
+
+# ── Default configuration (stored / overridden in Redis) ─────────────────────
+_DEFAULT_CADENCE  = [0, 2, 4, 7, 11]            # calendar-day offsets
+_DEFAULT_WEIGHTS  = {'schedule_call': 3, 'interest_check': 2, 'self_service': 1}
+_DEFAULT_MAX_DAY  = 200                          # max emails per inbox per day
+
+HUBSPOT_API_URL_ENROLL = 'https://api.hubapi.com'   # reuse existing key
+
+
+# ── Business-day helpers ──────────────────────────────────────────────────────
+
+def _us_holidays(year: int) -> set:
+    """Return a set of US public holiday dates for a given year."""
+    if _HOLIDAYS_AVAILABLE:
+        return set(holidays_lib.US(years=year).keys())
+    return set()
+
+
+def is_business_day(d: date) -> bool:
+    """Return True if d is a weekday and not a US public holiday."""
+    if d.weekday() >= 5:          # 5=Sat, 6=Sun
+        return False
+    if d in _us_holidays(d.year):
+        return False
+    return True
+
+
+def next_business_day(d: date) -> date:
+    """Return the next business day at or after d."""
+    while not is_business_day(d):
+        d += timedelta(days=1)
+    return d
+
+
+def get_step_date(enrollment_date: date, offset_days: int) -> date:
+    """
+    Project the actual send date for one cadence step.
+    Day 0 is the enrollment date (already a business day).
+    For offset > 0, add calendar days then shift to next business day.
+    """
+    projected = enrollment_date + timedelta(days=offset_days)
+    return next_business_day(projected)
+
+
+# ── Redis config helpers ──────────────────────────────────────────────────────
+
+def _get_redis():
+    """Return a redis.Redis client using REDIS_URL."""
+    import redis as redis_lib
+    redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+    return redis_lib.from_url(redis_url, decode_responses=True)
+
+
+def get_sequence_cadence() -> list:
+    try:
+        r = _get_redis()
+        raw = r.get('enrollment:cadence')
+        if raw:
+            cadence = json.loads(raw)
+            return sorted(cadence)
+    except Exception as e:
+        print(f"[DISPATCHER] Redis cadence read error: {e}")
+    return list(_DEFAULT_CADENCE)
+
+
+def set_sequence_cadence(cadence: list) -> bool:
+    try:
+        r = _get_redis()
+        r.set('enrollment:cadence', json.dumps(sorted(cadence)))
+        return True
+    except Exception as e:
+        print(f"[DISPATCHER] Redis cadence write error: {e}")
+        return False
+
+
+def get_outreach_weights() -> dict:
+    try:
+        r = _get_redis()
+        raw = r.get('enrollment:weights')
+        if raw:
+            return json.loads(raw)
+    except Exception as e:
+        print(f"[DISPATCHER] Redis weights read error: {e}")
+    return dict(_DEFAULT_WEIGHTS)
+
+
+def set_outreach_weights(weights: dict) -> bool:
+    try:
+        r = _get_redis()
+        r.set('enrollment:weights', json.dumps(weights))
+        return True
+    except Exception as e:
+        print(f"[DISPATCHER] Redis weights write error: {e}")
+        return False
+
+
+def get_max_per_day() -> int:
+    try:
+        r = _get_redis()
+        raw = r.get('enrollment:max_per_day')
+        if raw:
+            return int(raw)
+    except Exception:
+        pass
+    return _DEFAULT_MAX_DAY
+
+
+def set_max_per_day(n: int) -> bool:
+    try:
+        r = _get_redis()
+        r.set('enrollment:max_per_day', str(n))
+        return True
+    except Exception as e:
+        print(f"[DISPATCHER] Redis max_per_day write error: {e}")
+        return False
+
+
+# ── HubSpot helpers ───────────────────────────────────────────────────────────
+
+def _hs_headers() -> dict:
+    return {
+        'Authorization': f'Bearer {HUBSPOT_API_KEY}',
+        'Content-Type':  'application/json',
+    }
+
+
+def hubspot_search_contacts_all(filters: list, properties: list,
+                                 sorts: list = None, limit_total: int = 10000) -> list:
+    """
+    Paginate through HubSpot contacts search API.
+    filters: list of filter dicts for filterGroups[0]
+    properties: list of property names to fetch
+    sorts: optional list of sort dicts
+    Returns flat list of contact dicts {id, properties}.
+    """
+    url    = f"{HUBSPOT_API_URL_ENROLL}/crm/v3/objects/contacts/search"
+    after  = None
+    results = []
+
+    body = {
+        'filterGroups': [{'filters': filters}],
+        'properties':   properties,
+        'limit':        100,
+    }
+    if sorts:
+        body['sorts'] = sorts
+
+    while True:
+        if after:
+            body['after'] = after
+
+        try:
+            resp = requests.post(url, headers=_hs_headers(), json=body, timeout=30)
+            if resp.status_code != 200:
+                print(f"[DISPATCHER] HubSpot search error {resp.status_code}: {resp.text[:200]}")
+                break
+            data     = resp.json()
+            results += data.get('results', [])
+            paging   = data.get('paging', {})
+            after    = paging.get('next', {}).get('after')
+            if not after or len(results) >= limit_total:
+                break
+        except Exception as e:
+            print(f"[DISPATCHER] HubSpot search exception: {e}")
+            break
+
+    return results
+
+
+def hubspot_update_contact(contact_id: str, properties: dict) -> bool:
+    """PATCH a HubSpot contact's properties."""
+    url = f"{HUBSPOT_API_URL_ENROLL}/crm/v3/objects/contacts/{contact_id}"
+    try:
+        resp = requests.patch(
+            url,
+            headers=_hs_headers(),
+            json={'properties': properties},
+            timeout=15,
+        )
+        if resp.status_code in (200, 204):
+            return True
+        print(f"[DISPATCHER] HubSpot update error for {contact_id}: "
+              f"{resp.status_code} — {resp.text[:200]}")
+        return False
+    except Exception as e:
+        print(f"[DISPATCHER] HubSpot update exception for {contact_id}: {e}")
+        return False
+
+
+# ── Capacity projection ───────────────────────────────────────────────────────
+
+def build_committed_schedule(active_contacts: list, cadence: list) -> dict:
+    """
+    Build a schedule of already-committed email sends.
+    Returns: {inbox_name: {date_str: count}}
+    """
+    committed = {inbox: {} for inbox in ENROLLMENT_INBOXES}
+
+    for contact in active_contacts:
+        props         = contact.get('properties', {})
+        inbox_name    = props.get('reply_io_sequence', '')
+        enrolled_raw  = props.get('recent_reply_sequence_enrolled_date', '')
+
+        if not inbox_name or inbox_name not in ENROLLMENT_INBOXES:
+            continue
+        if not enrolled_raw:
+            continue
+
+        try:
+            # HubSpot date properties come as 'YYYY-MM-DD' or epoch ms
+            if isinstance(enrolled_raw, str) and '-' in enrolled_raw:
+                enrolled_date = date.fromisoformat(enrolled_raw[:10])
+            else:
+                # epoch ms
+                enrolled_date = date.fromtimestamp(int(enrolled_raw) / 1000)
+        except Exception:
+            continue
+
+        for offset in cadence:
+            step_date  = get_step_date(enrolled_date, offset)
+            date_str   = step_date.isoformat()
+            committed[inbox_name][date_str] = committed[inbox_name].get(date_str, 0) + 1
+
+    return committed
+
+
+def available_slots_for_inbox(inbox_name: str, enrollment_date: date,
+                               committed: dict, cadence: list,
+                               max_per_day: int) -> int:
+    """
+    Return the minimum available capacity across all cadence step dates
+    for a given inbox if one more contact were enrolled today.
+    """
+    inbox_schedule = committed.get(inbox_name, {})
+    min_avail = max_per_day  # pessimistic start
+
+    for offset in cadence:
+        step_date = get_step_date(enrollment_date, offset)
+        date_str  = step_date.isoformat()
+        used      = inbox_schedule.get(date_str, 0)
+        avail     = max_per_day - used
+        if avail < min_avail:
+            min_avail = avail
+
+    return max(0, min_avail)
+
+
+def best_inbox_for_enrollment(enrollment_date: date, committed: dict,
+                               cadence: list, max_per_day: int) -> Optional[str]:
+    """
+    Pick the inbox with the highest minimum available slots across all cadence days.
+    Returns None if all inboxes are at capacity.
+    """
+    best_inbox = None
+    best_avail = 0
+
+    for inbox_name in ENROLLMENT_INBOXES:
+        avail = available_slots_for_inbox(
+            inbox_name, enrollment_date, committed, cadence, max_per_day
+        )
+        if avail > best_avail:
+            best_avail = avail
+            best_inbox = inbox_name
+
+    return best_inbox  # None if best_avail == 0
+
+
+def update_committed_for_enrollment(inbox_name: str, enrollment_date: date,
+                                     committed: dict, cadence: list) -> None:
+    """Increment committed counts for a newly enrolled contact (in-place)."""
+    if inbox_name not in committed:
+        committed[inbox_name] = {}
+    for offset in cadence:
+        step_date = get_step_date(enrollment_date, offset)
+        date_str  = step_date.isoformat()
+        committed[inbox_name][date_str] = committed[inbox_name].get(date_str, 0) + 1
+
+
+# ── Weight-based slot allocation ──────────────────────────────────────────────
+
+def allocate_slots_by_weight(total_slots: int, weights: dict,
+                              queue_depths: dict) -> dict:
+    """
+    Divide total_slots across outreach types proportionally by weight,
+    capped by each type's queue depth.
+    Returns: {outreach_type: slots_to_fill}
+    """
+    types         = list(weights.keys())
+    total_weight  = sum(weights[t] for t in types)
+    allocation    = {}
+
+    remaining_slots  = total_slots
+    remaining_weight = total_weight
+
+    # Iterate until stable (handles cap overflow redistribution)
+    for _ in range(len(types) + 1):
+        if remaining_weight == 0 or remaining_slots == 0:
+            break
+        changed = False
+        for t in types:
+            if t in allocation:
+                continue
+            share = round(remaining_slots * weights[t] / remaining_weight)
+            capped = min(share, queue_depths.get(t, 0))
+            if share != capped:
+                # This type is capped; fix its allocation and free the weight
+                allocation[t]         = capped
+                remaining_slots      -= capped
+                remaining_weight     -= weights[t]
+                changed = True
+
+        if not changed:
+            # No type is capped; allocate proportionally for all remaining
+            for t in types:
+                if t not in allocation:
+                    share = round(remaining_slots * weights[t] / remaining_weight)
+                    allocation[t]     = min(share, queue_depths.get(t, 0))
+                    remaining_slots  -= allocation[t]
+                    remaining_weight -= weights[t]
+            break
+
+    # Fill any missing types with 0
+    for t in types:
+        allocation.setdefault(t, 0)
+
+    return allocation
+
+
+# ── Main dispatcher task ──────────────────────────────────────────────────────
+
+@celery_app.task(bind=True, name='tasks.run_enrollment_dispatcher',
+                 time_limit=900, soft_time_limit=840)
+def run_enrollment_dispatcher(self):
+    """
+    Mon–Fri 9 AM PST enrollment dispatcher.
+    1. Check today is a business day.
+    2. Fetch active contacts → build committed schedule.
+    3. Compute total available slots across all inboxes.
+    4. Fetch queued contacts (sorted by combined_lead_score DESC, hs_createdate ASC).
+    5. Allocate slots by outreach type weights.
+    6. For each contact to enroll: assign best inbox, update HubSpot.
+    """
+    today = date.today()
+
+    if not is_business_day(today):
+        print(f"[DISPATCHER] {today} is not a business day — skipping run")
+        return {'skipped': True, 'reason': 'not_business_day', 'date': today.isoformat()}
+
+    print(f"[DISPATCHER] Starting enrollment run for {today}")
+
+    cadence     = get_sequence_cadence()
+    weights     = get_outreach_weights()
+    max_per_day = get_max_per_day()
+
+    # ── Step 1: Fetch active contacts & build committed schedule ──────────────
+    active_contacts = hubspot_search_contacts_all(
+        filters=[
+            {'propertyName': 'reply_sequence_queue_status',
+             'operator': 'EQ', 'value': 'active'}
+        ],
+        properties=[
+            'reply_io_sequence',
+            'primary_category',
+            'outreach_segment',
+            'recent_reply_sequence_enrolled_date',
+        ],
+    )
+    print(f"[DISPATCHER] {len(active_contacts)} active contacts found")
+
+    committed = build_committed_schedule(active_contacts, cadence)
+
+    # ── Step 2: Compute total available enrollment capacity ───────────────────
+    total_available = sum(
+        available_slots_for_inbox(inbox, today, committed, cadence, max_per_day)
+        for inbox in ENROLLMENT_INBOXES
+    )
+    print(f"[DISPATCHER] Total available enrollment slots today: {total_available}")
+
+    if total_available == 0:
+        print("[DISPATCHER] No enrollment capacity today — all inboxes full")
+        return {
+            'enrolled': 0,
+            'date':     today.isoformat(),
+            'reason':   'no_capacity',
+        }
+
+    # ── Step 3: Fetch queued contacts ─────────────────────────────────────────
+    queued_contacts = hubspot_search_contacts_all(
+        filters=[
+            {'propertyName': 'reply_sequence_queue_status',
+             'operator': 'EQ', 'value': 'queued'}
+        ],
+        properties=[
+            'primary_category',
+            'outreach_segment',
+            'combined_lead_score',
+            'hs_createdate',
+        ],
+        sorts=[
+            {'propertyName': 'combined_lead_score', 'direction': 'DESCENDING'},
+            {'propertyName': 'hs_createdate',       'direction': 'ASCENDING'},
+        ],
+    )
+    print(f"[DISPATCHER] {len(queued_contacts)} queued contacts found")
+
+    if not queued_contacts:
+        return {
+            'enrolled': 0,
+            'date':     today.isoformat(),
+            'reason':   'no_queued_contacts',
+        }
+
+    # ── Step 4: Group queued by outreach type & compute allocation ────────────
+    by_type = {}
+    for contact in queued_contacts:
+        otype = (contact.get('properties', {}).get('outreach_segment', '') or 'unknown').strip()
+        by_type.setdefault(otype, []).append(contact)
+
+    queue_depths = {t: len(contacts) for t, contacts in by_type.items()}
+    print(f"[DISPATCHER] Queue depths by type: {queue_depths}")
+
+    # Only allocate for known weight types; 'unknown' gets remaining capacity
+    known_types   = list(weights.keys())
+    known_depths  = {t: queue_depths.get(t, 0) for t in known_types}
+    unknown_depth = queue_depths.get('unknown', 0)
+
+    allocation = allocate_slots_by_weight(
+        total_slots  = max(0, total_available - unknown_depth),
+        weights      = weights,
+        queue_depths = known_depths,
+    )
+    # Unknown/unclassified contacts fill remaining capacity
+    allocation['unknown'] = min(unknown_depth, total_available - sum(allocation.values()))
+
+    print(f"[DISPATCHER] Slot allocation by type: {allocation}")
+
+    # ── Step 5: Enroll contacts ───────────────────────────────────────────────
+    enrolled_count = 0
+    errors         = 0
+    today_str      = today.isoformat()
+
+    for otype, slots in allocation.items():
+        if slots <= 0:
+            continue
+
+        candidates = by_type.get(otype, [])
+        to_enroll  = candidates[:slots]
+
+        for contact in to_enroll:
+            contact_id = contact.get('id')
+            if not contact_id:
+                continue
+
+            # Find best inbox
+            inbox_name = best_inbox_for_enrollment(
+                enrollment_date=today,
+                committed=committed,
+                cadence=cadence,
+                max_per_day=max_per_day,
+            )
+            if not inbox_name:
+                print(f"[DISPATCHER] No capacity left — stopping early "
+                      f"(enrolled {enrolled_count} so far)")
+                break
+
+            owner_id = ENROLLMENT_INBOXES[inbox_name]
+
+            # Build HubSpot property update
+            update_props = {
+                'reply_sequence_queue_status':      'active',
+                'reply_io_sequence':                inbox_name,
+                'hubspot_owner_id':                 owner_id,
+                'recent_reply_sequence_enrolled_date': today_str,
+                'enroll_in_reply_sequence':         'true',
+            }
+
+            success = hubspot_update_contact(contact_id, update_props)
+            if success:
+                update_committed_for_enrollment(inbox_name, today, committed, cadence)
+                enrolled_count += 1
+                print(f"[DISPATCHER] Enrolled {contact_id} → {inbox_name} "
+                      f"(type={otype}, score="
+                      f"{contact.get('properties', {}).get('combined_lead_score', 'n/a')})")
+            else:
+                errors += 1
+
+            time.sleep(0.1)   # polite rate-limit on HubSpot API
+
+    print(f"[DISPATCHER] Run complete: {enrolled_count} enrolled, {errors} errors")
+
+    # Persist summary to Redis for the monitor UI
+    try:
+        rdb = _get_redis()
+        summary = {
+            'date':       today_str,
+            'enrolled':   enrolled_count,
+            'errors':     errors,
+            'active':     len(active_contacts),
+            'queued':     len(queued_contacts),
+            'allocation': {k: v for k, v in allocation.items()},
+            'capacity': {
+                inbox: available_slots_for_inbox(inbox, today, committed, cadence, max_per_day)
+                for inbox in ENROLLMENT_INBOXES
+            },
+            'ts': datetime.utcnow().isoformat(),
+        }
+        rdb.set('enrollment:last_run', json.dumps(summary))
+        rdb.lpush('enrollment:run_history', json.dumps(summary))
+        rdb.ltrim('enrollment:run_history', 0, 29)   # keep last 30 runs
+    except Exception as e:
+        print(f"[DISPATCHER] Redis summary write error: {e}")
+
+    return {
+        'enrolled': enrolled_count,
+        'errors':   errors,
+        'date':     today_str,
+        'active_contacts': len(active_contacts),
+        'queued_contacts': len(queued_contacts),
+    }
