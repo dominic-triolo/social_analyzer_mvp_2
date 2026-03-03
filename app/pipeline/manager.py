@@ -116,6 +116,14 @@ def get_run_status(run_id: str) -> dict:
 
 # ── Pipeline runner (enqueued via RQ) ─────────────────────────────────────────
 
+def _ensure_logging():
+    """Configure logging once per worker process."""
+    if not getattr(_ensure_logging, '_done', False):
+        from app.logging_config import configure_logging
+        configure_logging()
+        _ensure_logging._done = True
+
+
 def run_pipeline(run_id: str, retry_from_stage: str = None):
     """
     Execute all 6 pipeline stages for a run.
@@ -132,6 +140,7 @@ def run_pipeline(run_id: str, retry_from_stage: str = None):
     If retry_from_stage is set, load checkpoint from stage_outputs and skip
     stages before the retry point.
     """
+    _ensure_logging()
     run = Run.load(run_id)
     if not run:
         logger.error("Run %s not found", run_id)
