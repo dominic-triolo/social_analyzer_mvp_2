@@ -118,8 +118,8 @@
     </div>
 </div>
 
-{# ── Cost info (if available) ─────────────────────────────────────── #}
-{% set est_cost = run.estimated_cost or 0 %}
+{# ── Cost info — hidden until we have real cost data ──────────────── #}
+{# {% set est_cost = run.estimated_cost or 0 %}
 {% set act_cost = run.actual_cost or 0 %}
 {% set budget = run.get('filters', {}).get('max_budget') %}
 {% if est_cost or act_cost or budget %}
@@ -165,7 +165,7 @@
     </div>
     {% endif %}
 </div>
-{% endif %}
+{% endif %} #}
 
 {# ── Two-col: Pipeline + Tier distribution ────────────────────────── #}
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6" >

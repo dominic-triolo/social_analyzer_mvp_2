@@ -32,7 +32,7 @@
         <th class="pb-2 px-4 pt-4 font-medium">Found</th>
         <th class="pb-2 px-4 pt-4 font-medium">Synced</th>
         <th class="pb-2 px-4 pt-4 font-medium">Dupes</th>
-        <th class="pb-2 px-4 pt-4 font-medium">Cost</th>
+        {# <th class="pb-2 px-4 pt-4 font-medium">Cost</th> #}
         <th class="pb-2 px-5 pt-4 font-medium">Status</th>
     </tr></thead>
     <tbody>
@@ -71,7 +71,7 @@
             <td class="py-3 px-4 text-xs font-mono" style="color:#3c4858;">{{ run.profiles_found or 0 }}</td>
             <td class="py-3 px-4 text-xs font-mono" style="color:#3c4858;">{{ run.contacts_synced or 0 }}</td>
             <td class="py-3 px-4 text-xs font-mono" style="color:#3c4858;">{{ run.duplicates_skipped or 0 }}</td>
-            <td class="py-3 px-4 text-xs font-mono" style="color:#3c4858;">{% if run.actual_cost %}${{ '%.2f' | format(run.actual_cost) }}{% else %}-{% endif %}</td>
+            {# <td class="py-3 px-4 text-xs font-mono" style="color:#3c4858;">{% if run.actual_cost %}${{ '%.2f' | format(run.actual_cost) }}{% else %}-{% endif %}</td> #}
             <td class="py-3 px-5">
                 <span class="badge {{ status_colors.get(run.status, 'badge-info') }}">{{ run.status }}</span>
             </td>
