@@ -5659,14 +5659,12 @@ def _hs_headers() -> dict:
 def hubspot_search_contacts_all(filters: list, properties: list,
                                  sorts: list = None, limit_total: int = 10000) -> list:
     """
-    Paginate through HubSpot contacts search API.
-    filters: list of filter dicts for filterGroups[0]
-    properties: list of property names to fetch
-    sorts: optional list of sort dicts
-    Returns flat list of contact dicts {id, properties}.
+    Paginate through HubSpot contacts search API with rate-limit handling.
+    HubSpot CRM Search allows ~4 req/s; we sleep 0.3s between pages and
+    retry up to 3 times with exponential backoff on 429 responses.
     """
-    url    = f"{HUBSPOT_API_URL_ENROLL}/crm/v3/objects/contacts/search"
-    after  = None
+    url     = f"{HUBSPOT_API_URL_ENROLL}/crm/v3/objects/contacts/search"
+    after   = None
     results = []
 
     body = {
@@ -5677,23 +5675,41 @@ def hubspot_search_contacts_all(filters: list, properties: list,
     if sorts:
         body['sorts'] = sorts
 
+    page_num = 0
     while True:
         if after:
             body['after'] = after
 
-        try:
-            resp = requests.post(url, headers=_hs_headers(), json=body, timeout=30)
-            if resp.status_code != 200:
-                print(f"[DISPATCHER] HubSpot search error {resp.status_code}: {resp.text[:200]}")
-                break
-            data     = resp.json()
-            results += data.get('results', [])
-            paging   = data.get('paging', {})
-            after    = paging.get('next', {}).get('after')
-            if not after or len(results) >= limit_total:
-                break
-        except Exception as e:
-            print(f"[DISPATCHER] HubSpot search exception: {e}")
+        # Polite inter-page delay (stay well under 4 req/s)
+        if page_num > 0:
+            time.sleep(0.35)
+        page_num += 1
+
+        # Retry loop for 429 / transient errors
+        resp = None
+        for attempt in range(4):
+            try:
+                resp = requests.post(url, headers=_hs_headers(), json=body, timeout=30)
+                if resp.status_code == 429:
+                    wait = 2 ** attempt          # 1s, 2s, 4s, 8s
+                    print(f"[DISPATCHER] HubSpot 429 — waiting {wait}s (attempt {attempt+1})")
+                    time.sleep(wait)
+                    continue
+                break                            # success or non-retryable error
+            except Exception as e:
+                print(f"[DISPATCHER] HubSpot search exception (attempt {attempt+1}): {e}")
+                time.sleep(2 ** attempt)
+
+        if resp is None or resp.status_code != 200:
+            print(f"[DISPATCHER] HubSpot search failed after retries: "
+                  f"{resp.status_code if resp else 'no response'}")
+            break
+
+        data     = resp.json()
+        results += data.get('results', [])
+        paging   = data.get('paging', {})
+        after    = paging.get('next', {}).get('after')
+        if not after or len(results) >= limit_total:
             break
 
     return results
