@@ -1,5 +1,5 @@
 """
-OpenAI API helpers — GPT-4o vision, Whisper transcription, with retry logic.
+OpenAI API helpers — GPT-4.1 vision, Whisper transcription, with retry logic.
 """
 import json
 import logging
@@ -25,7 +25,7 @@ def analyze_content_item(media_url: str, media_format: str) -> Dict[str, Any]:
     """Analyze a single content item — focus on POV, authenticity, vulnerability, engagement."""
     if media_format == 'IMAGE':
         response = _chat_completion(
-            model="gpt-4o",
+            model="gpt-4.1",
             messages=[{
                 "role": "user",
                 "content": [{
@@ -63,7 +63,7 @@ Respond in JSON:
     else:  # VIDEO
         transcript = transcribe_video_with_whisper(media_url)
         response = _chat_completion(
-            model="gpt-4o",
+            model="gpt-4.1",
             messages=[{
                 "role": "user",
                 "content": f"""Analyze this video transcript for group travel host potential.
@@ -139,7 +139,7 @@ def analyze_bio_evidence(bio: str) -> Dict[str, Any]:
         }
 
     response = _chat_completion(
-        model="gpt-4o",
+        model="gpt-4.1",
         messages=[{
             "role": "user",
             "content": f"""Analyze this Instagram bio for group travel host potential.
@@ -198,7 +198,7 @@ def analyze_caption_evidence(captions: List[str]) -> Dict[str, Any]:
     captions_text = "\n\n---\n\n".join([f"CAPTION {i+1}: {cap}" for i, cap in enumerate(truncated_captions) if cap])
 
     response = _chat_completion(
-        model="gpt-4o",
+        model="gpt-4.1",
         messages=[{
             "role": "user",
             "content": f"""Analyze these Instagram captions for group travel host potential.
@@ -256,7 +256,7 @@ def generate_creator_profile(content_analyses: List[Dict[str, Any]]) -> Dict[str
     combined = "\n\n".join(summaries)
 
     response = _chat_completion(
-        model="gpt-4o",
+        model="gpt-4.1",
         messages=[{
             "role": "system",
             "content": """You analyze creators to profile their content strategy, audience engagement, and monetization.
@@ -347,7 +347,7 @@ Return ONLY the name(s). No quotes, no explanation."""
 
     try:
         response = _chat_completion(
-            model="gpt-4o-mini",
+            model="gpt-4.1-mini",
             messages=[
                 {"role": "system", "content": "You are a precise data extraction assistant. Return only the requested format with no additional text."},
                 {"role": "user", "content": prompt},

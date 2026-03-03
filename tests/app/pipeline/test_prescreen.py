@@ -353,7 +353,7 @@ class TestPreScreenProfile:
 
     @patch('app.pipeline.prescreen.client')
     def test_uses_gpt4o_model(self, mock_client, profile_data_basic):
-        """The call should target the gpt-4o model."""
+        """The call should target the gpt-4.1 model."""
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
         mock_response.choices[0].message.content = '{"decision": "continue", "reasoning": "OK", "selected_content_indices": []}'
@@ -363,7 +363,7 @@ class TestPreScreenProfile:
         pre_screen_profile(img, profile_data_basic)
 
         call_kwargs = mock_client.chat.completions.create.call_args[1]
-        assert call_kwargs['model'] == 'gpt-4o'
+        assert call_kwargs['model'] == 'gpt-4.1'
 
     @patch('app.pipeline.prescreen.client')
     def test_missing_username_defaults_to_unknown(self, mock_client):
@@ -391,7 +391,7 @@ class TestInstagramPrescreen:
         adapter = InstagramPrescreen()
         assert adapter.platform == 'instagram'
         assert adapter.stage == 'pre_screen'
-        assert 'GPT-4o' in adapter.description
+        assert 'GPT-4.1' in adapter.description
 
     def test_estimate_cost_scales_with_count(self):
         """Cost estimate is 0.05 per profile."""

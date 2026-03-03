@@ -71,7 +71,7 @@ class TestAnalyzeContentItemImage:
         analyze_content_item("https://example.com/photo.jpg", "IMAGE")
 
         call_kwargs = mock_client.chat.completions.create.call_args[1]
-        assert call_kwargs["model"] == "gpt-4o"
+        assert call_kwargs["model"] == "gpt-4.1"
         assert call_kwargs["response_format"] == {"type": "json_object"}
 
     @patch('app.services.openai_client.client')
@@ -653,7 +653,7 @@ class TestExtractFirstNames:
         )
 
         call_kwargs = mock_client.chat.completions.create.call_args[1]
-        assert call_kwargs["model"] == "gpt-4o-mini"
+        assert call_kwargs["model"] == "gpt-4.1-mini"
         assert call_kwargs["temperature"] == 0.3
         assert call_kwargs["max_tokens"] == 50
 

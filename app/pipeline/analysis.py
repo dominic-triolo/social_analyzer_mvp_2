@@ -1,7 +1,7 @@
 """
 Pipeline Stage 4: ANALYSIS — Deep content analysis per platform.
 
-Instagram: GPT-4o vision on posts + Whisper on reels + evidence gathering.
+Instagram: GPT-4.1 vision on posts + Whisper on reels + evidence gathering.
 Patreon:   Text content analysis + tier structure + patron engagement signals.
 Facebook:  Group health metrics + admin profile signals.
 
@@ -60,7 +60,7 @@ def analyze_thumbnail_evidence(
                 posts_below += 1
 
     response = client.chat.completions.create(
-        model="gpt-4o",
+        model="gpt-4.1",
         messages=[{
             "role": "user",
             "content": [{
@@ -110,7 +110,7 @@ def analyze_selected_content(
     selected_indices: List[int],
     contact_id: str,
 ) -> List[Dict[str, Any]]:
-    """Analyze 3 selected content items (rehost + GPT-4o/Whisper)."""
+    """Analyze 3 selected content items (rehost + GPT-4.1/Whisper)."""
     content_analyses = []
 
     for idx in selected_indices[:3]:
@@ -201,7 +201,7 @@ def gather_evidence(filtered_items: List[Dict], bio: str, contact_id: str):
 
 class InstagramAnalysis(StageAdapter):
     """
-    IG analysis: GPT-4o vision on 3 posts + Whisper on reels + evidence gathering.
+    IG analysis: GPT-4.1 vision on 3 posts + Whisper on reels + evidence gathering.
     Uses _content_items and _selected_indices from prescreen stage.
     """
     platform = 'instagram'
@@ -209,7 +209,7 @@ class InstagramAnalysis(StageAdapter):
     def estimate_cost(self, count: int) -> float:
         return count * 0.15
     stage = 'analysis'
-    description = 'GPT-4o vision on 3 posts + Whisper audio transcription'
+    description = 'GPT-4.1 vision on 3 posts + Whisper audio transcription'
     apis = ['OpenAI']
 
     def run(self, profiles, run) -> StageResult:
@@ -270,11 +270,11 @@ class InstagramAnalysis(StageAdapter):
 class PatreonAnalysis(StageAdapter):
     """
     Patreon analysis: text content analysis + tier structure + patron signals.
-    Uses GPT-4o to evaluate creator's written content and community indicators.
+    Uses GPT-4.1 to evaluate creator's written content and community indicators.
     """
     platform = 'patreon'
     stage = 'analysis'
-    description = 'GPT-4o text analysis — bio, tiers, patron signals'
+    description = 'GPT-4.1 text analysis — bio, tiers, patron signals'
     apis = ['OpenAI']
 
     def estimate_cost(self, count: int) -> float:
@@ -299,7 +299,7 @@ class PatreonAnalysis(StageAdapter):
                     if profile.get(k)
                 }
 
-                # GPT-4o text analysis
+                # GPT-4.1 text analysis
                 analysis_prompt = f"""Analyze this Patreon creator for group travel host potential (TrovaTrip).
 
 Creator: {creator_name}
@@ -330,7 +330,7 @@ Respond ONLY with JSON:
 }}"""
 
                 response = client.chat.completions.create(
-                    model="gpt-4o",
+                    model="gpt-4.1",
                     messages=[{"role": "user", "content": analysis_prompt}],
                     response_format={"type": "json_object"},
                 )
@@ -391,7 +391,7 @@ class FacebookAnalysis(StageAdapter):
     """
     platform = 'facebook'
     stage = 'analysis'
-    description = 'GPT-4o text analysis — group health, admin profile'
+    description = 'GPT-4.1 text analysis — group health, admin profile'
     apis = ['OpenAI']
 
     def estimate_cost(self, count: int) -> float:
@@ -440,7 +440,7 @@ Respond ONLY with JSON:
 }}"""
 
                 response = client.chat.completions.create(
-                    model="gpt-4o",
+                    model="gpt-4.1",
                     messages=[{"role": "user", "content": analysis_prompt}],
                     response_format={"type": "json_object"},
                 )

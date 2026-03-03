@@ -268,7 +268,7 @@ CREATOR PROFILE:
 """
 
     response = client.chat.completions.create(
-        model="gpt-4o",
+        model="gpt-4.1",
         messages=[{
             "role": "system",
             "content": f"""You score creators for TrovaTrip, a group travel platform where creators host trips with their communities.

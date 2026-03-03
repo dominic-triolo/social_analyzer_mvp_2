@@ -287,6 +287,21 @@
         }
         .tag-pill button:hover { color: #f65c4e; }
 
+        .interest-chip {
+            display: inline-block;
+            font-size: 11px; font-weight: 500; line-height: 1;
+            padding: 5px 10px; border-radius: 999px;
+            cursor: pointer; user-select: none;
+            border: 1px solid rgba(60,72,88,0.15);
+            background: white; color: #3c4858;
+            transition: all 0.15s ease;
+        }
+        .interest-chip:hover { border-color: rgba(0,178,201,0.4); color: #005c69; }
+        .interest-chip.active {
+            background: #e0f7fa; color: #005c69;
+            border-color: #00b2c9; font-weight: 600;
+        }
+
         .suggestion-chip {
             display: inline-flex; align-items: center; gap: 3px;
             background: #f0fdf4; color: #005c69;

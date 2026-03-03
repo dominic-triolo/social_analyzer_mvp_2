@@ -1,7 +1,7 @@
 """
 Pipeline Stage 2: PRE-SCREEN — Quick disqualification.
 
-Instagram: post frequency check + GPT-4o vision snapshot.
+Instagram: post frequency check + GPT-4.1 vision snapshot.
 Patreon:   NSFW filter + patron count + post count.
 Facebook:  Member count + visibility + posts/month.
 """
@@ -179,7 +179,7 @@ def pre_screen_profile(snapshot_image: Image.Image, profile_data: Dict[str, Any]
     username = profile_data.get('username', 'Unknown')
 
     response = client.chat.completions.create(
-        model="gpt-4o",
+        model="gpt-4.1",
         messages=[{
             "role": "system",
             "content": """You are a pre-screener for TrovaTrip, a group travel platform. Based on profile snapshots, quickly identify obvious BAD FITS to save processing time.
@@ -249,7 +249,7 @@ Respond ONLY with JSON:
 
 class InstagramPrescreen(StageAdapter):
     """
-    IG pre-screen: fetch content → post frequency check → GPT-4o snapshot.
+    IG pre-screen: fetch content → post frequency check → GPT-4.1 snapshot.
 
     NOTE: This adapter fetches content from InsightIQ because pre-screening
     needs the content items. The fetched content is attached to each profile
@@ -257,7 +257,7 @@ class InstagramPrescreen(StageAdapter):
     """
     platform = 'instagram'
     stage = 'pre_screen'
-    description = 'Post frequency check + GPT-4o content scan'
+    description = 'Post frequency check + GPT-4.1 content scan'
     apis = ['InsightIQ', 'OpenAI']
 
     def estimate_cost(self, count: int) -> float:
@@ -302,7 +302,7 @@ class InstagramPrescreen(StageAdapter):
                     skipped += 1
                     continue
 
-                # GPT-4o snapshot screen
+                # GPT-4.1 snapshot screen
                 profile_info = social_data.get('data', [{}])[0].get('profile', {})
                 profile_data = {
                     'username': profile_info.get('platform_username', 'Unknown'),

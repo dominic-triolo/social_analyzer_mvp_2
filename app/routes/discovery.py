@@ -146,38 +146,21 @@ KEYWORD_PROMPTS = {
 }
 
 
-def _call_anthropic(system_prompt, user_input):
-    """Call Claude Haiku via Anthropic API (production)."""
-    from app.extensions import anthropic_client
+def _call_openai(system_prompt, user_input):
+    """Call GPT-4.1-mini via OpenAI API for keyword suggestions."""
+    from app.extensions import openai_client
     from app.services.circuit_breaker import get_breaker
-    cb = get_breaker('anthropic')
+    cb = get_breaker('openai')
     response = cb.call(
-        anthropic_client.messages.create,
-        model="claude-haiku-4-5-20251001",
+        openai_client.chat.completions.create,
+        model="gpt-4.1-mini",
         max_tokens=256,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_input}],
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_input},
+        ],
     )
-    return response.content[0].text
-
-
-def _call_ollama(system_prompt, user_input):
-    """Call local Ollama model (development)."""
-    from app.config import OLLAMA_URL, OLLAMA_MODEL
-    resp = http_requests.post(
-        f"{OLLAMA_URL}/api/chat",
-        json={
-            "model": OLLAMA_MODEL,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_input},
-            ],
-            "stream": False,
-        },
-        timeout=30,
-    )
-    resp.raise_for_status()
-    return resp.json()["message"]["content"]
+    return response.choices[0].message.content
 
 
 import re
@@ -210,9 +193,7 @@ def _parse_suggestions(raw):
 
 @bp.route('/api/keyword-suggestions', methods=['POST'])
 def keyword_suggestions():
-    """Generate AI keyword suggestions — Anthropic in prod, Ollama locally."""
-    from app.extensions import anthropic_client
-
+    """Generate AI keyword suggestions via GPT-4.1-mini."""
     data = request.json or {}
     platform = data.get('platform', 'instagram')
     keywords = data.get('keywords', [])
@@ -224,10 +205,7 @@ def keyword_suggestions():
     user_input = "Current keywords: " + ", ".join(keywords)
 
     try:
-        if anthropic_client:
-            raw = _call_anthropic(system_prompt, user_input)
-        else:
-            raw = _call_ollama(system_prompt, user_input)
+        raw = _call_openai(system_prompt, user_input)
 
         suggestions = _parse_suggestions(raw)
 

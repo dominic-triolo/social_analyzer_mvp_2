@@ -24,23 +24,23 @@
                     </div>
                 </button>
 
-                <button type="button" class="platform-card" disabled style="opacity:0.45;cursor:default;">
+                <button type="button" data-platform="patreon" class="platform-card">
                     <div class="platform-card-icon">
                         <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><circle cx="10" cy="5.5" r="3.5" stroke="currentColor" stroke-width="1.3"/><rect x="2" y="2" width="2" height="12" rx="1" fill="currentColor" opacity="0.6"/></svg>
                     </div>
                     <div>
                         <div class="platform-card-name">Patreon</div>
-                        <div class="platform-card-source">Coming soon</div>
+                        <div class="platform-card-source">Apify</div>
                     </div>
                 </button>
 
-                <button type="button" class="platform-card" disabled style="opacity:0.45;cursor:default;">
+                <button type="button" data-platform="facebook" class="platform-card">
                     <div class="platform-card-icon">
                         <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M13 2H3V10C3 10.55 3.45 11 4 11H9L13 14V2Z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </div>
                     <div>
                         <div class="platform-card-name">Facebook Groups</div>
-                        <div class="platform-card-source">Coming soon</div>
+                        <div class="platform-card-source">Apify</div>
                     </div>
                 </button>
 
@@ -255,79 +255,26 @@
                         <div class="mt-4 space-y-4">
                             <div>
                                 <label class="block text-xs font-semibold mb-1.5" style="color:#005c69;">Creator Interests</label>
-                                <select id="creator-interests" multiple class="input-field" style="height:112px;font-size:12px;">
-                                    <option value="Television & Film">Television & Film</option>
-                                    <option value="Music">Music</option>
-                                    <option value="Shopping & Retail">Shopping & Retail</option>
-                                    <option value="Coffee, Tea & Beverages">Coffee, Tea & Beverages</option>
-                                    <option value="Camera & Photography">Camera & Photography</option>
-                                    <option value="Clothes, Shoes, Handbags & Accessories">Clothes, Shoes, Handbags & Accessories</option>
-                                    <option value="Beer, Wine & Spirits">Beer, Wine & Spirits</option>
-                                    <option value="Sports">Sports</option>
-                                    <option value="Electronics & Computers">Electronics & Computers</option>
-                                    <option value="Gaming">Gaming</option>
-                                    <option value="Activewear">Activewear</option>
-                                    <option value="Art & Design">Art & Design</option>
-                                    <option value="Travel, Tourism & Aviation">Travel, Tourism & Aviation</option>
-                                    <option value="Business & Careers">Business & Careers</option>
-                                    <option value="Beauty & Cosmetics">Beauty & Cosmetics</option>
-                                    <option value="Healthcare & Medicine">Healthcare & Medicine</option>
-                                    <option value="Jewellery & Watches">Jewellery & Watches</option>
-                                    <option value="Restaurants, Food & Grocery">Restaurants, Food & Grocery</option>
-                                    <option value="Toys, Children & Baby">Toys, Children & Baby</option>
-                                    <option value="Fitness & Yoga">Fitness & Yoga</option>
-                                    <option value="Wedding">Wedding</option>
-                                    <option value="Tobacco & Smoking">Tobacco & Smoking</option>
-                                    <option value="Pets">Pets</option>
-                                    <option value="Healthy Lifestyle">Healthy Lifestyle</option>
-                                    <option value="Luxury Goods">Luxury Goods</option>
-                                    <option value="Home Decor, Furniture & Garden">Home Decor, Furniture & Garden</option>
-                                    <option value="Friends, Family & Relationships">Friends, Family & Relationships</option>
-                                    <option value="Cars & Motorbikes">Cars & Motorbikes</option>
-                                </select>
-                                <p class="text-xs mt-1" style="color:#3c4858;opacity:0.35;">Hold Ctrl/Cmd to select multiple</p>
+                                <div id="creator-interests" class="flex flex-wrap gap-1.5"></div>
                             </div>
                             <div>
                                 <label class="block text-xs font-semibold mb-1.5" style="color:#005c69;">Audience Interests</label>
-                                <select id="audience-interests" multiple class="input-field" style="height:112px;font-size:12px;">
-                                    <option value="Television & Film">Television & Film</option>
-                                    <option value="Music">Music</option>
-                                    <option value="Shopping & Retail">Shopping & Retail</option>
-                                    <option value="Coffee, Tea & Beverages">Coffee, Tea & Beverages</option>
-                                    <option value="Camera & Photography">Camera & Photography</option>
-                                    <option value="Clothes, Shoes, Handbags & Accessories">Clothes, Shoes, Handbags & Accessories</option>
-                                    <option value="Beer, Wine & Spirits">Beer, Wine & Spirits</option>
-                                    <option value="Sports">Sports</option>
-                                    <option value="Electronics & Computers">Electronics & Computers</option>
-                                    <option value="Gaming">Gaming</option>
-                                    <option value="Activewear">Activewear</option>
-                                    <option value="Art & Design">Art & Design</option>
-                                    <option value="Travel, Tourism & Aviation">Travel, Tourism & Aviation</option>
-                                    <option value="Business & Careers">Business & Careers</option>
-                                    <option value="Beauty & Cosmetics">Beauty & Cosmetics</option>
-                                    <option value="Healthcare & Medicine">Healthcare & Medicine</option>
-                                    <option value="Jewellery & Watches">Jewellery & Watches</option>
-                                    <option value="Restaurants, Food & Grocery">Restaurants, Food & Grocery</option>
-                                    <option value="Toys, Children & Baby">Toys, Children & Baby</option>
-                                    <option value="Fitness & Yoga">Fitness & Yoga</option>
-                                    <option value="Wedding">Wedding</option>
-                                    <option value="Tobacco & Smoking">Tobacco & Smoking</option>
-                                    <option value="Pets">Pets</option>
-                                    <option value="Healthy Lifestyle">Healthy Lifestyle</option>
-                                    <option value="Luxury Goods">Luxury Goods</option>
-                                    <option value="Home Decor, Furniture & Garden">Home Decor, Furniture & Garden</option>
-                                    <option value="Friends, Family & Relationships">Friends, Family & Relationships</option>
-                                    <option value="Cars & Motorbikes">Cars & Motorbikes</option>
-                                </select>
-                                <p class="text-xs mt-1" style="color:#3c4858;opacity:0.35;">Hold Ctrl/Cmd to select multiple</p>
+                                <div id="audience-interests" class="flex flex-wrap gap-1.5"></div>
                             </div>
                             <div>
                                 <label class="block text-xs font-semibold mb-1.5" style="color:#005c69;">Hashtags</label>
-                                <input type="text" id="hashtags" placeholder="e.g., travel, wanderlust (comma-separated)" class="input-field">
-                                <div class="flex items-center gap-2 mt-1.5">
-                                    <button type="button" id="ig-suggest-btn" disabled
-                                            class="text-xs font-medium" style="color:#9ca3af;cursor:default;background:none;border:none;padding:0;">
-                                        Suggest keywords (coming soon)
+                                <div id="ig-hashtag-wrapper"
+                                     class="rounded-lg p-2 min-h-[42px] flex flex-wrap gap-1 items-start cursor-text"
+                                     style="border:1px solid rgba(60,72,88,0.13);background:white;"
+                                     onclick="document.getElementById('ig-hashtag-input').focus()">
+                                    <input type="text" id="ig-hashtag-input" placeholder="Type hashtag and press Enter..."
+                                           class="flex-1 min-w-[180px] outline-none text-sm py-1 bg-transparent">
+                                </div>
+                                <div class="flex items-center gap-2 mt-1">
+                                    <p class="text-xs" style="color:#3c4858;opacity:0.35;">Press Enter to add, click x to remove</p>
+                                    <button type="button" id="ig-suggest-btn" onclick="suggestKeywords('instagram')"
+                                            class="text-xs font-medium" style="color:#00b2c9;cursor:pointer;background:none;border:none;padding:0;">
+                                        Suggest keywords
                                     </button>
                                 </div>
                                 <div id="ig-suggestions" class="flex flex-wrap gap-1.5 mt-2 hidden">
@@ -382,6 +329,7 @@
                     <div>
                         <label class="block text-xs font-semibold mb-1.5" style="color:#005c69;">Max Results</label>
                         <input type="number" id="patreon-max-results" value="100" min="1" max="500" class="input-field">
+                        <p class="text-xs mt-1" style="color:#3c4858;opacity:0.35;">Maximum: 500 creators (typical: 50-100)</p>
                     </div>
                     <div>
                         <label class="block text-xs font-semibold mb-1.5" style="color:#005c69;">Location <span style="opacity:0.35;font-weight:400;">(Optional)</span></label>
@@ -434,6 +382,7 @@
                     <div>
                         <label class="block text-xs font-semibold mb-1.5" style="color:#005c69;">Max Results</label>
                         <input type="number" id="facebook-max-results" value="100" min="1" max="500" class="input-field">
+                        <p class="text-xs mt-1" style="color:#3c4858;opacity:0.35;">Maximum: 500 groups (typical: 50-100)</p>
                     </div>
                     <div>
                         <label class="block text-xs font-semibold mb-1.5" style="color:#005c69;">Member Count <span style="opacity:0.35;font-weight:400;">(Optional)</span></label>
@@ -525,6 +474,33 @@
 if (!window._discoveryLoaded) {
 window._discoveryLoaded = true;
 (function() {
+// ── Interest chip grids ──────────────────────────────────────────────
+var INTEREST_OPTIONS = [
+    'Television & Film', 'Music', 'Shopping & Retail', 'Coffee, Tea & Beverages',
+    'Camera & Photography', 'Clothes, Shoes, Handbags & Accessories',
+    'Beer, Wine & Spirits', 'Sports', 'Electronics & Computers', 'Gaming',
+    'Activewear', 'Art & Design', 'Travel, Tourism & Aviation', 'Business & Careers',
+    'Beauty & Cosmetics', 'Healthcare & Medicine', 'Jewellery & Watches',
+    'Restaurants, Food & Grocery', 'Toys, Children & Baby', 'Fitness & Yoga',
+    'Wedding', 'Tobacco & Smoking', 'Pets', 'Healthy Lifestyle', 'Luxury Goods',
+    'Home Decor, Furniture & Garden', 'Friends, Family & Relationships', 'Cars & Motorbikes',
+];
+
+function renderInterestChips(containerId) {
+    var container = document.getElementById(containerId);
+    INTEREST_OPTIONS.forEach(function(label) {
+        var chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'interest-chip';
+        chip.dataset.value = label;
+        chip.textContent = label;
+        chip.addEventListener('click', function() { chip.classList.toggle('active'); });
+        container.appendChild(chip);
+    });
+}
+renderInterestChips('creator-interests');
+renderInterestChips('audience-interests');
+
 // ── Platform switching ───────────────────────────────────────────────
 var selectedPlatform = 'instagram';
 
@@ -588,6 +564,7 @@ function _removeTag(wrapperId, inputId, index) {
 
 function getTagValues(wrapperId) { return (_tagState[wrapperId] || []).slice(); }
 
+initTagInput('ig-hashtag-wrapper', 'ig-hashtag-input');
 initTagInput('patreon-keyword-wrapper', 'patreon-keyword-input');
 initTagInput('facebook-keyword-wrapper', 'facebook-keyword-input');
 
@@ -739,13 +716,13 @@ function buildFilters(opts) {
             filters.lookalike_username = lu;
         }
 
-        const ci = Array.from(document.getElementById('creator-interests').selectedOptions).map(o => o.value);
+        const ci = Array.from(document.querySelectorAll('#creator-interests .interest-chip.active')).map(el => el.dataset.value);
         if (ci.length) filters.creator_interests = ci;
-        const ai = Array.from(document.getElementById('audience-interests').selectedOptions).map(o => o.value);
+        const ai = Array.from(document.querySelectorAll('#audience-interests .interest-chip.active')).map(el => el.dataset.value);
         if (ai.length) filters.audience_interests = ai;
 
-        const hashtags = document.getElementById('hashtags').value.trim();
-        if (hashtags) filters.hashtags = hashtags.split(',').map(h => ({name: h.trim()})).filter(h => h.name);
+        const hashtags = getTagValues('ig-hashtag-wrapper');
+        if (hashtags.length) filters.hashtags = hashtags.map(h => ({name: h}));
 
         const { base, advanced } = getBioPhrases();
         if (base) {
@@ -913,8 +890,7 @@ var _suggestionState = {};
 
 function _getExistingKeywords(platform) {
     if (platform === 'instagram') {
-        const hashtags = document.getElementById('hashtags').value.trim();
-        const tags = hashtags ? hashtags.split(',').map(t => t.trim()).filter(Boolean) : [];
+        const tags = getTagValues('ig-hashtag-wrapper');
         const bio = document.getElementById('bio-phrase-0').value.trim();
         if (bio) tags.push(bio);
         return tags;
@@ -999,16 +975,10 @@ function acceptSuggestion(platform, index) {
     const kw = suggestions[index];
     if (!kw) return;
 
-    if (platform === 'instagram') {
-        const inp = document.getElementById('hashtags');
-        const cur = inp.value.trim();
-        inp.value = cur ? cur + ', ' + kw : kw;
-    } else {
-        const wrapperId = platform + '-keyword-wrapper';
-        const inputId = platform + '-keyword-input';
-        _tagState[wrapperId].push(kw);
-        _renderTags(wrapperId, inputId);
-    }
+    var wrapperId = platform === 'instagram' ? 'ig-hashtag-wrapper' : platform + '-keyword-wrapper';
+    var inputId = platform === 'instagram' ? 'ig-hashtag-input' : platform + '-keyword-input';
+    _tagState[wrapperId].push(kw);
+    _renderTags(wrapperId, inputId);
 
     suggestions.splice(index, 1);
     _renderSuggestions(platform);
@@ -1022,18 +992,12 @@ function dismissSuggestion(platform, index) {
 
 function acceptAllSuggestions(platform) {
     const suggestions = (_suggestionState[platform] || []).slice();
+    var wrapperId = platform === 'instagram' ? 'ig-hashtag-wrapper' : platform + '-keyword-wrapper';
+    var inputId = platform === 'instagram' ? 'ig-hashtag-input' : platform + '-keyword-input';
     suggestions.forEach(kw => {
-        if (platform === 'instagram') {
-            const inp = document.getElementById('hashtags');
-            const cur = inp.value.trim();
-            inp.value = cur ? cur + ', ' + kw : kw;
-        } else {
-            const wrapperId = platform + '-keyword-wrapper';
-            const inputId = platform + '-keyword-input';
-            _tagState[wrapperId].push(kw);
-            _renderTags(wrapperId, inputId);
-        }
+        _tagState[wrapperId].push(kw);
     });
+    _renderTags(wrapperId, inputId);
     _suggestionState[platform] = [];
     _renderSuggestions(platform);
 }
