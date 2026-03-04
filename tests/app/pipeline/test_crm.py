@@ -34,7 +34,7 @@ class TestAdaptersRegistry:
 # ── InstagramCrmSync ───────────────────────────────────────────────────────
 
 class TestInstagramCrmSync:
-    """InstagramCrmSync standardizes, assigns BDR, and batch-imports to HubSpot."""
+    """InstagramCrmSync sends each contact to HubSpot via workflow webhook."""
 
     def test_is_stage_adapter_subclass(self):
         assert issubclass(InstagramCrmSync, StageAdapter)
@@ -51,39 +51,42 @@ class TestInstagramCrmSync:
         assert adapter.estimate_cost(100) == 0.0
         assert adapter.estimate_cost(9999) == 0.0
 
-    @patch('app.pipeline.crm.import_profiles_to_hubspot')
-    @patch('app.pipeline.crm.assign_bdr_round_robin')
-    @patch('app.pipeline.crm.standardize_instagram_profiles')
-    def test_run_full_pipeline(self, mock_standardize, mock_bdr, mock_import, make_run):
-        """Runs standardize -> BDR assign -> HubSpot import in order."""
-        standardized = [{'instagram_handle': 'https://instagram.com/creator_a', 'email': 'a@test.com'}]
-        bdr_assigned = [{'instagram_handle': 'https://instagram.com/creator_a', 'email': 'a@test.com', 'bdr_': '12345'}]
-
-        mock_standardize.return_value = standardized
-        mock_bdr.return_value = bdr_assigned
-        mock_import.return_value = {'created': 1, 'skipped': 0, 'errors': []}
-
-        profiles = [{'_lead_analysis': {'lead_score': 0.85}, 'instagram_handle': 'https://instagram.com/creator_a'}]
+    @patch('app.pipeline.crm.time.sleep')
+    @patch('app.pipeline.crm.send_to_hubspot')
+    def test_run_sends_webhook_per_profile(self, mock_webhook, mock_sleep, make_run):
+        """Each profile triggers a separate webhook call."""
+        profiles = [
+            {
+                'email': 'a@test.com',
+                'instagram_handle': 'https://instagram.com/a',
+                '_first_name': 'Alice',
+                '_lead_analysis': {'lead_score': 0.85, 'section_scores': {}, 'score_reasoning': 'Good fit'},
+                '_creator_profile': {'content_category': 'travel'},
+                '_content_analyses': [{'type': 'image', 'summary': 'Beach photo'}],
+            },
+            {
+                'email': 'b@test.com',
+                'instagram_handle': 'https://instagram.com/b',
+                '_first_name': 'Bob',
+                '_lead_analysis': {'lead_score': 0.65, 'section_scores': {}, 'score_reasoning': 'Decent'},
+                '_creator_profile': {'content_category': 'fitness'},
+                '_content_analyses': [],
+            },
+        ]
         run = make_run(id='run-ig1', platform='instagram', filters={})
 
         adapter = InstagramCrmSync()
         result = adapter.run(profiles, run)
 
-        assert isinstance(result, StageResult)
-        assert result.profiles == profiles
-        assert result.processed == 1
-        assert result.skipped == 0
-        assert result.meta == {'created': 1, 'skipped': 0, 'errors': []}
+        assert mock_webhook.call_count == 2
+        assert result.processed == 2
+        assert result.meta['synced'] == 2
+        assert run.contacts_synced == 2
 
-        mock_standardize.assert_called_once_with(profiles)
-        mock_bdr.assert_called_once_with(standardized, list(BDR_OWNER_IDS.keys()))
-        mock_import.assert_called_once_with(bdr_assigned, 'run-ig1')
-
-    @patch('app.pipeline.crm.import_profiles_to_hubspot')
-    @patch('app.pipeline.crm.assign_bdr_round_robin')
-    @patch('app.pipeline.crm.standardize_instagram_profiles')
-    def test_run_empty_profiles_short_circuits(self, mock_std, mock_bdr, mock_import, make_run):
-        """Empty input returns immediately without calling any service."""
+    @patch('app.pipeline.crm.time.sleep')
+    @patch('app.pipeline.crm.send_to_hubspot')
+    def test_run_empty_profiles_short_circuits(self, mock_webhook, mock_sleep, make_run):
+        """Empty input returns immediately without calling webhook."""
         run = make_run(platform='instagram', filters={})
 
         adapter = InstagramCrmSync()
@@ -91,72 +94,15 @@ class TestInstagramCrmSync:
 
         assert result.profiles == []
         assert result.processed == 0
-        mock_std.assert_not_called()
-        mock_bdr.assert_not_called()
-        mock_import.assert_not_called()
+        mock_webhook.assert_not_called()
 
-    @patch('app.pipeline.crm.import_profiles_to_hubspot')
-    @patch('app.pipeline.crm.assign_bdr_round_robin')
-    @patch('app.pipeline.crm.standardize_instagram_profiles')
-    def test_run_uses_custom_bdr_names(self, mock_std, mock_bdr, mock_import, make_run):
-        """bdr_names from run.filters overrides the default BDR list."""
-        mock_std.return_value = [{'instagram_handle': 'x'}]
-        mock_bdr.return_value = [{'instagram_handle': 'x', 'bdr_': '99999'}]
-        mock_import.return_value = {'created': 1, 'skipped': 0}
-
-        custom_bdrs = ['Alice Smith', 'Bob Jones']
-        run = make_run(id='run-ig-custom', platform='instagram', filters={'bdr_names': custom_bdrs})
-
-        adapter = InstagramCrmSync()
-        adapter.run([{'_lead_analysis': {}}], run)
-
-        mock_bdr.assert_called_once_with(mock_std.return_value, custom_bdrs)
-
-    @patch('app.pipeline.crm.import_profiles_to_hubspot')
-    @patch('app.pipeline.crm.assign_bdr_round_robin')
-    @patch('app.pipeline.crm.standardize_instagram_profiles')
-    def test_run_defaults_bdr_names_to_all_bdr_owners(self, mock_std, mock_bdr, mock_import, make_run):
-        """When bdr_names is not in filters, uses all BDR_OWNER_IDS keys."""
-        mock_std.return_value = [{'instagram_handle': 'x'}]
-        mock_bdr.return_value = [{'instagram_handle': 'x'}]
-        mock_import.return_value = {'created': 1, 'skipped': 0}
-
-        run = make_run(id='run-ig-default', platform='instagram', filters={})
-
-        adapter = InstagramCrmSync()
-        adapter.run([{'_lead_analysis': {}}], run)
-
-        expected_bdrs = list(BDR_OWNER_IDS.keys())
-        mock_bdr.assert_called_once_with(mock_std.return_value, expected_bdrs)
-
-    @patch('app.pipeline.crm.import_profiles_to_hubspot')
-    @patch('app.pipeline.crm.assign_bdr_round_robin')
-    @patch('app.pipeline.crm.standardize_instagram_profiles')
-    def test_run_updates_run_contacts_synced(self, mock_std, mock_bdr, mock_import, make_run):
-        """run.contacts_synced and run.duplicates_skipped are set from import results."""
-        mock_std.return_value = []
-        mock_bdr.return_value = []
-        mock_import.return_value = {'created': 5, 'skipped': 3}
-
-        run = make_run(id='run-ig-counts', platform='instagram', filters={})
-
-        adapter = InstagramCrmSync()
-        adapter.run([{'_lead_analysis': {}}], run)
-
-        assert run.contacts_synced == 5
-        assert run.duplicates_skipped == 3
-        run.save.assert_called_once()
-
-    @patch('app.pipeline.crm.import_profiles_to_hubspot')
-    @patch('app.pipeline.crm.assign_bdr_round_robin')
-    @patch('app.pipeline.crm.standardize_instagram_profiles')
-    def test_run_sets_synced_to_crm_flag(self, mock_std, mock_bdr, mock_import, make_run):
-        """Each original profile gets _synced_to_crm=True for lead persistence."""
-        mock_std.return_value = []
-        mock_bdr.return_value = []
-        mock_import.return_value = {'created': 2, 'skipped': 0}
-
-        profiles = [{'_lead_analysis': {}}, {'_lead_analysis': {}}]
+    @patch('app.pipeline.crm.time.sleep')
+    @patch('app.pipeline.crm.send_to_hubspot')
+    def test_run_sets_synced_to_crm_flag(self, mock_webhook, mock_sleep, make_run):
+        """Each profile gets _synced_to_crm=True after successful webhook."""
+        profiles = [
+            {'email': 'a@test.com', '_lead_analysis': {}, '_creator_profile': {}, '_content_analyses': []},
+        ]
         run = make_run(id='run-ig-flag', platform='instagram', filters={})
 
         adapter = InstagramCrmSync()
@@ -164,39 +110,88 @@ class TestInstagramCrmSync:
 
         assert all(p.get('_synced_to_crm') is True for p in profiles)
 
-    @patch('app.pipeline.crm.import_profiles_to_hubspot')
-    @patch('app.pipeline.crm.assign_bdr_round_robin')
-    @patch('app.pipeline.crm.standardize_instagram_profiles')
-    def test_run_skipped_in_result(self, mock_std, mock_bdr, mock_import, make_run):
-        """StageResult.skipped reflects the skipped count from import."""
-        mock_std.return_value = []
-        mock_bdr.return_value = []
-        mock_import.return_value = {'created': 2, 'skipped': 8}
-
-        run = make_run(id='run-ig-skip', platform='instagram', filters={})
+    @patch('app.pipeline.crm.time.sleep')
+    @patch('app.pipeline.crm.send_to_hubspot', side_effect=Exception('Webhook down'))
+    def test_run_handles_webhook_error(self, mock_webhook, mock_sleep, make_run):
+        """Webhook errors are caught, counted as skipped, not raised."""
+        profiles = [
+            {'email': 'a@test.com', '_lead_analysis': {}, '_creator_profile': {}, '_content_analyses': []},
+        ]
+        run = make_run(id='run-ig-err', platform='instagram', filters={})
 
         adapter = InstagramCrmSync()
-        result = adapter.run([{'_lead_analysis': {}}, {'_lead_analysis': {}}], run)
+        result = adapter.run(profiles, run)
 
-        assert result.skipped == 8
-        assert result.processed == 2
+        assert result.failed == 1
+        assert result.skipped == 1
+        assert result.meta['synced'] == 0
+        assert run.contacts_synced == 0
+        assert run.duplicates_skipped == 1
 
-    @patch('app.pipeline.crm.import_profiles_to_hubspot')
-    @patch('app.pipeline.crm.assign_bdr_round_robin')
-    @patch('app.pipeline.crm.standardize_instagram_profiles')
-    def test_run_import_results_in_meta(self, mock_std, mock_bdr, mock_import, make_run):
-        """Full import_results dict is stored in StageResult.meta."""
-        import_data = {'created': 3, 'skipped': 1, 'errors': ['dup@test.com']}
-        mock_std.return_value = []
-        mock_bdr.return_value = []
-        mock_import.return_value = import_data
-
-        run = make_run(id='run-ig-meta', platform='instagram', filters={})
+    @patch('app.pipeline.crm.time.sleep')
+    @patch('app.pipeline.crm.send_to_hubspot')
+    def test_run_passes_correct_args_to_webhook(self, mock_webhook, mock_sleep, make_run):
+        """Webhook receives lead_analysis, creator_profile, content_analyses from profile."""
+        profiles = [
+            {
+                'email': 'test@example.com',
+                '_first_name': 'Test',
+                '_lead_analysis': {
+                    'lead_score': 0.90,
+                    'section_scores': {'niche_and_audience_identity': 0.8},
+                    'score_reasoning': 'Strong travel creator',
+                },
+                '_creator_profile': {'content_category': 'travel'},
+                '_content_analyses': [{'type': 'image', 'summary': 'Mountain view'}],
+            },
+        ]
+        run = make_run(id='run-ig-args', platform='instagram', filters={})
 
         adapter = InstagramCrmSync()
-        result = adapter.run([{'_lead_analysis': {}}], run)
+        adapter.run(profiles, run)
 
-        assert result.meta == import_data
+        mock_webhook.assert_called_once()
+        kwargs = mock_webhook.call_args
+        assert kwargs[1]['contact_id'] == 'test@example.com'
+        assert kwargs[1]['lead_score'] == 0.90
+        assert kwargs[1]['first_name'] == 'Test'
+        assert kwargs[1]['creator_profile'] == {'content_category': 'travel'}
+
+    @patch('app.pipeline.crm.time.sleep')
+    @patch('app.pipeline.crm.send_to_hubspot')
+    def test_run_uses_instagram_handle_as_fallback_contact_id(self, mock_webhook, mock_sleep, make_run):
+        """When email is missing, contact_id falls back to instagram_handle."""
+        profiles = [
+            {
+                'instagram_handle': 'https://instagram.com/nomail',
+                '_lead_analysis': {'lead_score': 0.5, 'section_scores': {}, 'score_reasoning': ''},
+                '_creator_profile': {},
+                '_content_analyses': [],
+            },
+        ]
+        run = make_run(id='run-ig-fallback', platform='instagram', filters={})
+
+        adapter = InstagramCrmSync()
+        adapter.run(profiles, run)
+
+        kwargs = mock_webhook.call_args
+        assert kwargs[1]['contact_id'] == 'https://instagram.com/nomail'
+
+    @patch('app.pipeline.crm.time.sleep')
+    @patch('app.pipeline.crm.send_to_hubspot')
+    def test_run_rate_limits_between_calls(self, mock_webhook, mock_sleep, make_run):
+        """Sleep is called between webhook calls for rate limiting."""
+        profiles = [
+            {'email': f'{i}@test.com', '_lead_analysis': {}, '_creator_profile': {}, '_content_analyses': []}
+            for i in range(3)
+        ]
+        run = make_run(id='run-ig-rate', platform='instagram', filters={})
+
+        adapter = InstagramCrmSync()
+        adapter.run(profiles, run)
+
+        assert mock_sleep.call_count == 3
+        mock_sleep.assert_called_with(0.15)
 
 
 # ── PatreonCrmSync ─────────────────────────────────────────────────────────
