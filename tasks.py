@@ -1409,156 +1409,161 @@ RESPOND ONLY with JSON (no preamble):
         "expected_precision": expected_precision,
         "score_reasoning": score_reasoning
     }
-def extract_first_names_from_instagram_profile(username: str, full_name: str, bio: str, 
+def extract_first_names_from_instagram_profile(username: str, full_name: str, bio: str,
                                                content_analyses: List[Dict] = None) -> str:
     """
-    Use OpenAI to extract properly formatted first name(s) from Instagram profile
-    
-    Args:
-        username: Instagram handle (e.g., "morgandrinkscoffee")
-        full_name: Full name from profile (e.g., "Morgan Smith")
-        bio: Biography text
-        content_analyses: List of analyzed content (captions may mention names)
-    
+    Extract first name(s) from an Instagram profile using a layered approach:
+
+    Layer 1 — deterministic (no AI):
+        Clean and inspect full_name. If the first word looks like a genuine
+        first name (not a title, article, group word, or couple indicator),
+        return it immediately.
+
+    Layer 2 — OpenAI (ambiguous cases only):
+        Used when full_name is empty, starts with a non-name prefix, contains
+        couple/group indicators, or is otherwise unclear. Raw captions are
+        preferred over summaries for context.
+
+    Layer 3 — final fallback (no AI):
+        Short all-alpha username → return it.
+        Otherwise → 'there'.
+
     Returns:
-        str: Formatted first name(s)
-            - Single person: "John"
-            - Couple: "John and Jane"
-            - 3+ people: "John, Jane, and Bill"
-            - Fallback: "there"
+        str: "Morgan" | "John and Sarah" | "Mike, Lisa, and Tom" | "there"
     """
-    def _full_name_fallback() -> str:
-        """Return first token of full_name, first token of username, or 'there'."""
-        if full_name and full_name.strip():
-            first = full_name.strip().split(' ')[0]
-            if first:
-                return first
-        # Try to derive something human-readable from the username
-        # e.g. "morgandrinkscoffee" → "morgandrinkscoffee" (still better than 'there')
-        if username and username.strip():
-            return username.strip().lstrip('@')
-        return "there"
+    import unicodedata
 
+    # ── Shared constants ──────────────────────────────────────────────────────
+    # Words that commonly appear as the first token of full_name but are NOT
+    # a first name. If the first word matches, skip to OpenAI.
+    _NON_NAME_PREFIXES = {
+        # articles
+        'the', 'a', 'an',
+        # titles (with and without periods)
+        'dr', 'dr.', 'mr', 'mr.', 'mrs', 'mrs.', 'ms', 'ms.',
+        'prof', 'prof.', 'rev', 'rev.',
+        # role prefixes that put the real name second
+        'coach', 'chef', 'dj', 'mc', 'pastor', 'host',
+        # group / brand words
+        'team', 'squad', 'crew', 'house', 'official', 'real',
+        'just', 'daily', 'your',
+    }
+
+    # Couple / group signals in full_name → always needs OpenAI
+    _COUPLE_PATTERNS = ['&', ' and ', ' + ', '/']
+
+    def _strip_emoji(text: str) -> str:
+        """Remove emoji and other non-ASCII symbol characters."""
+        cleaned = []
+        for ch in text:
+            cat = unicodedata.category(ch)
+            # Keep letters, numbers, spaces, basic punctuation
+            if cat.startswith('L') or cat.startswith('N') or ch in ' .,|·–-_\'':
+                cleaned.append(ch)
+        return ''.join(cleaned).strip()
+
+    def _layer3_fallback() -> str:
+        """Last resort: short all-alpha username, or 'there'."""
+        if username:
+            u = username.strip().lstrip('@')
+            if u and u.isalpha() and len(u) <= 15:
+                return u.capitalize()
+        return 'there'
+
+    # ── Layer 1: deterministic full_name check ────────────────────────────────
+    cleaned_full = _strip_emoji(full_name or '')
+
+    # Normalise common separators to spaces so we split cleanly
+    for sep in ('|', '·', '–', '-', '_'):
+        cleaned_full = cleaned_full.replace(sep, ' ')
+    cleaned_full = ' '.join(cleaned_full.split())   # collapse whitespace
+
+    layer1_result = None
+    if cleaned_full:
+        # Check couple/group signals on the ORIGINAL full_name before emoji-stripping,
+        # because _strip_emoji removes '&' before we'd have a chance to see it.
+        original_lower = (full_name or '').lower()
+        has_couple_signal = any(p in original_lower for p in _COUPLE_PATTERNS)
+
+        if not has_couple_signal:
+            words = cleaned_full.split()
+            first_word = words[0]
+            first_lower = first_word.lower().rstrip('.')
+
+            if first_lower not in _NON_NAME_PREFIXES and first_word.isalpha() and len(first_word) >= 2:
+                layer1_result = first_word.capitalize()
+
+    if layer1_result:
+        print(f"[FIRST_NAME] @{username} → '{layer1_result}' (layer 1 / full_name)")
+        return layer1_result
+
+    # ── Layer 2: OpenAI for ambiguous cases ───────────────────────────────────
     if not client:
-        print("OpenAI client not initialized, using full_name fallback")
-        return _full_name_fallback()
+        print("[FIRST_NAME] OpenAI not available — using layer 3 fallback")
+        return _layer3_fallback()
 
-    # Quick validation
-    if not username and not full_name:
-        return "there"
-    
-    # Extract useful context from content analyses
-    content_context = ""
+    # Prefer raw captions over AI summaries — self-references appear in captions
+    raw_captions = []
     if content_analyses:
-        # Get first few captions/summaries for context
-        captions = []
-        for item in content_analyses[:5]:  # Use first 5 pieces of content
-            summary = item.get('summary', '')
-            caption = item.get('caption', '')
-            
-            if summary:
-                captions.append(summary[:200])  # First 200 chars
-            elif caption:
-                captions.append(caption[:200])
-        
-        if captions:
-            content_context = "\n".join(captions)
-    
-    prompt = f"""Extract the first name(s) from this Instagram profile.
+        for item in content_analyses[:5]:
+            caption = item.get('caption', '') or item.get('summary', '')
+            if caption:
+                raw_captions.append(caption[:300])
+    content_context = '\n---\n'.join(raw_captions) if raw_captions else ''
 
-Profile Information:
-- Username: @{username}
-- Full Name Field: {full_name if full_name else 'Not provided'}
-- Bio: {bio[:300] if bio else 'Not provided'}
+    prompt = f"""You are extracting a first name (or names) from an Instagram profile to use in an email greeting.
 
-{f'''Recent Content Context (may mention their name):
-{content_context[:800]}
-''' if content_context else ''}
+PROFILE DATA
+Username : @{username or 'unknown'}
+Full name: {cleaned_full if cleaned_full else '(empty)'}
+Bio      : {(bio or '').strip()[:300] or '(empty)'}
+{f"Recent captions:{chr(10)}{content_context[:600]}" if content_context else ''}
 
-Rules:
-1. Determine if this is:
-   - Single person → Return just their first name: "John"
-   - Couple (2 people) → Return both first names: "John and Jane"
-   - Group (3+ people) → Return all first names: "John, Jane, and Bill"
+TASK
+Determine who runs this account and return their first name(s) only.
 
-2. Formatting:
-   - Use ONLY first names (not full names or last names)
-   - Capitalize properly: "John" not "john" or "JOHN"
-   - For couples: "Name and Name" (no comma before "and")
-   - For 3+: "Name, Name, and Name" (comma before final "and")
+RULES — follow in order:
+1. Single person → one first name, e.g. "Morgan"
+2. Couple (2 people) → "Name and Name", e.g. "John and Sarah"
+3. Group (3+) → "Name, Name, and Name", e.g. "Mike, Lisa, and Tom"
+4. Brand / company with no individual people → return the brand name as-is
+5. Cannot determine → return exactly: there
 
-3. How to find the name:
-   - Check the username for clues (e.g., @morgandrinkscoffee → "Morgan")
-   - Check the full name field
-   - Check the bio for self-references
-   - Check content summaries for how they refer to themselves
-   - Look for patterns like "I'm [Name]" or "Hi, I'm [Name]"
+SIGNALS
+- Full name starting with "The / A / Coach / DJ / Team / Mr / Dr" → the real name is elsewhere
+- "&", "and", "+", "/" in the name field → likely a couple or group
+- "we", "couple", "married", "partners" in bio → 2 people
+- "squad", "crew", "trio", "friends" in bio → 3+ people
+- Username often encodes a name: @morgandrinkscoffee → Morgan, @iamjohnsmith → John
+- Bio phrases like "I'm [Name]" or "Hi, I'm [Name]" are reliable
 
-4. Special cases:
-   - If brand/company (no people), return the brand name
-   - If you cannot determine, return exactly: there
-
-5. Context clues:
-   - Look for "we", "couple", "married", "partners" → likely 2 people
-   - Look for "friends", "squad", "crew", "trio" → likely 3+ people
-   - "&" or "and" in name field → likely 2+ people
-   - Single name like "John Smith" → 1 person
-
-Return ONLY the name(s). No quotes, no explanation, just the name(s) or "there".
-
-Examples:
-Input: @johnsmith, "John Smith", "Travel blogger", Content: "I'm John and I love..."
-Output: John
-
-Input: @morgandrinkscoffee, "", "", Content: "Hey it's Morgan here with another coffee review"
-Output: Morgan
-
-Input: @thejohnsons, "John & Sarah", "Married couple", Content: "We're exploring..."
-Output: John and Sarah
-
-Input: @travelsquad, "The Squad", "Mike, Lisa, Tom", Content: "The three of us went to..."
-Output: Mike, Lisa, and Tom
-
-Input: @nikefitness, "Nike Fitness", "Official account", Content: "New workout collection"
-Output: Nike Fitness
-
-Input: @randomuser123, "", "", Content: "Check out this cool thing"
-Output: there
-"""
+OUTPUT: Return ONLY the name(s) or "there". No quotes, no punctuation, no explanation."""
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model='gpt-4o-mini',
             messages=[
-                {
-                    "role": "system",
-                    "content": "You are a precise data extraction assistant. Return only the requested format with no additional text."
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
+                {'role': 'system',
+                 'content': 'Return only the requested name or "there". No extra text.'},
+                {'role': 'user', 'content': prompt},
             ],
-            temperature=0.3,
-            max_tokens=50
+            temperature=0.1,
+            max_tokens=30,
         )
-        
-        first_names = response.choices[0].message.content.strip()
-        
-        # Remove any quotes that might have been added
-        first_names = first_names.strip('"').strip("'")
-        
-        # If empty or a known non-answer, fall back to full_name
-        if not first_names or first_names.lower() in ['', 'none', 'unknown', 'n/a', 'not provided', 'there']:
-            first_names = _full_name_fallback()
 
-        print(f"[FIRST_NAME] @{username} → '{first_names}'")
+        result = response.choices[0].message.content.strip().strip('"').strip("'")
 
-        return first_names
+        if not result or result.lower() in ('none', 'unknown', 'n/a', 'not provided', 'there', ''):
+            fallback = _layer3_fallback()
+            print(f"[FIRST_NAME] @{username} → '{fallback}' (layer 3 / OpenAI uncertain)")
+            return fallback
+
+        print(f"[FIRST_NAME] @{username} → '{result}' (layer 2 / OpenAI)")
+        return result
 
     except Exception as e:
-        print(f"[FIRST_NAME] Error for @{username}: {e}")
-        return _full_name_fallback()
+        print(f"[FIRST_NAME] OpenAI error for @{username}: {e}")
+        return _layer3_fallback()
 
 def send_to_hubspot(contact_id: str, lead_score: float, section_scores: Dict, score_reasoning: str, 
                        creator_profile: Dict, content_analyses: List[Dict], lead_analysis: Dict = None,
