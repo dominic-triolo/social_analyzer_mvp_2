@@ -1248,7 +1248,7 @@ def get_enrollment_queue_stats():
     # Queued breakdown by outreach type
     queued_contacts = hubspot_search_contacts_all(
         filters=[{'propertyName': 'reply_sequence_queue_status',
-                  'operator': 'EQ', 'value': 'queued'}],
+                  'operator': 'CONTAINS_TOKEN', 'value': 'queued'}],
         properties=['outreach_segment'],
     )
     by_type = {}
@@ -1259,7 +1259,7 @@ def get_enrollment_queue_stats():
     # Active count
     active_contacts = hubspot_search_contacts_all(
         filters=[{'propertyName': 'reply_sequence_queue_status',
-                  'operator': 'EQ', 'value': 'active'}],
+                  'operator': 'CONTAINS_TOKEN', 'value': 'active'}],
         properties=['reply_io_sequence'],
     )
     active_by_inbox = {}
@@ -1293,7 +1293,7 @@ def get_enrollment_capacity():
 
     active_contacts = hubspot_search_contacts_all(
         filters=[{'propertyName': 'reply_sequence_queue_status',
-                  'operator': 'EQ', 'value': 'active'}],
+                  'operator': 'CONTAINS_TOKEN', 'value': 'active'}],
         properties=['reply_io_sequence', 'recent_reply_sequence_enrolled_date'],
     )
     committed = build_committed_schedule(active_contacts, cadence)
