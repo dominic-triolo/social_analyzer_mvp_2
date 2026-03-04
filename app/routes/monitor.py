@@ -173,6 +173,37 @@ def retry_run(run_id):
         return jsonify({'error': str(e)}), 500
 
 
+@bp.route('/api/runs/<run_id>', methods=['PATCH'])
+def update_run(run_id):
+    """Update a run's status (e.g. mark stuck runs as failed)."""
+    try:
+        data = request.json or {}
+        new_status = data.get('status')
+
+        if new_status not in ('failed', 'completed'):
+            return jsonify({'error': 'status must be "failed" or "completed"'}), 400
+
+        run = Run.load(run_id)
+        if not run:
+            return jsonify({'error': 'Run not found'}), 404
+
+        if run.status in ('completed', 'failed'):
+            return jsonify({'error': f'Run already {run.status}'}), 409
+
+        run.status = new_status
+        if data.get('reason'):
+            run.errors = (run.errors or []) + [data['reason']]
+        run.save()
+
+        from app.services.db import persist_run
+        persist_run(run)
+
+        return jsonify(run.to_dict())
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @bp.route('/partials/run-detail/<run_id>')
 def run_detail_partial(run_id):
     """HTMX partial: full run detail content (fallback for non-SSE clients)."""
