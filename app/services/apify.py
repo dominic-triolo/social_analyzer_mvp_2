@@ -2113,6 +2113,40 @@ def standardize_instagram_profiles(profiles: List[Dict]) -> List[Dict]:
         try:
             lead_analysis = profile.get('_lead_analysis', {})
             creator_profile = profile.get('_creator_profile', {})
+            content_analyses = profile.get('_content_analyses', [])
+            section_scores = lead_analysis.get('section_scores', {})
+
+            # Build content summary from analysis results
+            content_summaries = []
+            for idx, item in enumerate(content_analyses, 1):
+                item_type = item.get('type', 'unknown')
+                summary = item.get('summary', '')
+                if summary:
+                    content_summaries.append(f"Content {idx} ({item_type}): {summary}")
+
+            # Detect community platforms from creator profile
+            community_building = creator_profile.get('community_building', '')
+            if isinstance(community_building, list):
+                community_text = ' '.join(str(x) for x in community_building if x).lower()
+                community_str = ', '.join(str(x) for x in community_building if x)
+            else:
+                community_text = str(community_building).lower()
+                community_str = str(community_building) if community_building else ''
+
+            platforms_detected = []
+            for keyword, name in [('email', 'Email List'), ('patreon', 'Patreon'),
+                                  ('discord', 'Discord'), ('substack', 'Substack')]:
+                if keyword in community_text and name not in platforms_detected:
+                    platforms_detected.append(name)
+
+            def safe_str(value):
+                if value is None:
+                    return ''
+                if isinstance(value, list):
+                    return ', '.join(str(x) for x in value if x is not None)
+                if isinstance(value, dict):
+                    return json.dumps(value)
+                return str(value)
 
             props = {
                 # ── Contact info ──────────────────────────────────────
@@ -2141,16 +2175,32 @@ def standardize_instagram_profiles(profiles: List[Dict]) -> List[Dict]:
                 'lead_score':           lead_analysis.get('lead_score'),
                 'manual_score':         lead_analysis.get('manual_score'),
                 'priority_tier':        lead_analysis.get('priority_tier'),
+                'expected_precision':   lead_analysis.get('expected_precision'),
                 'score_reasoning':      lead_analysis.get('score_reasoning'),
-                'score_niche_and_audience': lead_analysis.get('section_scores', {}).get('niche_and_audience_identity'),
-                'score_host_likeability': lead_analysis.get('section_scores', {}).get('creator_authenticity_and_presence'),
-                'score_monetization':   lead_analysis.get('section_scores', {}).get('monetization_and_business_mindset'),
-                'score_community_infrastructure': lead_analysis.get('section_scores', {}).get('community_infrastructure'),
-                'score_trip_fit':       lead_analysis.get('section_scores', {}).get('engagement_and_connection'),
+                'follower_boost_applied': lead_analysis.get('follower_boost'),
+                'engagement_adjustment_applied': lead_analysis.get('engagement_adjustment'),
+                'category_penalty_applied': lead_analysis.get('category_penalty'),
+                'score_niche_and_audience': section_scores.get('niche_and_audience_identity'),
+                'score_host_likeability': section_scores.get('creator_authenticity_and_presence'),
+                'score_monetization':   section_scores.get('monetization_and_business_mindset'),
+                'score_community_infrastructure': section_scores.get('community_infrastructure'),
+                'score_trip_fit':       section_scores.get('engagement_and_connection'),
 
                 # ── Creator profile ───────────────────────────────────
-                'profile_category':     creator_profile.get('content_category'),
-                'primary_category':     creator_profile.get('primary_category'),
+                'profile_category':     safe_str(creator_profile.get('content_category')),
+                'primary_category':     safe_str(creator_profile.get('primary_category')),
+                'profile_content_types': safe_str(creator_profile.get('content_types')),
+                'profile_engagement':   safe_str(creator_profile.get('audience_engagement')),
+                'profile_presence':     safe_str(creator_profile.get('creator_presence')),
+                'profile_monetization': safe_str(creator_profile.get('monetization')),
+                'profile_community_building': community_str,
+                'has_community_platform': 'true' if platforms_detected else '',
+                'community_platforms_detected': ', '.join(platforms_detected) if platforms_detected else '',
+
+                # ── Content analysis ──────────────────────────────────
+                'content_summary_structured': '\n\n'.join(content_summaries),
+                'items_analyzed':       str(len(content_analyses)) if content_analyses else '',
+                'analyzed_at':          datetime.now().isoformat(),
 
                 # ── Metadata / channel tracking ───────────────────────
                 'flagship_social_platform': 'instagram',
