@@ -5950,6 +5950,8 @@ def run_enrollment_dispatcher(self):
         }
 
     # ── Step 3: Fetch queued contacts ─────────────────────────────────────────
+    # No server-side sort — custom properties may not be indexed as sortable.
+    # We sort client-side after fetching.
     queued_contacts = hubspot_search_contacts_all(
         filters=[
             {'propertyName': 'reply_sequence_queue_status',
@@ -5961,11 +5963,16 @@ def run_enrollment_dispatcher(self):
             'combined_lead_score',
             'hs_createdate',
         ],
-        sorts=[
-            {'propertyName': 'combined_lead_score', 'direction': 'DESCENDING'},
-            {'propertyName': 'hs_createdate',       'direction': 'ASCENDING'},
-        ],
     )
+
+    # Sort: combined_lead_score DESC, hs_createdate ASC (tiebreaker)
+    def _sort_key(c):
+        props = c.get('properties', {})
+        score = float(props.get('combined_lead_score') or 0)
+        ts    = props.get('hs_createdate') or '9999'
+        return (-score, ts)
+
+    queued_contacts.sort(key=_sort_key)
     print(f"[DISPATCHER] {len(queued_contacts)} queued contacts found")
 
     if not queued_contacts:
