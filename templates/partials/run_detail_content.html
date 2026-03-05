@@ -73,10 +73,11 @@
 <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6" >
     <div class="card kpi-card">
         <div class="kpi-label">Found</div>
-        <div class="kpi-value">{{ run.profiles_found or 0 }}</div>
         {% set discovered = run.get('profiles_discovered') or run.profiles_found or 0 %}
         {% set db_dupes = run.duplicates_skipped or 0 %}
         {% set hs_dupes = run.get('hubspot_duplicates') or 0 %}
+        {% set found_new = [discovered - db_dupes - hs_dupes, 0] | max %}
+        <div class="kpi-value">{{ found_new if (db_dupes or hs_dupes) else (run.profiles_found or 0) }}</div>
         {% if discovered and (db_dupes or hs_dupes) %}
         <div class="kpi-sub">of {{ discovered }} discovered</div>
         {% endif %}
@@ -256,7 +257,7 @@
                     {% set disc_discovered = run.get('profiles_discovered') or run.profiles_found or 0 %}
                     {% set disc_db_dupes = run.duplicates_skipped or 0 %}
                     {% set disc_hs_dupes = run.get('hubspot_duplicates') or 0 %}
-                    {% set disc_new = run.profiles_found or 0 %}
+                    {% set disc_new = [disc_discovered - disc_db_dupes - disc_hs_dupes, 0] | max %}
                     {% if disc_discovered %}
                     <div class="flex flex-wrap gap-1 mt-1.5">
                         <span class="badge badge-muted">{{ disc_discovered }} discovered</span>
@@ -274,8 +275,11 @@
                     {% elif stage.key == 'pre_screen' and (run.profiles_pre_screened or run.profiles_found) %}
                     {# Pre-screen: show passed vs filtered #}
                     {% set ps_passed = run.profiles_pre_screened or 0 %}
-                    {% set ps_found = run.profiles_found or 0 %}
-                    {% set ps_filtered = ps_found - ps_passed if ps_found > ps_passed else 0 %}
+                    {% set _disc = run.get('profiles_discovered') or run.profiles_found or 0 %}
+                    {% set _db_d = run.duplicates_skipped or 0 %}
+                    {% set _hs_d = run.get('hubspot_duplicates') or 0 %}
+                    {% set ps_input = [_disc - _db_d - _hs_d, 0] | max if (_db_d or _hs_d) else (run.profiles_found or 0) %}
+                    {% set ps_filtered = ps_input - ps_passed if ps_input > ps_passed else 0 %}
                     <div class="flex flex-wrap gap-1 mt-1.5">
                         <span class="badge badge-muted">{{ ps_passed }} passed</span>
                         {% if ps_filtered > 0 %}
