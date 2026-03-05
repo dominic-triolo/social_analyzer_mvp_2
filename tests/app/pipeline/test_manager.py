@@ -93,6 +93,7 @@ def _make_run(**overrides):
             'crm_sync': {'total': 0, 'completed': 0, 'failed': 0},
         },
         current_stage='',
+        cancelled=False,
     )
     defaults.update(overrides)
     run = MagicMock()

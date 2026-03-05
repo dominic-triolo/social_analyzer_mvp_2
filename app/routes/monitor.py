@@ -25,11 +25,13 @@ def _build_stages(run_dict):
 
     stages = []
     for i, key in enumerate(STAGE_ORDER):
-        if run_status == 'failed' and i == current_idx:
+        if run_status == 'cancelled' and i == current_idx:
+            s = 'cancelled'
+        elif run_status == 'failed' and i == current_idx:
             s = 'failed'
-        elif run_status in ('completed', 'failed') and i <= current_idx:
+        elif run_status in ('completed', 'failed', 'cancelled') and i <= current_idx:
             s = 'completed'
-        elif run_status == 'completed' and i > current_idx:
+        elif run_status in ('completed', 'cancelled') and i > current_idx:
             # Pipeline exited early — these stages never ran
             s = 'skipped'
         elif i < current_idx:
@@ -59,7 +61,7 @@ def run_detail(run_id):
         return render_template('runs_list.html', runs=[], error='Run not found'), 404
     run_dict = run.to_dict()
     stages = _build_stages(run_dict)
-    is_terminal = run_dict.get('status') in ('completed', 'failed')
+    is_terminal = run_dict.get('status') in ('completed', 'failed', 'cancelled')
 
     # Compute benchmark deviations for completed runs
     deviations = []
@@ -114,6 +116,28 @@ def get_run(run_id):
     if not status:
         return jsonify({'error': 'Run not found'}), 404
     return jsonify(status)
+
+
+@bp.route('/api/runs/<run_id>/stop', methods=['POST'])
+def stop_run(run_id):
+    """Stop an active run by setting the cancellation flag."""
+    try:
+        run = Run.load(run_id)
+        if not run:
+            return jsonify({'error': 'Run not found'}), 404
+
+        if run.status in ('completed', 'failed', 'cancelled'):
+            return jsonify({'error': f'Run already {run.status}'}), 409
+
+        run.cancel()
+
+        from app.services.db import persist_run
+        persist_run(run)
+
+        return jsonify(run.to_dict())
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @bp.route('/api/runs/<run_id>/retry', methods=['POST'])
@@ -253,7 +277,7 @@ def run_detail_partial(run_id):
         return '<div class="text-center py-8 text-sm" style="color:#f65c4e;">Run not found</div>', 404
     run_dict = run.to_dict()
     stages = _build_stages(run_dict)
-    is_terminal = run_dict.get('status') in ('completed', 'failed')
+    is_terminal = run_dict.get('status') in ('completed', 'failed', 'cancelled')
     return render_template('partials/run_detail_content.html',
                            run=run_dict, stages=stages, is_terminal=is_terminal)
 
@@ -270,7 +294,7 @@ def stream_run(run_id):
 
             run_dict = run.to_dict()
             stages = _build_stages(run_dict)
-            is_terminal = run_dict.get('status') in ('completed', 'failed')
+            is_terminal = run_dict.get('status') in ('completed', 'failed', 'cancelled')
 
             # Simple change detection: hash the volatile fields
             state_key = (
@@ -316,7 +340,7 @@ def runs_table_partial():
     if platform != 'all':
         filtered = [r for r in filtered if r.get('platform') == platform]
     if status == 'active':
-        filtered = [r for r in filtered if r.get('status') not in ('completed', 'failed')]
+        filtered = [r for r in filtered if r.get('status') not in ('completed', 'failed', 'cancelled')]
     elif status != 'all':
         filtered = [r for r in filtered if r.get('status') == status]
 

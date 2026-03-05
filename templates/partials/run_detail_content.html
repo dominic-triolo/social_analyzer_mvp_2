@@ -22,15 +22,29 @@
 {% set X_SVG = '<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 4L12 12M12 4L4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>' %}
 
 {# ── Status color/bg/label helpers ─────────────────────────────────── #}
-{% set STATUS_COLOR = {'completed': '#10b981', 'running': '#00b2c9', 'failed': '#f65c4e', 'pending': '#d1d5db', 'skipped': '#94a3b8'} %}
-{% set STATUS_BG    = {'completed': '#d1fae5', 'running': '#e0f7fa', 'failed': '#fee2e2', 'pending': '#f9fafb', 'skipped': '#f1f5f9'} %}
-{% set STATUS_LABEL = {'completed': 'Done', 'running': 'Running...', 'failed': 'Failed', 'pending': 'Pending', 'skipped': 'Skipped'} %}
+{% set STATUS_COLOR = {'completed': '#10b981', 'running': '#00b2c9', 'failed': '#f65c4e', 'cancelled': '#f59e0b', 'pending': '#d1d5db', 'skipped': '#94a3b8'} %}
+{% set STATUS_BG    = {'completed': '#d1fae5', 'running': '#e0f7fa', 'failed': '#fee2e2', 'cancelled': '#fef3c7', 'pending': '#f9fafb', 'skipped': '#f1f5f9'} %}
+{% set STATUS_LABEL = {'completed': 'Done', 'running': 'Running...', 'failed': 'Failed', 'cancelled': 'Cancelled', 'pending': 'Pending', 'skipped': 'Skipped'} %}
 
 {# ── OOB: Status badge in breadcrumb ──────────────────────────────── #}
-{% set badge_class = {'completed': 'badge-success', 'failed': 'badge-error', 'queued': 'badge-muted'} %}
+{% set badge_class = {'completed': 'badge-success', 'failed': 'badge-error', 'cancelled': 'badge-warning', 'queued': 'badge-muted'} %}
 <span id="run-status-badge"
       class="badge {{ badge_class.get(run.status, 'badge-info') }} ml-2"
       hx-swap-oob="true">{{ run.status }}</span>
+
+{# ── Stop Run button (shown only for active runs) ────────────────── #}
+{% if run.status not in ('completed', 'failed', 'cancelled') %}
+<div class="mb-4 flex justify-end">
+    <button onclick="stopRun()"
+            class="text-xs font-medium px-3 py-1.5 rounded flex items-center gap-1.5"
+            style="background:#fef3c7;color:#92400e;cursor:pointer;border:1px solid #fde68a;">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+            <rect x="3" y="3" width="10" height="10" rx="1.5" fill="currentColor"/>
+        </svg>
+        Stop Run
+    </button>
+</div>
+{% endif %}
 
 {# ── Run summary card ────────────────────────────────────────────── #}
 {# ── Retry indicator (shown when this run was created via retry) ──── #}
@@ -434,6 +448,26 @@ function toggleStageDrilldown(stageKey) {
     var isHidden = panel.style.display === 'none';
     panel.style.display = isHidden ? 'block' : 'none';
     if (chevron) chevron.style.transform = isHidden ? 'rotate(180deg)' : '';
+}
+
+function stopRun() {
+    showConfirm('The pipeline will stop before the next stage begins.', {
+        title: 'Stop this run?',
+        confirmLabel: 'Stop Run',
+    }).then(function(ok) {
+        if (!ok) return;
+        var runId = '{{ run.id }}';
+        fetch('/api/runs/' + runId + '/stop', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.status === 'cancelled') window.location.reload();
+            else showModal(data.error || 'Unknown error', {type: 'error'});
+        })
+        .catch(function(err) { showModal(err.message, {type: 'error'}); });
+    });
 }
 
 function retryFromStage(stage) {

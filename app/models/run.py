@@ -59,6 +59,7 @@ class Run:
         self.actual_cost = 0.0
         self.stage_outputs = {}
         self.stage_timings = {}
+        self.cancelled = False
 
     def to_dict(self) -> Dict:
         return {
@@ -85,6 +86,7 @@ class Run:
             'actual_cost': self.actual_cost,
             'stage_timings': self.stage_timings,
             'stage_outputs': self.stage_outputs,
+            'cancelled': self.cancelled,
         }
 
     def save(self):
@@ -120,6 +122,13 @@ class Run:
             'profile_id': profile_id,
             'timestamp': datetime.now().isoformat(),
         })
+        self.save()
+
+    def cancel(self):
+        """Mark run as cancelled by user."""
+        self.status = 'cancelled'
+        self.cancelled = True
+        self.add_error(self.current_stage or 'pipeline', 'Cancelled by user')
         self.save()
 
     def complete(self):
@@ -161,6 +170,7 @@ class Run:
         run.actual_cost = db_run.actual_cost or 0.0
         run.stage_outputs = db_run.stage_outputs or {}
         run.stage_timings = db_run.stage_timings or {}
+        run.cancelled = db_run.status == 'cancelled'
         return run
 
     @classmethod
@@ -194,6 +204,7 @@ class Run:
             run.actual_cost = d.get('actual_cost', 0.0)
             run.stage_outputs = d.get('stage_outputs', {})
             run.stage_timings = d.get('stage_timings', {})
+            run.cancelled = d.get('cancelled', False)
             return run
 
         # Fallback to DB

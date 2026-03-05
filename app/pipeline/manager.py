@@ -167,6 +167,12 @@ def run_pipeline(run_id: str, retry_from_stage: str = None):
                 skipping = False
 
     for stage_name in PIPELINE_STAGES:
+        # Check for user cancellation before each stage
+        run = Run.load(run_id)
+        if not run or run.cancelled:
+            logger.info("Run %s was cancelled — aborting pipeline", run_id)
+            return
+
         # Skip stages before retry point
         if skipping:
             if stage_name == retry_from_stage:
