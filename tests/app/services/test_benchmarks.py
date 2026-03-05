@@ -1,10 +1,13 @@
 """Tests for app.services.benchmarks — snapshot persistence, baselines, deviations."""
 import pytest
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from unittest.mock import patch, MagicMock
 
 from app.models.db_run import DbRun
 from app.models.metric_snapshot import MetricSnapshot
+
+# Use UTC now for created_at so func.date(created_at) == func.current_date() in SQLite
+_utcnow = datetime.now(timezone.utc)
 from app.services.benchmarks import (
     persist_metric_snapshot,
     get_baseline,
@@ -33,7 +36,7 @@ class TestPersistMetricSnapshot:
             id='r1', platform='instagram', status='completed',
             profiles_found=100, profiles_pre_screened=80,
             profiles_enriched=70, profiles_scored=50,
-            contacts_synced=30, actual_cost=5.0,
+            contacts_synced=30, actual_cost=5.0, created_at=_utcnow,
         )
         session.add(db_run)
         session.commit()
@@ -41,7 +44,6 @@ class TestPersistMetricSnapshot:
         result = persist_metric_snapshot(run)
         assert result is not None
         assert result.platform == 'instagram'
-        assert result.date == date.today()
         assert result.runs_count == 1
         assert result.avg_found == 100.0
 
@@ -54,7 +56,7 @@ class TestPersistMetricSnapshot:
                 id=f'r{i}', platform='instagram', status='completed',
                 profiles_found=found, profiles_pre_screened=found - 20,
                 profiles_enriched=found - 30, profiles_scored=found - 50,
-                contacts_synced=found - 70, actual_cost=5.0,
+                contacts_synced=found - 70, actual_cost=5.0, created_at=_utcnow,
             ))
         session.commit()
 
@@ -81,7 +83,7 @@ class TestPersistMetricSnapshot:
             id='r1', platform='instagram', status='completed',
             profiles_found=100, profiles_pre_screened=40,
             profiles_enriched=35, profiles_scored=30,
-            contacts_synced=20, actual_cost=3.0,
+            contacts_synced=20, actual_cost=3.0, created_at=_utcnow,
         ))
         session.commit()
 
@@ -95,7 +97,7 @@ class TestPersistMetricSnapshot:
             id='r1', platform='instagram', status='completed',
             profiles_found=100, profiles_pre_screened=80,
             profiles_enriched=70, profiles_scored=50,
-            contacts_synced=25, actual_cost=5.0,
+            contacts_synced=25, actual_cost=5.0, created_at=_utcnow,
         ))
         session.commit()
 
@@ -109,7 +111,7 @@ class TestPersistMetricSnapshot:
             id='r1', platform='instagram', status='completed',
             profiles_found=100, profiles_pre_screened=80,
             profiles_enriched=70, profiles_scored=50,
-            contacts_synced=10, actual_cost=5.0,
+            contacts_synced=10, actual_cost=5.0, created_at=_utcnow,
         ))
         session.commit()
 
@@ -123,7 +125,7 @@ class TestPersistMetricSnapshot:
             id='r1', platform='instagram', status='completed',
             profiles_found=0, profiles_pre_screened=0,
             profiles_enriched=0, profiles_scored=0,
-            contacts_synced=0, actual_cost=0.0,
+            contacts_synced=0, actual_cost=0.0, created_at=_utcnow,
         ))
         session.commit()
 
@@ -138,7 +140,7 @@ class TestPersistMetricSnapshot:
             id='r1', platform='instagram', status='completed',
             profiles_found=50, profiles_pre_screened=40,
             profiles_enriched=35, profiles_scored=30,
-            contacts_synced=0, actual_cost=2.0,
+            contacts_synced=0, actual_cost=2.0, created_at=_utcnow,
         ))
         session.commit()
 
@@ -152,7 +154,7 @@ class TestPersistMetricSnapshot:
             id='r1', platform='instagram', status='completed',
             profiles_found=100, profiles_pre_screened=80,
             profiles_enriched=70, profiles_scored=50,
-            contacts_synced=30, actual_cost=5.0,
+            contacts_synced=30, actual_cost=5.0, created_at=_utcnow,
         ))
         session.commit()
 

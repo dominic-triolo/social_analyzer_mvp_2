@@ -41,7 +41,7 @@ def persist_metric_snapshot(run) -> Optional[MetricSnapshot]:
         logger.error("Failed to get session: %s", e)
         return None
     try:
-        today = date.today()
+        today = func.current_date()
         platform = run.platform
 
         # Aggregate all completed runs for this date + platform
@@ -89,9 +89,11 @@ def persist_metric_snapshot(run) -> Optional[MetricSnapshot]:
         ).first()
         avg_score = float(score_row.avg_score or 0) if score_row else 0.0
 
+        today_date = date.today()
+
         # Upsert: find existing or create new
         snapshot = session.query(MetricSnapshot).filter(
-            MetricSnapshot.date == today,
+            MetricSnapshot.date == today_date,
             MetricSnapshot.platform == platform,
         ).first()
 
@@ -107,7 +109,7 @@ def persist_metric_snapshot(run) -> Optional[MetricSnapshot]:
             snapshot.avg_cost_per_lead = round(avg_cost_per_lead, 4)
         else:
             snapshot = MetricSnapshot(
-                date=today,
+                date=today_date,
                 platform=platform,
                 runs_count=row.runs,
                 yield_rate=round(yield_rate, 2),

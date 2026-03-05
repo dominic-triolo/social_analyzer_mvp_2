@@ -1,5 +1,6 @@
 """Tests for app.routes.discovery — Discovery UI, presets API, pipeline preview, staleness check."""
 import json
+import re
 import pytest
 from unittest.mock import patch, MagicMock
 from datetime import datetime
@@ -26,6 +27,34 @@ class TestDiscoveryPage:
     def test_renders_html(self, client):
         resp = client.get('/discovery')
         assert resp.content_type.startswith('text/html')
+
+    def test_js_does_not_reference_missing_html_ids(self, client):
+        """Every getElementById call in JS must reference an element present in the HTML,
+        OR be guarded with a null check. Catches bugs where Jinja comments remove
+        HTML elements but JS still references them (e.g. budget-input)."""
+        resp = client.get('/discovery')
+        html = resp.data.decode()
+
+        # Collect all id="..." from the rendered HTML
+        html_ids = set(re.findall(r'id=["\']([^"\']+)["\']', html))
+
+        # Collect all getElementById('...') calls from <script> blocks
+        scripts = re.findall(r'<script[^>]*>(.*?)</script>', html, re.DOTALL)
+        all_js = '\n'.join(scripts)
+
+        # Find getElementById calls that are NOT guarded by null checks
+        # Pattern: direct .value / .property access without `if (el)` or `?.` guard
+        # We look for: getElementById('X').something (unguarded)
+        unguarded = re.findall(
+            r"getElementById\(['\"]([^'\"]+)['\"]\)\s*\.",
+            all_js,
+        )
+
+        missing = [eid for eid in unguarded if eid not in html_ids]
+        assert missing == [], (
+            f"JS references element IDs not present in rendered HTML: {missing}. "
+            f"Guard with null check or ensure element is not inside a Jinja comment."
+        )
 
 
 # ---------------------------------------------------------------------------
