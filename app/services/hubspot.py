@@ -21,7 +21,10 @@ def send_to_hubspot(
     content_analyses: List[Dict], lead_analysis: Dict = None,
     first_name: str = "there",
 ):
-    """Send results to HubSpot with validation."""
+    """Send results to HubSpot with validation.
+
+    HubSpot workflow: https://app.hubspot.com/workflows/4329123/platform/flow/1773801022/edit
+    """
     content_summaries = [
         f"Content {idx} ({item['type']}): {item['summary']}"
         for idx, item in enumerate(content_analyses, 1)
@@ -260,3 +263,134 @@ def import_profiles_to_hubspot(profiles: List[Dict], job_id: str) -> Dict:
 
     logger.info("Import complete: %d created, %d skipped", created_count, skipped_count)
     return {'created': created_count, 'skipped': skipped_count}
+
+
+def hubspot_batch_create(profiles: List[Dict], run) -> tuple:
+    """Batch-create HubSpot contacts from raw discovery profiles (Instagram).
+
+    1. Assign BDR round-robin from run filters
+    2. Call import_profiles_to_hubspot() for batch create with dedup via objectWriteTraceId
+
+    All profiles pass through regardless of create/skip outcome — the expensive
+    GPT-4.1 prescreen still runs on all of them. The stage 6 webhook
+    (send_to_hubspot) updates these contacts with scores/enrichment later.
+
+    Returns (profiles, created_count, skipped_count).
+    """
+    from app.services.apify import assign_bdr_round_robin
+    from app.config import BDR_OWNER_IDS
+
+    bdr_names = run.filters.get('bdr_names', list(BDR_OWNER_IDS.keys()))
+    profiles = assign_bdr_round_robin(profiles, bdr_names)
+
+    try:
+        result = import_profiles_to_hubspot(profiles, run.id)
+        created = result.get('created', 0)
+        skipped = result.get('skipped', 0)
+        logger.info("HubSpot batch create: %d created, %d skipped", created, skipped)
+    except Exception as e:
+        logger.error("HubSpot batch create failed: %s", e)
+        created, skipped = 0, 0
+
+    return profiles, created, skipped
+
+
+def hubspot_search_contacts_all(filters: List[Dict], properties: List[str],
+                                 sorts: List[Dict] = None) -> List[Dict]:
+    """Paginated search via POST /crm/v3/objects/contacts/search.
+
+    Cursor-based pagination, 100 per page, max 10K safety limit.
+    Returns list of contact dicts with requested properties.
+    """
+    if not HUBSPOT_API_KEY:
+        logger.warning("hubspot_search_contacts_all: no API key set")
+        return []
+
+    from app.services.circuit_breaker import get_breaker
+    cb = get_breaker('hubspot')
+
+    all_results = []
+    after = None
+    max_total = 10_000
+
+    while len(all_results) < max_total:
+        body = {
+            'filterGroups': [{'filters': filters}],
+            'properties': properties,
+            'limit': 100,
+        }
+        if sorts:
+            body['sorts'] = sorts
+        if after:
+            body['after'] = after
+
+        try:
+            resp = cb.call(
+                requests.post,
+                f"{HUBSPOT_API_URL}/crm/v3/objects/contacts/search",
+                headers={
+                    'Authorization': f'Bearer {HUBSPOT_API_KEY}',
+                    'Content-Type': 'application/json',
+                },
+                json=body,
+                timeout=15,
+            )
+
+            if resp.status_code != 200:
+                logger.error("HubSpot search error: %d — %s",
+                             resp.status_code, resp.text[:200])
+                break
+
+            data = resp.json()
+            results = data.get('results', [])
+            all_results.extend(results)
+
+            paging = data.get('paging', {}).get('next', {})
+            after = paging.get('after')
+            if not after or not results:
+                break
+
+        except Exception as e:
+            logger.error("HubSpot search exception: %s", e)
+            break
+
+        time.sleep(0.1)
+
+    logger.info("HubSpot search: %d contacts found", len(all_results))
+    return all_results
+
+
+def hubspot_update_contact(contact_id: str, properties: Dict) -> bool:
+    """Update a single contact via PATCH /crm/v3/objects/contacts/{id}.
+
+    Returns True on success, False on failure.
+    """
+    if not HUBSPOT_API_KEY:
+        logger.warning("hubspot_update_contact: no API key set")
+        return False
+
+    from app.services.circuit_breaker import get_breaker
+    cb = get_breaker('hubspot')
+
+    try:
+        resp = cb.call(
+            requests.patch,
+            f"{HUBSPOT_API_URL}/crm/v3/objects/contacts/{contact_id}",
+            headers={
+                'Authorization': f'Bearer {HUBSPOT_API_KEY}',
+                'Content-Type': 'application/json',
+            },
+            json={'properties': properties},
+            timeout=10,
+        )
+
+        if resp.status_code == 200:
+            return True
+        else:
+            logger.error("HubSpot update contact %s error: %d — %s",
+                         contact_id, resp.status_code, resp.text[:200])
+            return False
+
+    except Exception as e:
+        logger.error("HubSpot update contact %s exception: %s", contact_id, e)
+        return False

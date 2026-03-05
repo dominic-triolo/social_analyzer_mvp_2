@@ -332,32 +332,7 @@ class InstagramPrescreen(StageAdapter):
         filtered = []
         skipped = 0
 
-        # HubSpot dedup — skip profiles already in CRM
-        from app.services.hubspot import check_existing_contacts
         total_input = len(profiles)
-        hubspot_dupes = 0
-        emails = [p.get('email', '').lower().strip() for p in profiles]
-        emails = [e for e in emails if e]
-        existing_emails = check_existing_contacts(emails)
-
-        if existing_emails:
-            new_profiles = []
-            for p in profiles:
-                email = (p.get('email') or '').lower().strip()
-                if email and email in existing_emails:
-                    skipped += 1
-                    hubspot_dupes += 1
-                    filtered.append({
-                        'profile': p.get('profile_url') or p.get('instagram_handle', ''),
-                        'reason': 'Already exists in HubSpot',
-                        'type': 'hubspot_duplicate',
-                    })
-                    run.increment_stage_progress('pre_screen', 'completed')
-                else:
-                    new_profiles.append(p)
-            logger.info("HubSpot dedup: %d/%d skipped (already in CRM)",
-                        hubspot_dupes, total_input)
-            profiles = new_profiles
 
         with ThreadPoolExecutor(max_workers=PRESCREEN_CONCURRENCY) as pool:
             futures = {
@@ -387,8 +362,6 @@ class InstagramPrescreen(StageAdapter):
         meta = {}
         if filtered:
             meta['filtered'] = filtered
-        if hubspot_dupes:
-            meta['hubspot_duplicates'] = hubspot_dupes
 
         return StageResult(
             profiles=passed,

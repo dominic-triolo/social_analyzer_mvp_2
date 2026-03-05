@@ -280,6 +280,15 @@ def run_pipeline(run_id: str, retry_from_stage: str = None):
                 # Record filter fingerprint
                 record_filter_history(run, len(profiles), total_before)
 
+            # Post-discovery: batch create contacts in HubSpot (Instagram only)
+            if stage_name == 'discovery' and profiles and run.platform == 'instagram':
+                try:
+                    from app.services.hubspot import hubspot_batch_create
+                    profiles, hs_created, hs_skipped = hubspot_batch_create(profiles, run)
+                    logger.info("HubSpot batch create: %d created, %d skipped", hs_created, hs_skipped)
+                except Exception as e:
+                    logger.error("HubSpot batch create failed (non-fatal): %s", e)
+
             # Checkpoint profiles after each stage for retry-from-stage
             try:
                 # Only store serializable data (strip large binary fields)
