@@ -13,6 +13,8 @@ from app.models.db_run import DbRun
 from app.models.lead import Lead
 from app.models.lead_run import LeadRun
 from app.models.filter_history import FilterHistory
+from app.models.enrollment_run import EnrollmentRun
+from app.models.app_config import AppConfig
 
 logger = logging.getLogger('services.db')
 
@@ -268,6 +270,110 @@ def get_filter_staleness(platform, filters):
             session.close()
     except Exception:
         return None
+
+
+# ── App config store ─────────────────────────────────────────────────────────
+
+def get_app_config(key: str):
+    """Read a config value from Postgres. Returns dict/list or None."""
+    session = get_session()
+    try:
+        row = session.query(AppConfig).filter_by(key=key).first()
+        return row.value if row else None
+    except Exception:
+        logger.error("Failed to read app config key=%s", key, exc_info=True)
+        return None
+    finally:
+        session.close()
+
+
+def save_app_config(key: str, value) -> bool:
+    """Upsert a config value in Postgres. Returns True on success."""
+    session = get_session()
+    try:
+        row = session.query(AppConfig).filter_by(key=key).first()
+        if row:
+            row.value = value
+        else:
+            row = AppConfig(key=key, value=value)
+            session.add(row)
+        session.commit()
+        return True
+    except Exception:
+        session.rollback()
+        logger.error("Failed to save app config key=%s", key, exc_info=True)
+        return False
+    finally:
+        session.close()
+
+
+# ── Enrollment persistence ───────────────────────────────────────────────────
+
+def persist_enrollment_run(summary: dict):
+    """Insert an enrollment dispatch run record into Postgres."""
+    session = get_session()
+    try:
+        run = EnrollmentRun(
+            status=summary.get('status', 'error'),
+            reason=summary.get('reason'),
+            enrolled_count=summary.get('enrolled_count', 0),
+            error_count=summary.get('error_count', 0),
+            active_count=summary.get('active_count', 0),
+            queued_count=summary.get('queued_count', 0),
+            total_slots=summary.get('total_slots', 0),
+            allocation=summary.get('allocation'),
+            enrolled_details=summary.get('enrolled_details'),
+            errors=summary.get('errors'),
+            dry_run=summary.get('dry_run', False),
+            run_date=summary.get('run_date'),
+            finished_at=summary.get('finished_at'),
+        )
+        session.add(run)
+        session.commit()
+        return run.id
+    except Exception:
+        session.rollback()
+        logger.error("Failed to persist enrollment run", exc_info=True)
+        return None
+    finally:
+        session.close()
+
+
+def get_enrollment_history(limit: int = 20) -> list:
+    """Fetch recent enrollment runs from Postgres, newest first."""
+    session = get_session()
+    try:
+        rows = (
+            session.query(EnrollmentRun)
+            .order_by(EnrollmentRun.started_at.desc())
+            .limit(limit)
+            .all()
+        )
+        results = []
+        for r in rows:
+            results.append({
+                'id': r.id,
+                'status': r.status,
+                'reason': r.reason,
+                'enrolled_count': r.enrolled_count,
+                'error_count': r.error_count,
+                'active_count': r.active_count,
+                'queued_count': r.queued_count,
+                'total_slots': r.total_slots,
+                'allocation': r.allocation,
+                'enrolled_details': r.enrolled_details,
+                'errors': r.errors,
+                'dry_run': r.dry_run,
+                'run_date': r.run_date.isoformat() if r.run_date else None,
+                'started_at': r.started_at.isoformat() if r.started_at else None,
+                'finished_at': r.finished_at.isoformat() if r.finished_at else None,
+            })
+        return results
+    except Exception:
+        logger.error("Failed to fetch enrollment history", exc_info=True)
+        return []
+    finally:
+        session.close()
 
 
 # ── Private helpers ──────────────────────────────────────────────────────────

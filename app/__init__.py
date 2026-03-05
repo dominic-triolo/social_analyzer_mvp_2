@@ -123,12 +123,14 @@ def create_app():
     from app.routes.webhook import bp as webhook_bp
     from app.routes.monitor import bp as monitor_bp
     from app.routes.evaluation import bp as evaluation_bp
+    from app.routes.enrollment import bp as enrollment_bp
 
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(discovery_bp)
     app.register_blueprint(webhook_bp)
     app.register_blueprint(monitor_bp)
     app.register_blueprint(evaluation_bp)
+    app.register_blueprint(enrollment_bp)
 
     # Initialize circuit breakers for external API services
     from app.extensions import redis_client
@@ -144,5 +146,7 @@ def create_app():
     importlib.import_module('app.models.filter_history')
     importlib.import_module('app.models.preset')
     importlib.import_module('app.models.metric_snapshot')
+    importlib.import_module('app.models.enrollment_run')
+    importlib.import_module('app.models.app_config')
 
     return app

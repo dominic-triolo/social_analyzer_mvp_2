@@ -1,0 +1,82 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Enrollment Dispatcher Configuration
+#
+# Controls how queued HubSpot contacts are activated into Reply.io sequences.
+# The dispatcher runs daily (business days) via external cron and distributes
+# contacts across inboxes under per-inbox daily send limits.
+#
+# Any value here can be overridden by an environment variable of the same name
+# (prefixed with ENROLLMENT_). Complex values use JSON in env vars.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Inboxes ──────────────────────────────────────────────────────────────────
+# Maps inbox display name → HubSpot owner ID.
+# Names must match the `reply_io_sequence` enum values in HubSpot exactly.
+# Owner IDs validated against live enrolled contacts (2026-03-05).
+#
+# Env override: ENROLLMENT_INBOXES_JSON='{"Jenn":"1377426260",...}'
+inboxes:
+  Jenn:    "1377426260"
+  Dom:     "75772233"
+  Matt:    "1392069281"
+  Kendall: "271269536"
+  Ryan:    "583796152"
+
+# ── Send Limits ──────────────────────────────────────────────────────────────
+# Maximum emails any single inbox can send per day. The dispatcher won't enroll
+# a new contact if doing so would push any future send date (based on cadence)
+# over this limit for that inbox.
+#
+# Env override: ENROLLMENT_MAX_PER_DAY=25
+max_per_day: 25
+
+# ── Sequence Cadence ─────────────────────────────────────────────────────────
+# Days between emails in a sequence. A 3-day cadence means a contact enrolled
+# on Monday gets emails on Mon, Thu, Sun, Wed, Sat (5 steps).
+# Used to project future inbox load when calculating available slots.
+#
+# Env override: ENROLLMENT_SEQUENCE_CADENCE=3
+sequence_cadence: 3
+
+# ── Sequence Steps ───────────────────────────────────────────────────────────
+# Number of emails in a sequence. Used with cadence to project how far into
+# the future an enrollment commits inbox capacity.
+# 5 steps × 3-day cadence = 15 days of projected sends per enrollment.
+sequence_steps: 5
+
+# ── Outreach Weights ─────────────────────────────────────────────────────────
+# How to split available slots across outreach segments.
+# Segment names come from the HubSpot `outreach_segment` property.
+# Weights are normalized — they just need to be proportional.
+#
+# Weight ratios from Dom (2026-03-05): 4 / 2 / 1
+# → schedule_call ≈ 57%, interest_check ≈ 29%, self_service ≈ 14%
+#
+# Env override: ENROLLMENT_OUTREACH_WEIGHTS_JSON='{"schedule_call":4,...}'
+outreach_weights:
+  schedule_call:   4
+  interest_check:  2
+  self_service:    1
+
+# ── HubSpot Property Mapping ────────────────────────────────────────────────
+# Contact properties the dispatcher reads/writes in HubSpot.
+# Validated against live HubSpot portal (2026-03-05).
+hubspot_properties:
+  status_field:     reply_sequence_queue_status       # R+W: queued → active
+  inbox_field:      reply_io_sequence                 # W: inbox name
+  date_field:       recent_reply_sequence_enrolled_date  # W: today's date
+  segment_field:    outreach_segment                  # R: schedule_call | interest_check | self_service
+  trigger_field:    enroll_in_reply_sequence           # W: "true" — triggers Reply.io pickup
+  score_field:      combined_lead_score               # R: sort key (DESC)
+  createdate_field: hs_createdate                     # R: tiebreaker sort (ASC)
+
+# ── Rate Limiting ────────────────────────────────────────────────────────────
+# Seconds to sleep between HubSpot API update calls.
+# HubSpot private apps allow 100 calls/10s.
+api_delay: 0.1
+
+# ── Scheduling ───────────────────────────────────────────────────────────────
+# Timezone for business-day checks. The dispatcher skips weekends in this tz.
+#
+# Env override: ENROLLMENT_TIMEZONE=America/Los_Angeles
+timezone: America/Los_Angeles

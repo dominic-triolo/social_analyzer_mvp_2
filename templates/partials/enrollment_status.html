@@ -1,0 +1,104 @@
+{% if last_run %}
+<div class="card" style="padding:20px;">
+    <div class="flex items-center justify-between mb-3">
+        <div class="section-label">Last Run</div>
+        <div class="flex items-center gap-2">
+            {% if last_run.dry_run %}
+            <span class="badge badge-warning" style="font-size:10px;">DRY RUN</span>
+            {% endif %}
+            {% if last_run.status == 'completed' %}
+            <span class="badge badge-success">Completed</span>
+            {% elif last_run.status == 'skipped' %}
+            <span class="badge badge-muted">Skipped</span>
+            {% elif last_run.status == 'error' %}
+            <span class="badge badge-error">Error</span>
+            {% else %}
+            <span class="badge badge-info">{{ last_run.status }}</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+        <div class="kpi-card card" style="padding:12px;">
+            <div class="kpi-label">Enrolled</div>
+            <div class="kpi-value" style="font-size:20px;">{{ last_run.enrolled_count or 0 }}</div>
+        </div>
+        <div class="kpi-card card" style="padding:12px;">
+            <div class="kpi-label">Queued</div>
+            <div class="kpi-value" style="font-size:20px;">{{ last_run.queued_count or 0 }}</div>
+        </div>
+        <div class="kpi-card card" style="padding:12px;">
+            <div class="kpi-label">Capacity</div>
+            <div class="kpi-value" style="font-size:20px;">{{ last_run.total_slots or 0 }}</div>
+        </div>
+        <div class="kpi-card card" style="padding:12px;">
+            <div class="kpi-label">Errors</div>
+            <div class="kpi-value" style="font-size:20px; {{ 'color:#f65c4e;' if last_run.error_count else '' }}">{{ last_run.error_count or 0 }}</div>
+        </div>
+    </div>
+
+    {% if last_run.allocation %}
+    <!-- Allocation breakdown bar -->
+    <div class="mb-3">
+        <div class="flex items-center justify-between mb-1">
+            <span style="font-size:11px; font-weight:600; color:#005c69;">Allocation</span>
+            <span style="font-size:11px; color:#5a6779;">
+                {% for seg, count in last_run.allocation.items() %}
+                {{ seg }}: {{ count }}{{ ", " if not loop.last }}
+                {% endfor %}
+            </span>
+        </div>
+        {% set total_alloc = last_run.allocation.values()|sum %}
+        {% if total_alloc > 0 %}
+        <div class="alloc-bar">
+            {% for seg, count in last_run.allocation.items() %}
+            <div class="{{ 'alloc-bar-cold' if seg == 'cold' else 'alloc-bar-warm' }}"
+                 style="width:{{ (count / total_alloc * 100)|round(1) }}%; min-width:{{ '2px' if count > 0 else '0' }};"></div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if last_run.enrolled_details and last_run.enrolled_details|length > 0 %}
+    <!-- Enrolled contacts summary by inbox -->
+    <div class="mb-3">
+        <div style="font-size:11px; font-weight:600; color:#005c69; margin-bottom:6px;">Inbox Distribution</div>
+        {% set ns = namespace(inboxes={}) %}
+        {% for detail in last_run.enrolled_details %}
+            {% if detail.inbox in ns.inboxes %}
+                {% set _ = ns.inboxes.update({detail.inbox: ns.inboxes[detail.inbox] + 1}) %}
+            {% else %}
+                {% set _ = ns.inboxes.update({detail.inbox: 1}) %}
+            {% endif %}
+        {% endfor %}
+        <div class="space-y-2">
+            {% for inbox, count in ns.inboxes.items() %}
+            <div class="flex items-center gap-3" style="font-size:12px;">
+                <span style="width:100px; color:#3c4858; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ inbox }}</span>
+                <div class="flex-1 inbox-meter">
+                    <div class="inbox-meter-fill" style="width:{{ (count / last_run.enrolled_count * 100)|round(1) }}%; background:#00b2c9;"></div>
+                </div>
+                <span style="color:#005c69; font-weight:600; min-width:24px; text-align:right;">{{ count }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if last_run.reason %}
+    <div class="text-xs" style="color:#5a6779;">Reason: {{ last_run.reason }}</div>
+    {% endif %}
+
+    <div class="text-xs mt-2" style="color:#5a6779; opacity:0.6;">
+        {{ last_run.run_date or '' }} &middot; {{ last_run.started_at|time_since if last_run.started_at else '' }}
+    </div>
+</div>
+{% else %}
+<div class="card" style="padding:20px;">
+    <div class="text-center py-4">
+        <div style="font-size:13px; color:#5a6779; opacity:0.5; margin-bottom:4px;">No enrollment runs yet</div>
+        <div style="font-size:11px; color:#5a6779; opacity:0.35;">Use "Run Now" or "Dry Run" below to trigger a dispatch</div>
+    </div>
+</div>
+{% endif %}

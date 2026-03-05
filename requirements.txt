@@ -14,3 +14,5 @@ beautifulsoup4>=4.12.0
 sqlalchemy>=2.0.0
 alembic>=1.13.0
 psycopg2-binary>=2.9.9
+holidays>=0.40
+pytest-bdd>=7.0.0

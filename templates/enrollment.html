@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+{% block title %}Enrollment{% endblock %}
+{% block page_title %}Enrollment Dispatcher{% endblock %}
+
+{% block head %}
+<style>
+    .flow-diagram {
+        display: flex;
+        align-items: stretch;
+        gap: 0;
+        overflow-x: auto;
+        padding: 4px 0;
+    }
+    .flow-step {
+        flex: 1;
+        min-width: 130px;
+        text-align: center;
+        position: relative;
+    }
+    .flow-step-box {
+        border-radius: 10px;
+        padding: 14px 10px 12px;
+        position: relative;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+    }
+    .flow-step-icon {
+        width: 36px; height: 36px; border-radius: 10px;
+        display: flex; align-items: center; justify-content: center;
+        margin-bottom: 8px; flex-shrink: 0;
+    }
+    .flow-step-title {
+        font-size: 12px; font-weight: 700; line-height: 1.2;
+        margin-bottom: 4px;
+    }
+    .flow-step-desc {
+        font-size: 11px; line-height: 1.35;
+        opacity: 0.7;
+    }
+    .flow-arrow {
+        display: flex;
+        align-items: center;
+        flex-shrink: 0;
+        padding: 0 2px;
+    }
+    .flow-arrow svg { opacity: 0.3; }
+
+    /* Allocation bar */
+    .alloc-bar {
+        height: 8px; border-radius: 4px; overflow: hidden;
+        display: flex; background: #f1f5f9;
+    }
+    .alloc-bar-cold { background: #005c69; }
+    .alloc-bar-warm { background: #00b2c9; }
+
+    /* Inbox utilization */
+    .inbox-meter {
+        height: 6px; border-radius: 3px; overflow: hidden;
+        background: #f1f5f9;
+    }
+    .inbox-meter-fill {
+        height: 100%; border-radius: 3px;
+        transition: width 0.3s ease;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6 animate-in">
+
+    <!-- How it works -->
+    <div class="card" style="padding:20px;">
+        <div class="flex items-center justify-between mb-4">
+            <div class="section-label">How it Works</div>
+            <a href="/enrollment/settings" style="font-size:12px; color:#005c69; text-decoration:none; font-weight:500; display:inline-flex; align-items:center; gap:4px;">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 10C9.1 10 10 9.1 10 8C10 6.9 9.1 6 8 6C6.9 6 6 6.9 6 8C6 9.1 6.9 10 8 10Z" stroke="currentColor" stroke-width="1.3"/><path d="M13 8C13 8 12.6 8.8 12.2 9.2L13.3 10.3L10.3 13.3L9.2 12.2C8.8 12.6 8 13 8 13C8 13 7.2 12.6 6.8 12.2L5.7 13.3L2.7 10.3L3.8 9.2C3.4 8.8 3 8 3 8C3 8 3.4 7.2 3.8 6.8L2.7 5.7L5.7 2.7L6.8 3.8C7.2 3.4 8 3 8 3C8 3 8.8 3.4 9.2 3.8L10.3 2.7L13.3 5.7L12.2 6.8C12.6 7.2 13 8 13 8Z" stroke="currentColor" stroke-width="1.3"/></svg>
+                Settings
+            </a>
+        </div>
+        <div class="flow-diagram">
+            <!-- Step 1: Trigger -->
+            <div class="flow-step">
+                <div class="flow-step-box" style="background:#fef3c7; border:1px solid rgba(245,158,11,0.2);">
+                    <div class="flow-step-icon" style="background:rgba(245,158,11,0.15); color:#92400e;">
+                        <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M8 4.5V8.5L10.5 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                    </div>
+                    <div class="flow-step-title" style="color:#92400e;">Cron Trigger</div>
+                    <div class="flow-step-desc" style="color:#92400e;">Daily cron hits the API on business days</div>
+                </div>
+            </div>
+            <div class="flow-arrow">
+                <svg width="20" height="16" viewBox="0 0 20 16"><path d="M2 8H16M16 8L12 4M16 8L12 12" stroke="#3c4858" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <!-- Step 2: Fetch -->
+            <div class="flow-step">
+                <div class="flow-step-box" style="background:#e0f7fa; border:1px solid rgba(0,178,201,0.2);">
+                    <div class="flow-step-icon" style="background:rgba(0,178,201,0.15); color:#005c69;">
+                        <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M14.5 14.5L10.5 10.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                    </div>
+                    <div class="flow-step-title" style="color:#005c69;">Fetch Queues</div>
+                    <div class="flow-step-desc" style="color:#005c69;">Pulls queued &amp; active contacts from HubSpot</div>
+                </div>
+            </div>
+            <div class="flow-arrow">
+                <svg width="20" height="16" viewBox="0 0 20 16"><path d="M2 8H16M16 8L12 4M16 8L12 12" stroke="#3c4858" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <!-- Step 3: Capacity -->
+            <div class="flow-step">
+                <div class="flow-step-box" style="background:#ede9fe; border:1px solid rgba(139,92,246,0.2);">
+                    <div class="flow-step-icon" style="background:rgba(139,92,246,0.15); color:#6d28d9;">
+                        <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><rect x="2" y="6" width="3" height="8" rx="1" fill="currentColor" opacity="0.4"/><rect x="6.5" y="3" width="3" height="11" rx="1" fill="currentColor" opacity="0.6"/><rect x="11" y="1" width="3" height="13" rx="1" fill="currentColor" opacity="0.8"/></svg>
+                    </div>
+                    <div class="flow-step-title" style="color:#6d28d9;">Calc Capacity</div>
+                    <div class="flow-step-desc" style="color:#6d28d9;">Checks each inbox against {{ config_max }}/day send limit</div>
+                </div>
+            </div>
+            <div class="flow-arrow">
+                <svg width="20" height="16" viewBox="0 0 20 16"><path d="M2 8H16M16 8L12 4M16 8L12 12" stroke="#3c4858" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <!-- Step 4: Allocate -->
+            <div class="flow-step">
+                <div class="flow-step-box" style="background:#e0f7fa; border:1px solid rgba(0,92,105,0.15);">
+                    <div class="flow-step-icon" style="background:rgba(0,92,105,0.1); color:#005c69;">
+                        <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M8 2L9.8 5.6L14 6.2L11 9.1L11.7 13.3L8 11.4L4.3 13.3L5 9.1L2 6.2L6.2 5.6L8 2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+                    </div>
+                    <div class="flow-step-title" style="color:#005c69;">Allocate Slots</div>
+                    <div class="flow-step-desc" style="color:#005c69;">Splits slots by weight: {% for seg, w in config_weights.items() %}{{ seg }} {{ (w * 100)|int }}%{{ ", " if not loop.last }}{% endfor %}</div>
+                </div>
+            </div>
+            <div class="flow-arrow">
+                <svg width="20" height="16" viewBox="0 0 20 16"><path d="M2 8H16M16 8L12 4M16 8L12 12" stroke="#3c4858" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <!-- Step 5: Enroll -->
+            <div class="flow-step">
+                <div class="flow-step-box" style="background:#d1fae5; border:1px solid rgba(16,185,129,0.2);">
+                    <div class="flow-step-icon" style="background:rgba(16,185,129,0.15); color:#065f46;">
+                        <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><polyline points="3,9 6,12 13,4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </div>
+                    <div class="flow-step-title" style="color:#065f46;">Enroll</div>
+                    <div class="flow-step-desc" style="color:#065f46;">Updates contacts in HubSpot: queued &rarr; active + assigns inbox</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Config summary -->
+        <div class="mt-4 pt-3" style="border-top:1px solid rgba(60,72,88,0.08);">
+            <div class="flex flex-wrap gap-x-6 gap-y-1" style="font-size:11px; color:#5a6779;">
+                <span><strong style="color:#005c69;">Inboxes:</strong> {{ config_inboxes|length or 'none configured' }}</span>
+                <span><strong style="color:#005c69;">Max/inbox/day:</strong> {{ config_max }}</span>
+                <span><strong style="color:#005c69;">Cadence:</strong> every {{ config_cadence }}d</span>
+                <span><strong style="color:#005c69;">Timezone:</strong> {{ config_tz }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Status card (auto-refreshes) -->
+    <div hx-get="/partials/enrollment-status" hx-trigger="load, every 30s" hx-swap="innerHTML">
+        {% include 'partials/enrollment_status.html' %}
+    </div>
+
+    <!-- Actions -->
+    <div class="card" style="padding:20px;">
+        <div class="section-label mb-3">Actions</div>
+        <div class="flex items-center gap-3 flex-wrap">
+            <button class="btn-primary" id="run-now-btn" onclick="dispatchEnrollment(false)">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><polygon points="4,2 14,8 4,14" fill="currentColor"/></svg>
+                Run Now
+            </button>
+            <button class="btn-accent" id="dry-run-btn" onclick="dispatchEnrollment(true)">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M8 5V8.5L10.5 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                Dry Run
+            </button>
+        </div>
+        <div id="dispatch-feedback" class="text-xs mt-2" style="color:#5a6779;"></div>
+    </div>
+
+    <!-- History table -->
+    <div class="card" style="padding:20px;">
+        <div class="section-label mb-3">Run History</div>
+        {% if runs %}
+        <div style="overflow-x:auto;">
+            <table style="width:100%; font-size:13px; border-collapse:collapse;">
+                <thead>
+                    <tr style="border-bottom:1px solid rgba(60,72,88,0.1);">
+                        <th style="text-align:left; padding:8px 12px; font-weight:600; color:#005c69; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">Date</th>
+                        <th style="text-align:left; padding:8px 12px; font-weight:600; color:#005c69; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">Status</th>
+                        <th style="text-align:right; padding:8px 12px; font-weight:600; color:#005c69; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">Enrolled</th>
+                        <th style="text-align:right; padding:8px 12px; font-weight:600; color:#005c69; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">Queued</th>
+                        <th style="text-align:right; padding:8px 12px; font-weight:600; color:#005c69; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">Capacity</th>
+                        <th style="text-align:right; padding:8px 12px; font-weight:600; color:#005c69; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">Errors</th>
+                        <th style="text-align:left; padding:8px 12px; font-weight:600; color:#005c69; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">Note</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for run in runs %}
+                    <tr style="border-bottom:1px solid rgba(60,72,88,0.05);">
+                        <td style="padding:8px 12px; white-space:nowrap;">{{ run.run_date or '—' }}</td>
+                        <td style="padding:8px 12px;">
+                            {% if run.status == 'completed' %}
+                            <span class="badge badge-success">completed</span>
+                            {% elif run.status == 'skipped' %}
+                            <span class="badge badge-muted">skipped</span>
+                            {% elif run.status == 'error' %}
+                            <span class="badge badge-error">error</span>
+                            {% else %}
+                            <span class="badge badge-info">{{ run.status }}</span>
+                            {% endif %}
+                            {% if run.dry_run %}
+                            <span class="badge badge-warning" style="font-size:9px; margin-left:4px;">DRY</span>
+                            {% endif %}
+                        </td>
+                        <td style="padding:8px 12px; text-align:right; font-weight:600;">{{ run.enrolled_count or 0 }}</td>
+                        <td style="padding:8px 12px; text-align:right;">{{ run.queued_count or 0 }}</td>
+                        <td style="padding:8px 12px; text-align:right;">{{ run.total_slots or 0 }}</td>
+                        <td style="padding:8px 12px; text-align:right;">
+                            {% if run.error_count %}
+                            <span style="color:#f65c4e;">{{ run.error_count }}</span>
+                            {% else %}
+                            0
+                            {% endif %}
+                        </td>
+                        <td style="padding:8px 12px; color:#5a6779; font-size:12px;">{{ run.reason or '—' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-6 text-sm" style="color:#5a6779; opacity:0.5;">
+            No enrollment runs recorded yet
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function dispatchEnrollment(dryRun) {
+    var btn = dryRun ? document.getElementById('dry-run-btn') : document.getElementById('run-now-btn');
+    var feedback = document.getElementById('dispatch-feedback');
+    btn.disabled = true;
+    feedback.textContent = 'Dispatching...';
+    feedback.style.color = '#005c69';
+
+    fetch('/api/enrollment/dispatch', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({dry_run: dryRun}),
+    })
+    .then(function(r) { return r.json().then(function(d) { return {ok: r.ok, data: d}; }); })
+    .then(function(res) {
+        if (res.ok) {
+            feedback.textContent = 'Job queued: ' + res.data.job_id;
+            feedback.style.color = '#10b981';
+        } else {
+            feedback.textContent = 'Error: ' + (res.data.error || 'Unknown');
+            feedback.style.color = '#f65c4e';
+        }
+        btn.disabled = false;
+    })
+    .catch(function(e) {
+        feedback.textContent = 'Network error: ' + e.message;
+        feedback.style.color = '#f65c4e';
+        btn.disabled = false;
+    });
+}
+</script>
+{% endblock %}

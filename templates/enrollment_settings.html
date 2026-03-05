@@ -1,0 +1,314 @@
+{% extends "base.html" %}
+{% block title %}Enrollment Settings{% endblock %}
+{% block page_title %}Enrollment Settings{% endblock %}
+
+{% block breadcrumb %}
+<a href="/enrollment" style="color:#005c69; font-weight:500; text-decoration:none;">Enrollment</a>
+<span class="sep">/</span>
+<span style="color:#005c69; font-weight:600;">Settings</span>
+{% endblock %}
+
+{% block head %}
+<style>
+    .field-group { margin-bottom: 20px; }
+    .field-label {
+        font-size: 12px; font-weight: 600; color: #005c69;
+        margin-bottom: 4px; display: block;
+    }
+    .field-hint {
+        font-size: 11px; color: #5a6779; margin-top: 2px; line-height: 1.4;
+    }
+    .field-row {
+        display: flex; align-items: center; gap: 10px;
+    }
+    .field-row .input-field { flex: 1; }
+    .inbox-row {
+        display: grid; grid-template-columns: 1fr 1fr 32px; gap: 8px;
+        align-items: center; margin-bottom: 6px;
+    }
+    .inbox-row .input-field { font-size: 12px; padding: 6px 10px; }
+    .weight-row {
+        display: grid; grid-template-columns: 1fr 80px; gap: 8px;
+        align-items: center; margin-bottom: 6px;
+    }
+    .weight-row .seg-name {
+        font-size: 12px; font-weight: 500; color: #3c4858;
+        font-family: 'JetBrains Mono', monospace;
+        padding: 6px 10px;
+        background: #f1f5f9; border-radius: 6px;
+    }
+    .weight-row .input-field { font-size: 12px; padding: 6px 10px; text-align: right; }
+    .remove-btn {
+        width: 28px; height: 28px; border-radius: 6px; border: none;
+        background: none; color: #9ca3af; cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        transition: all 0.12s;
+    }
+    .remove-btn:hover { background: #fee2e2; color: #f65c4e; }
+    .add-btn {
+        font-size: 12px; font-weight: 500; color: #00b2c9;
+        background: none; border: 1px dashed rgba(0,178,201,0.3);
+        padding: 5px 12px; border-radius: 6px; cursor: pointer;
+        font-family: inherit; transition: all 0.12s;
+    }
+    .add-btn:hover { background: #e0f7fa; border-color: #00b2c9; }
+    .prop-table {
+        width: 100%; font-size: 12px; border-collapse: collapse;
+    }
+    .prop-table th {
+        text-align: left; font-weight: 600; color: #005c69;
+        padding: 4px 8px; font-size: 10px; text-transform: uppercase;
+        letter-spacing: 0.05em; border-bottom: 1px solid rgba(60,72,88,0.08);
+    }
+    .prop-table td {
+        padding: 4px 8px; font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    }
+    .prop-table tr:nth-child(even) td { background: #fafaf8; }
+    .prop-rw {
+        font-size: 10px; font-weight: 600; padding: 1px 6px;
+        border-radius: 4px; display: inline-block;
+    }
+    .prop-rw-r { background: #e0f7fa; color: #005c69; }
+    .prop-rw-w { background: #d1fae5; color: #065f46; }
+    .prop-rw-rw { background: #fef3c7; color: #92400e; }
+    .divider {
+        height: 1px; background: rgba(60,72,88,0.08); margin: 16px 0;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-5 animate-in" style="max-width:720px;">
+
+    {% if save_ok %}
+    <div class="card" style="padding:12px 16px; border-left:3px solid #10b981;">
+        <div style="font-size:13px; color:#065f46; font-weight:500;">
+            Config saved. Changes take effect on the next dispatch run.
+        </div>
+    </div>
+    {% endif %}
+
+    {% if save_error %}
+    <div class="card" style="padding:12px 16px; border-left:3px solid #f65c4e;">
+        <div style="font-size:13px; color:#991b1b; font-weight:500;">
+            {{ save_error }}
+        </div>
+    </div>
+    {% endif %}
+
+    <form method="POST" action="/enrollment/settings">
+
+    <!-- Inboxes -->
+    <div class="card" style="padding:20px;">
+        <div class="flex items-center justify-between mb-1">
+            <div class="section-label">Inboxes</div>
+            <span class="badge badge-info" style="font-size:10px;">reply_io_sequence</span>
+        </div>
+        <div class="field-hint" style="margin-bottom:12px;">
+            Each inbox maps a BDR name to a HubSpot owner ID. Names must match
+            the <code style="font-size:11px;">reply_io_sequence</code> enum in HubSpot exactly.
+        </div>
+
+        <div class="inbox-row" style="margin-bottom:4px;">
+            <span style="font-size:10px; font-weight:600; color:#5a6779; text-transform:uppercase; letter-spacing:0.05em;">Name</span>
+            <span style="font-size:10px; font-weight:600; color:#5a6779; text-transform:uppercase; letter-spacing:0.05em;">Owner ID</span>
+            <span></span>
+        </div>
+        <div id="inbox-list">
+        {% for name, owner_id in cfg.inboxes.items() %}
+            <div class="inbox-row">
+                <input type="text" name="inbox_name" value="{{ name }}" class="input-field" placeholder="e.g. Jenn">
+                <input type="text" name="inbox_owner" value="{{ owner_id }}" class="input-field" placeholder="e.g. 1377426260">
+                <button type="button" class="remove-btn" onclick="this.parentElement.remove()" title="Remove">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 4L12 12M12 4L4 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                </button>
+            </div>
+        {% endfor %}
+        </div>
+        <button type="button" class="add-btn" onclick="addInbox()">+ Add inbox</button>
+    </div>
+
+    <!-- Send Limits & Cadence -->
+    <div class="card" style="padding:20px;">
+        <div class="section-label" style="margin-bottom:12px;">Sequence Settings</div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px;">
+            <div class="field-group" style="margin-bottom:0;">
+                <label class="field-label">Max sends / inbox / day</label>
+                <input type="number" name="max_per_day" value="{{ cfg.max_per_day }}" class="input-field" min="1">
+            </div>
+            <div class="field-group" style="margin-bottom:0;">
+                <label class="field-label">Cadence (days)</label>
+                <input type="number" name="sequence_cadence" value="{{ cfg.sequence_cadence }}" class="input-field" min="1">
+            </div>
+            <div class="field-group" style="margin-bottom:0;">
+                <label class="field-label">Sequence steps</label>
+                <input type="number" name="sequence_steps" value="{{ cfg.sequence_steps }}" class="input-field" min="1">
+            </div>
+        </div>
+        <div class="field-hint" style="margin-top:8px;">
+            {{ cfg.sequence_steps }} steps &times; {{ cfg.sequence_cadence }}-day cadence = {{ cfg.sequence_steps * cfg.sequence_cadence }} days of projected sends per enrollment.
+        </div>
+    </div>
+
+    <!-- Outreach Weights -->
+    <div class="card" style="padding:20px;">
+        <div class="flex items-center justify-between mb-1">
+            <div class="section-label">Outreach Weights</div>
+            <span class="badge badge-info" style="font-size:10px;">outreach_segment</span>
+        </div>
+        <div class="field-hint" style="margin-bottom:12px;">
+            Controls what share of daily slots each segment gets. Values are
+            normalized (just need to be proportional). Segment names come from
+            HubSpot <code style="font-size:11px;">outreach_segment</code>.
+        </div>
+
+        {% for seg, weight in cfg.outreach_weights.items() %}
+        <div class="weight-row">
+            <div class="seg-name">{{ seg }}</div>
+            <input type="number" name="weight_{{ seg }}" value="{{ weight }}" class="input-field" step="0.01" min="0" max="1">
+        </div>
+        {% endfor %}
+
+        <div class="field-hint" style="margin-top:8px;">
+            {% set total = cfg.outreach_weights.values() | sum %}
+            Total: {{ "%.2f"|format(total) }}{% if (total - 1.0)|abs > 0.02 %}
+            <span style="color:#f65c4e; font-weight:600;"> — weights should sum to ~1.0</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Rate Limiting -->
+    <div class="card" style="padding:20px;">
+        <div class="section-label" style="margin-bottom:12px;">Rate Limiting</div>
+        <div class="field-group" style="margin-bottom:0;">
+            <label class="field-label">Delay between CRM calls (seconds)</label>
+            <div style="max-width:120px;">
+                <input type="number" name="api_delay" value="{{ cfg.api_delay }}" class="input-field" step="0.01" min="0">
+            </div>
+            <div class="field-hint">HubSpot private apps allow 100 calls/10s. Default: 0.1s.</div>
+        </div>
+    </div>
+
+    <!-- HubSpot Property Mapping (read-only reference) -->
+    <div class="card" style="padding:20px;">
+        <div class="flex items-center justify-between mb-1">
+            <div class="section-label">HubSpot Property Mapping</div>
+            <span class="badge badge-muted" style="font-size:10px;">Reference</span>
+        </div>
+        <div class="field-hint" style="margin-bottom:12px;">
+            These are the HubSpot contact properties the dispatcher reads and writes.
+            Validated against the live portal.
+        </div>
+
+        <table class="prop-table">
+            <thead>
+                <tr><th>Purpose</th><th>Property</th><th>R/W</th></tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Queue status</td>
+                    <td>{{ cfg.hubspot_properties.status_field }}</td>
+                    <td><span class="prop-rw prop-rw-rw">R+W</span></td>
+                </tr>
+                <tr>
+                    <td>Inbox / BDR</td>
+                    <td>{{ cfg.hubspot_properties.inbox_field }}</td>
+                    <td><span class="prop-rw prop-rw-w">W</span></td>
+                </tr>
+                <tr>
+                    <td>Segment</td>
+                    <td>{{ cfg.hubspot_properties.segment_field }}</td>
+                    <td><span class="prop-rw prop-rw-r">R</span></td>
+                </tr>
+                <tr>
+                    <td>Trigger flag</td>
+                    <td>{{ cfg.hubspot_properties.trigger_field }}</td>
+                    <td><span class="prop-rw prop-rw-w">W</span></td>
+                </tr>
+                <tr>
+                    <td>Enrolled date</td>
+                    <td>{{ cfg.hubspot_properties.date_field }}</td>
+                    <td><span class="prop-rw prop-rw-w">W</span></td>
+                </tr>
+                <tr>
+                    <td>Owner</td>
+                    <td>hubspot_owner_id</td>
+                    <td><span class="prop-rw prop-rw-w">W</span></td>
+                </tr>
+                <tr>
+                    <td>Lead score</td>
+                    <td>{{ cfg.hubspot_properties.score_field }}</td>
+                    <td><span class="prop-rw prop-rw-r">R</span></td>
+                </tr>
+                <tr>
+                    <td>Create date</td>
+                    <td>{{ cfg.hubspot_properties.createdate_field }}</td>
+                    <td><span class="prop-rw prop-rw-r">R</span></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Timezone -->
+    <div class="card" style="padding:20px;">
+        <div class="section-label" style="margin-bottom:12px;">Scheduling</div>
+        <div class="field-group" style="margin-bottom:0;">
+            <label class="field-label">Timezone</label>
+            <div style="max-width:280px;">
+                <input type="text" name="timezone" value="{{ cfg.timezone }}" class="input-field">
+            </div>
+            <div class="field-hint">Business-day checks use this timezone. The dispatcher skips weekends and US holidays.</div>
+        </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="flex items-center justify-between">
+        <a href="/enrollment" style="font-size:13px; color:#005c69; text-decoration:none; font-weight:500;">&larr; Back to Enrollment</a>
+        <div class="flex items-center gap-3">
+            <button type="button" class="btn-accent" onclick="resetToYaml()" style="font-size:12px; padding:6px 12px;">
+                Reset to file defaults
+            </button>
+            <button type="submit" class="btn-primary" style="font-size:13px;">
+                Save Config
+            </button>
+        </div>
+    </div>
+
+    </form>
+
+    <div class="card" style="padding:16px;">
+        <div style="font-size:11px; color:#5a6779; line-height:1.6;">
+            <strong style="color:#005c69;">Priority chain:</strong>
+            Database (this editor) &rarr; <code style="font-size:11px; background:#f1f5f9; padding:1px 4px; border-radius:3px;">config/enrollment.yml</code> (repo defaults)
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function addInbox() {
+    var list = document.getElementById('inbox-list');
+    var row = document.createElement('div');
+    row.className = 'inbox-row';
+    row.innerHTML = '<input type="text" name="inbox_name" value="" class="input-field" placeholder="e.g. NewBDR">' +
+        '<input type="text" name="inbox_owner" value="" class="input-field" placeholder="Owner ID">' +
+        '<button type="button" class="remove-btn" onclick="this.parentElement.remove()" title="Remove">' +
+        '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 4L12 12M12 4L4 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>';
+    list.appendChild(row);
+}
+
+function resetToYaml() {
+    showConfirm(
+        'This will reload the config from the YAML file in the repo, discarding your database overrides.',
+        {title: 'Reset to file defaults', type: 'warning', confirmLabel: 'Reset'}
+    ).then(function(ok) {
+        if (!ok) return;
+        fetch('/api/enrollment/config', {method: 'DELETE'})
+        .then(function() { window.location.reload(); })
+        .catch(function() { window.location.reload(); });
+    });
+}
+</script>
+{% endblock %}
