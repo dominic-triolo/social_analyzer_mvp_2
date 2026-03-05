@@ -17,8 +17,6 @@ def db_engine():
     import app.models.filter_history
     import app.models.preset
     import app.models.metric_snapshot
-    import app.models.enrollment_run
-    import app.models.app_config
     Base.metadata.create_all(engine)
     yield engine
     engine.dispose()
