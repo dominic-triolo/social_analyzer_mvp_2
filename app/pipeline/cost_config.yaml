@@ -3,9 +3,9 @@
 version: "1.0"
 
 defaults:
-  instagram: { max_budget: 50.00, warning_threshold: 0.80 }
-  patreon:   { max_budget: 20.00, warning_threshold: 0.80 }
-  facebook:  { max_budget: 20.00, warning_threshold: 0.80 }
+  instagram: { max_budget: 0, warning_threshold: 0.80 }
+  patreon:   { max_budget: 0, warning_threshold: 0.80 }
+  facebook:  { max_budget: 0, warning_threshold: 0.80 }
 
 rates:
   instagram: { discovery: 0.02, pre_screen: 0.05, analysis: 0.15, scoring: 0.02 }
