@@ -283,6 +283,11 @@ def hubspot_batch_create(profiles: List[Dict], run) -> tuple:
     bdr_names = run.filters.get('bdr_names', list(BDR_OWNER_IDS.keys()))
     profiles = assign_bdr_round_robin(profiles, bdr_names)
 
+    # Strip enrichment_status so batch create doesn't trigger the HubSpot
+    # workflow prematurely — the stage 6 webhook sets it after scoring.
+    for p in profiles:
+        p.pop('enrichment_status', None)
+
     try:
         result = import_profiles_to_hubspot(profiles, run.id)
         created = result.get('created', 0)
