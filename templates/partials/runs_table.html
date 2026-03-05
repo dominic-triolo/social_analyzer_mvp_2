@@ -42,6 +42,17 @@
             <td class="py-3 px-5">
                 <div class="text-xs font-mono font-medium" style="color:#005c69;">{{ run.id[:8] }}...</div>
                 <div class="text-xs mt-0.5" style="color:#3c4858;opacity:0.4;">{{ run.created_at | time_since }}</div>
+                {# ── Filter summary ── #}
+                {% set _f = run.get('filters', {}) or {} %}
+                {% set _parts = [] %}
+                {% if _f.get('lookalike_username') %}{% if _parts.append('@' + _f.lookalike_username) %}{% endif %}{% endif %}
+                {% if _f.get('hashtags') %}{% for h in _f.hashtags[:3] %}{% if _parts.append('#' + (h.name if h is mapping else h)) %}{% endif %}{% endfor %}{% endif %}
+                {% if _f.get('search_keywords') %}{% for kw in _f.search_keywords[:3] %}{% if _parts.append(kw) %}{% endif %}{% endfor %}{% endif %}
+                {% if _f.get('keywords') %}{% for kw in _f.keywords[:3] %}{% if _parts.append(kw) %}{% endif %}{% endfor %}{% endif %}
+                {% if _f.get('bio_phrase') %}{% if _parts.append('"' + _f.bio_phrase + '"') %}{% endif %}{% endif %}
+                {% if _parts %}
+                <div class="text-xs mt-0.5 truncate" style="color:#64748b;max-width:200px;">{{ _parts | join(', ') | truncate(60) }}</div>
+                {% endif %}
             </td>
             <td class="py-3 px-4">
                 <span class="inline-flex items-center gap-1.5 text-xs" style="color:#005c69;">

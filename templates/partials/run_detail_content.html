@@ -65,6 +65,164 @@
 </div>
 {% endif %}
 
+{# ── Search Filters card ──────────────────────────────────────────── #}
+{% set filters = run.get('filters', {}) or {} %}
+{% set INTERNAL_KEYS = ['_retry_from', '_parent_run_id', 'bdr_names', 'max_budget'] %}
+{% set visible_filters = {} %}
+{% for k, v in filters.items() if k not in INTERNAL_KEYS and v is not none and v != '' and v != [] %}
+    {% if visible_filters.update({k: v}) %}{% endif %}
+{% endfor %}
+{% if visible_filters %}
+<div class="card p-4 mb-4">
+    <h2 class="section-label mb-3 flex items-center gap-2">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="color:#005c69;">
+            <path d="M14 2H2L6.5 7.5V12L9.5 13.5V7.5L14 2Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Search Filters
+    </h2>
+    <div class="flex flex-wrap gap-x-6 gap-y-2">
+
+        {# ── Lookalike ── #}
+        {% if filters.get('lookalike_type') and filters.lookalike_type != 'none' %}
+        <div class="text-xs">
+            <span style="color:#3c4858;opacity:0.5;">Lookalike</span>
+            <span class="ml-1 font-medium" style="color:#005c69;">{{ filters.lookalike_type }}{% if filters.get('lookalike_username') %}: @{{ filters.lookalike_username }}{% endif %}</span>
+        </div>
+        {% endif %}
+
+        {# ── Follower range ── #}
+        {% if filters.get('follower_count') %}
+        {% set fc = filters.follower_count %}
+        <div class="text-xs">
+            <span style="color:#3c4858;opacity:0.5;">Followers</span>
+            <span class="ml-1 font-medium font-mono" style="color:#005c69;">{{ '{:,}'.format(fc.get('min', 0)) }}–{{ '{:,}'.format(fc.get('max', 0)) }}</span>
+        </div>
+        {% endif %}
+
+        {# ── Hashtags (Instagram) ── #}
+        {% if filters.get('hashtags') %}
+        <div class="text-xs flex items-center gap-1 flex-wrap">
+            <span style="color:#3c4858;opacity:0.5;">Hashtags</span>
+            {% for h in filters.hashtags %}
+            <span class="badge badge-muted" style="font-size:10px;">#{{ h.name if h is mapping else h }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {# ── Creator interests ── #}
+        {% if filters.get('creator_interests') %}
+        <div class="text-xs flex items-center gap-1 flex-wrap">
+            <span style="color:#3c4858;opacity:0.5;">Creator interests</span>
+            {% for ci in filters.creator_interests %}
+            <span class="badge badge-muted" style="font-size:10px;">{{ ci }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {# ── Audience interests ── #}
+        {% if filters.get('audience_interests') %}
+        <div class="text-xs flex items-center gap-1 flex-wrap">
+            <span style="color:#3c4858;opacity:0.5;">Audience interests</span>
+            {% for ai in filters.audience_interests %}
+            <span class="badge badge-muted" style="font-size:10px;">{{ ai }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {# ── Bio phrase ── #}
+        {% if filters.get('bio_phrase') %}
+        <div class="text-xs">
+            <span style="color:#3c4858;opacity:0.5;">Bio phrase</span>
+            <span class="ml-1 font-medium" style="color:#005c69;">{{ filters.bio_phrase }}</span>
+        </div>
+        {% endif %}
+        {% if filters.get('bio_phrase_advanced') %}
+        <div class="text-xs flex items-center gap-1 flex-wrap">
+            <span style="color:#3c4858;opacity:0.5;">Advanced bio</span>
+            {% for clause in filters.bio_phrase_advanced %}
+            <span class="badge badge-muted" style="font-size:10px;">{{ clause.action }} "{{ clause.bio_phrase }}"</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {# ── Patreon: search keywords ── #}
+        {% if filters.get('search_keywords') %}
+        <div class="text-xs flex items-center gap-1 flex-wrap">
+            <span style="color:#3c4858;opacity:0.5;">Keywords</span>
+            {% for kw in filters.search_keywords %}
+            <span class="badge badge-muted" style="font-size:10px;">{{ kw }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {# ── Facebook: keywords ── #}
+        {% if filters.get('keywords') %}
+        <div class="text-xs flex items-center gap-1 flex-wrap">
+            <span style="color:#3c4858;opacity:0.5;">Keywords</span>
+            {% for kw in filters.keywords %}
+            <span class="badge badge-muted" style="font-size:10px;">{{ kw }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {# ── Location (Patreon) ── #}
+        {% if filters.get('location') %}
+        <div class="text-xs">
+            <span style="color:#3c4858;opacity:0.5;">Location</span>
+            <span class="ml-1 font-medium" style="color:#005c69;">{{ filters.location }}</span>
+        </div>
+        {% endif %}
+
+        {# ── Patron range (Patreon) ── #}
+        {% if filters.get('min_patrons') or filters.get('max_patrons') %}
+        <div class="text-xs">
+            <span style="color:#3c4858;opacity:0.5;">Patrons</span>
+            <span class="ml-1 font-medium font-mono" style="color:#005c69;">{{ '{:,}'.format(filters.get('min_patrons', 0)) }}–{{ '{:,}'.format(filters.get('max_patrons', 0)) }}</span>
+        </div>
+        {% endif %}
+
+        {# ── Member range (Facebook) ── #}
+        {% if filters.get('min_members') or filters.get('max_members') %}
+        <div class="text-xs">
+            <span style="color:#3c4858;opacity:0.5;">Members</span>
+            <span class="ml-1 font-medium font-mono" style="color:#005c69;">{{ '{:,}'.format(filters.get('min_members', 0)) }}–{{ '{:,}'.format(filters.get('max_members', 0)) }}</span>
+        </div>
+        {% endif %}
+
+        {# ── Visibility (Facebook) ── #}
+        {% if filters.get('visibility') and filters.visibility != 'all' %}
+        <div class="text-xs">
+            <span style="color:#3c4858;opacity:0.5;">Visibility</span>
+            <span class="ml-1 font-medium" style="color:#005c69;">{{ filters.visibility }}</span>
+        </div>
+        {% endif %}
+
+        {# ── Min posts ── #}
+        {% if filters.get('min_posts') %}
+        <div class="text-xs">
+            <span style="color:#3c4858;opacity:0.5;">Min posts</span>
+            <span class="ml-1 font-medium font-mono" style="color:#005c69;">{{ filters.min_posts }}</span>
+        </div>
+        {% endif %}
+        {% if filters.get('min_posts_per_month') %}
+        <div class="text-xs">
+            <span style="color:#3c4858;opacity:0.5;">Min posts/mo</span>
+            <span class="ml-1 font-medium font-mono" style="color:#005c69;">{{ filters.min_posts_per_month }}</span>
+        </div>
+        {% endif %}
+
+        {# ── Max results ── #}
+        {% if filters.get('max_results') %}
+        <div class="text-xs">
+            <span style="color:#3c4858;opacity:0.5;">Max results</span>
+            <span class="ml-1 font-medium font-mono" style="color:#005c69;">{{ filters.max_results }}</span>
+        </div>
+        {% endif %}
+
+    </div>
+</div>
+{% endif %}
+
 {% if run.summary %}
 <div class="card p-4 mb-4" style="border-left:3px solid #10b981;">
     <div class="flex items-start gap-3">
