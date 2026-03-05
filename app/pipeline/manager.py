@@ -274,7 +274,6 @@ def run_pipeline(run_id: str, retry_from_stage: str = None):
                 total_before = len(profiles)
                 profiles, dupes = dedup_profiles(profiles, run.platform)
                 run.duplicates_skipped = dupes
-                run.profiles_found = len(profiles)
                 run.save()
 
                 # Record filter fingerprint
@@ -286,7 +285,6 @@ def run_pipeline(run_id: str, retry_from_stage: str = None):
                     from app.services.hubspot import hubspot_batch_create
                     profiles, hs_created, hs_dupes = hubspot_batch_create(profiles, run)
                     run.hubspot_duplicates = hs_dupes
-                    run.profiles_found = len(profiles)
                     run.save()
                     logger.info("HubSpot batch create: %d created, %d dupes dropped", hs_created, hs_dupes)
                 except Exception as e:
