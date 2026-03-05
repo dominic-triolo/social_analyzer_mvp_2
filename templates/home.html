@@ -14,7 +14,7 @@
 <!-- Stats strip (HTMX-powered) -->
 <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6 animate-in" style="animation-delay:0.04s;"
      hx-get="/partials/dashboard-stats"
-     hx-trigger="load, every 8s"
+     hx-trigger="load, every 20s"
      hx-swap="innerHTML">
     <div class="card kpi-card">
         <div class="kpi-label">Total Runs</div>
@@ -89,7 +89,7 @@
     </div>
     <div class="card"
          hx-get="/partials/recent-runs"
-         hx-trigger="load, every 8s"
+         hx-trigger="load, every 20s"
          hx-swap="innerHTML">
         <div class="text-center py-8 text-xs" style="color:#3c4858;opacity:0.3;">Loading...</div>
     </div>

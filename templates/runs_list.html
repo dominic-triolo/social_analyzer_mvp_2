@@ -93,7 +93,7 @@
 <!-- Runs table (HTMX-powered) -->
 <div class="card animate-in" style="animation-delay:0.08s;" id="runs-container"
      hx-get="/partials/runs-table"
-     hx-trigger="load, every 5s"
+     hx-trigger="load, every 15s"
      hx-swap="innerHTML"
      hx-vals='js:{platform: document.querySelector("#platform-filters .chip.active")?.dataset.platform || "all", status: document.querySelector("#status-filters .chip.active")?.dataset.status || "all"}'>
     <div class="text-center py-8 text-sm" style="color:#3c4858;opacity:0.35;">Loading runs...</div>
