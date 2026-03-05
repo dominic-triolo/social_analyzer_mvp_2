@@ -125,6 +125,11 @@ def persist_lead_results(run, profiles):
                 lead.email = email or lead.email
                 lead.last_seen_at = datetime.now()
 
+            # Persist HubSpot contact ID if available
+            hs_id = profile.get('_hubspot_contact_id')
+            if hs_id:
+                lead.hubspot_contact_id = hs_id
+
             # Extract scoring data
             analysis = profile.get('_lead_analysis', {})
             prescreen_result = profile.get('_prescreen_result')
