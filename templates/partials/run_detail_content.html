@@ -74,6 +74,12 @@
     <div class="card kpi-card">
         <div class="kpi-label">Found</div>
         <div class="kpi-value">{{ run.profiles_found or 0 }}</div>
+        {% set discovered = run.get('profiles_discovered') or run.profiles_found or 0 %}
+        {% set db_dupes = run.duplicates_skipped or 0 %}
+        {% set hs_dupes = run.get('hubspot_duplicates') or 0 %}
+        {% if discovered and (db_dupes or hs_dupes) %}
+        <div class="kpi-sub">of {{ discovered }} discovered</div>
+        {% endif %}
         {% if dev_map.get('avg_found') %}
         {% set d = dev_map['avg_found'] %}
         <div class="text-xs mt-1 font-medium" style="color:{{ '#10b981' if d.direction == 'above' else '#f65c4e' }};">
@@ -245,8 +251,28 @@
                     </div>
                     <div class="text-xs mt-0.5" style="color:#3c4858;opacity:0.45;">{{ def.sub }}</div>
                     {% set progress = run.get('stage_progress', {}).get(stage.key) if run.get('stage_progress') else None %}
-                    {% if stage.key == 'pre_screen' and (run.profiles_pre_screened or run.profiles_found) %}
-                    {# Pre-screen: show passed vs filtered instead of raw completed/total #}
+                    {% if stage.key == 'discovery' %}
+                    {# Discovery: show discovered → DB dupes → HS dupes → new #}
+                    {% set disc_discovered = run.get('profiles_discovered') or run.profiles_found or 0 %}
+                    {% set disc_db_dupes = run.duplicates_skipped or 0 %}
+                    {% set disc_hs_dupes = run.get('hubspot_duplicates') or 0 %}
+                    {% set disc_new = run.profiles_found or 0 %}
+                    {% if disc_discovered %}
+                    <div class="flex flex-wrap gap-1 mt-1.5">
+                        <span class="badge badge-muted">{{ disc_discovered }} discovered</span>
+                        {% if disc_db_dupes %}
+                        <span class="badge" style="background:#fef3c7;color:#92400e;">{{ disc_db_dupes }} in DB</span>
+                        {% endif %}
+                        {% if disc_hs_dupes %}
+                        <span class="badge" style="background:#e0f2fe;color:#0369a1;">{{ disc_hs_dupes }} in HubSpot</span>
+                        {% endif %}
+                        {% if disc_db_dupes or disc_hs_dupes %}
+                        <span class="badge" style="background:#d1fae5;color:#166534;">{{ disc_new }} new</span>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    {% elif stage.key == 'pre_screen' and (run.profiles_pre_screened or run.profiles_found) %}
+                    {# Pre-screen: show passed vs filtered #}
                     {% set ps_passed = run.profiles_pre_screened or 0 %}
                     {% set ps_found = run.profiles_found or 0 %}
                     {% set ps_filtered = ps_found - ps_passed if ps_found > ps_passed else 0 %}
@@ -266,11 +292,6 @@
                         {% if progress.get('failed', 0) > 0 %}
                         <span class="badge badge-error">{{ progress.failed }} failed</span>
                         {% endif %}
-                    </div>
-                    {% endif %}
-                    {% if stage.key == 'discovery' and run.get('hubspot_duplicates') %}
-                    <div class="flex flex-wrap gap-1 mt-1.5">
-                        <span class="badge" style="background:#e0f2fe;color:#0369a1;">{{ run.hubspot_duplicates }} in HubSpot</span>
                     </div>
                     {% endif %}
 

@@ -41,6 +41,7 @@ class Run:
         self.current_stage = ''
         self.stage_progress = {stage: {'total': 0, 'completed': 0, 'failed': 0} for stage in PIPELINE_STAGES}
         self.filters = filters or {}
+        self.profiles_discovered = 0
         self.profiles_found = 0
         self.profiles_pre_screened = 0
         self.profiles_enriched = 0
@@ -70,6 +71,7 @@ class Run:
             'current_stage': self.current_stage,
             'stage_progress': self.stage_progress,
             'filters': self.filters,
+            'profiles_discovered': self.profiles_discovered,
             'profiles_found': self.profiles_found,
             'profiles_pre_screened': self.profiles_pre_screened,
             'profiles_enriched': self.profiles_enriched,
@@ -146,6 +148,7 @@ class Run:
         run.current_stage = db_run.current_stage or ''
         run.stage_progress = {}
         run.filters = db_run.filters or {}
+        run.profiles_discovered = db_run.profiles_discovered or 0
         run.profiles_found = db_run.profiles_found or 0
         run.profiles_pre_screened = db_run.profiles_pre_screened or 0
         run.profiles_enriched = db_run.profiles_enriched or 0
@@ -179,6 +182,7 @@ class Run:
             run.current_stage = d.get('current_stage', '')
             run.stage_progress = d.get('stage_progress', {})
             run.filters = d.get('filters', {})
+            run.profiles_discovered = d.get('profiles_discovered', 0)
             run.profiles_found = d.get('profiles_found', 0)
             run.profiles_pre_screened = d.get('profiles_pre_screened', 0)
             run.profiles_enriched = d.get('profiles_enriched', 0)

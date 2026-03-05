@@ -16,6 +16,7 @@ class DbRun(Base):
     current_stage = Column(Text, default='')
     filters = Column(JSON, default=dict)
     bdr_assignment = Column(Text, default='')
+    profiles_discovered = Column(Integer, default=0)
     profiles_found = Column(Integer, default=0)
     profiles_pre_screened = Column(Integer, default=0)
     profiles_enriched = Column(Integer, default=0)

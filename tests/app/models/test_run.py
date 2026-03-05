@@ -311,7 +311,7 @@ class TestToDict:
         expected_keys = {
             'id', 'status', 'platform', 'created_at', 'updated_at',
             'current_stage', 'stage_progress', 'filters',
-            'profiles_found', 'profiles_pre_screened', 'profiles_enriched',
+            'profiles_discovered', 'profiles_found', 'profiles_pre_screened', 'profiles_enriched',
             'profiles_scored', 'contacts_synced', 'duplicates_skipped', 'hubspot_duplicates',
             'bdr_assignment', 'errors', 'tier_distribution',
             'summary', 'estimated_cost', 'actual_cost', 'stage_timings',

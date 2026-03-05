@@ -257,6 +257,7 @@ def run_pipeline(run_id: str, retry_from_stage: str = None):
 
             # Update aggregate counters
             if stage_name == 'discovery':
+                run.profiles_discovered = len(result.profiles)
                 run.profiles_found = len(result.profiles)
             elif stage_name == 'pre_screen':
                 run.profiles_pre_screened = len(result.profiles)
@@ -274,6 +275,7 @@ def run_pipeline(run_id: str, retry_from_stage: str = None):
                 total_before = len(profiles)
                 profiles, dupes = dedup_profiles(profiles, run.platform)
                 run.duplicates_skipped = dupes
+                run.profiles_found = len(profiles)
                 run.save()
 
                 # Record filter fingerprint
@@ -285,6 +287,7 @@ def run_pipeline(run_id: str, retry_from_stage: str = None):
                     from app.services.hubspot import hubspot_batch_create
                     profiles, hs_created, hs_dupes = hubspot_batch_create(profiles, run)
                     run.hubspot_duplicates = hs_dupes
+                    run.profiles_found = len(profiles)
                     run.save()
                     logger.info("HubSpot batch create: %d created, %d dupes dropped", hs_created, hs_dupes)
                 except Exception as e:
@@ -347,6 +350,7 @@ def _generate_run_summary(run, failed: bool = False) -> str:
     Produces a narrative funnel summary with contextual warnings.
     Works for both completed and failed runs.
     """
+    discovered = run.profiles_discovered or 0
     found = run.profiles_found or 0
     dupes = run.duplicates_skipped or 0
     hs_dupes = run.hubspot_duplicates or 0
@@ -362,7 +366,7 @@ def _generate_run_summary(run, failed: bool = False) -> str:
     platform = (run.platform or 'unknown').capitalize()
 
     # ── Zero-results short circuit ──
-    if found == 0 and not failed:
+    if discovered == 0 and not failed:
         return f"No {platform} profiles found. Check filters and try again."
 
     # ── Failed run ──
@@ -377,15 +381,15 @@ def _generate_run_summary(run, failed: bool = False) -> str:
     lines = []
 
     # Discovery line
-    discovery = f"Discovered {found} {platform} profiles"
+    discovery = f"Discovered {discovered} {platform} profiles"
     removals = []
     if dupes:
-        removals.append(f"{dupes} duplicates removed")
+        removals.append(f"{dupes} in DB")
     if hs_dupes:
-        removals.append(f"{hs_dupes} already in HubSpot")
+        removals.append(f"{hs_dupes} in HubSpot")
     if removals:
-        discovery += f" ({', '.join(removals)})"
-    discovery += "."
+        discovery += f", {' + '.join(removals)} already known"
+    discovery += f" — {found} new."
     lines.append(discovery)
 
     # Pre-screen line

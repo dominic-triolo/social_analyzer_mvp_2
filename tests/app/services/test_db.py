@@ -87,6 +87,7 @@ class TestPersistRun:
 
         # Mutate the run to simulate pipeline completion
         run.status = 'completed'
+        run.profiles_discovered = 50
         run.profiles_found = 42
         run.profiles_pre_screened = 38
         run.profiles_enriched = 30
@@ -103,6 +104,7 @@ class TestPersistRun:
 
         row = db_session.get(DbRun, run.id)
         assert row.status == 'completed'
+        assert row.profiles_discovered == 50
         assert row.profiles_found == 42
         assert row.profiles_pre_screened == 38
         assert row.profiles_enriched == 30

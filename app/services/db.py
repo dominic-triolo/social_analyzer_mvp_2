@@ -42,6 +42,7 @@ def persist_run(run):
         else:
             db_run.status = run.status
             db_run.current_stage = run.current_stage or ''
+            db_run.profiles_discovered = run.profiles_discovered
             db_run.profiles_found = run.profiles_found
             db_run.profiles_pre_screened = run.profiles_pre_screened
             db_run.profiles_enriched = run.profiles_enriched

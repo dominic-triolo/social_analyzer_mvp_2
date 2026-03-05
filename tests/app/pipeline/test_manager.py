@@ -745,8 +745,9 @@ class TestRunPipeline:
         with patch('app.pipeline.manager.STAGE_REGISTRY', registry):
             run_pipeline('run-test-001')
 
-        # profiles_found reflects raw discovery count (dedup counts tracked separately)
-        assert run.profiles_found == 3
+        # profiles_discovered = raw discovery, profiles_found = post-dedup
+        assert run.profiles_discovered == 3
+        assert run.profiles_found == 1
         # Scoring should also be tracked
         assert run.profiles_scored == 1
 

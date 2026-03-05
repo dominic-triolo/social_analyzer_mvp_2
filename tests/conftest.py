@@ -88,6 +88,7 @@ def make_run():
             estimated_cost=1.50,
             actual_cost=None,
             created_at='2026-01-15T10:00:00',
+            profiles_discovered=0,
             profiles_found=0,
             profiles_pre_screened=0,
             profiles_enriched=0,
