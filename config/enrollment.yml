@@ -54,9 +54,18 @@ sequence_steps: 5
 #
 # Env override: ENROLLMENT_OUTREACH_WEIGHTS_JSON='{"schedule_call":4,...}'
 outreach_weights:
-  schedule_call:   4
-  interest_check:  2
-  self_service:    1
+  schedule_call:        4
+  rewarm_schedule_call: 2
+  interest_check:       2
+  self_service:         1
+
+# ── Inbox Allowed Types ────────────────────────────────────────────────────
+# Restrict which inboxes can handle which outreach types.
+# Inboxes not listed here can handle all types (no restriction).
+inbox_allowed_types:
+  Dom:  [schedule_call, rewarm_schedule_call]
+  Jenn: [schedule_call, rewarm_schedule_call]
+  Ryan: [schedule_call, rewarm_schedule_call]
 
 # ── HubSpot Property Mapping ────────────────────────────────────────────────
 # Contact properties the dispatcher reads/writes in HubSpot.

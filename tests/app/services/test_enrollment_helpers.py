@@ -238,6 +238,64 @@ class TestBestInboxForEnrollment:
         result = best_inbox_for_enrollment(date.today(), {}, inboxes, cadence=3, max_per_day=25)
         assert result in inboxes
 
+    def test_filters_by_allowed_types(self):
+        """Inboxes restricted to certain types are excluded for other types."""
+        today = date.today()
+        inboxes = {'Dom': 'o1', 'Kendall': 'o2', 'Matt': 'o3'}
+        allowed = {'Dom': ['schedule_call', 'rewarm_schedule_call']}
+        # interest_check should skip Dom, pick Kendall or Matt
+        result = best_inbox_for_enrollment(
+            today, {}, inboxes, cadence=3, max_per_day=25,
+            outreach_type='interest_check', inbox_allowed_types=allowed,
+        )
+        assert result in ('Kendall', 'Matt')
+
+    def test_allowed_type_matches(self):
+        """Inbox with allowed type is still eligible."""
+        today = date.today()
+        inboxes = {'Dom': 'o1'}
+        allowed = {'Dom': ['schedule_call', 'rewarm_schedule_call']}
+        result = best_inbox_for_enrollment(
+            today, {}, inboxes, cadence=3, max_per_day=25,
+            outreach_type='schedule_call', inbox_allowed_types=allowed,
+        )
+        assert result == 'Dom'
+
+    def test_unlisted_inbox_handles_all_types(self):
+        """Inboxes not in inbox_allowed_types can handle any type."""
+        today = date.today()
+        inboxes = {'Dom': 'o1', 'Kendall': 'o2'}
+        allowed = {'Dom': ['schedule_call']}
+        result = best_inbox_for_enrollment(
+            today, {}, inboxes, cadence=3, max_per_day=25,
+            outreach_type='self_service', inbox_allowed_types=allowed,
+        )
+        assert result == 'Kendall'
+
+    def test_no_allowed_types_means_no_filtering(self):
+        """When inbox_allowed_types is empty, all inboxes are eligible."""
+        today = date.today()
+        inboxes = {'Dom': 'o1', 'Kendall': 'o2'}
+        result = best_inbox_for_enrollment(
+            today, {}, inboxes, cadence=3, max_per_day=25,
+            outreach_type='schedule_call', inbox_allowed_types={},
+        )
+        assert result in inboxes
+
+    def test_returns_none_when_all_filtered_out(self):
+        """Returns None when all inboxes are filtered out by type."""
+        today = date.today()
+        inboxes = {'Dom': 'o1', 'Jenn': 'o2'}
+        allowed = {
+            'Dom': ['schedule_call'],
+            'Jenn': ['schedule_call'],
+        }
+        result = best_inbox_for_enrollment(
+            today, {}, inboxes, cadence=3, max_per_day=25,
+            outreach_type='interest_check', inbox_allowed_types=allowed,
+        )
+        assert result is None
+
 
 class TestUpdateCommittedForEnrollment:
     def test_adds_to_empty_committed(self):

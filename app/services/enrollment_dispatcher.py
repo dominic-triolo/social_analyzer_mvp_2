@@ -50,6 +50,7 @@ def run_enrollment_dispatcher(force=False, dry_run=False):
     cadence = cfg['sequence_cadence']
     weights = cfg['outreach_weights']
     api_delay = cfg.get('api_delay', 0.1)
+    inbox_allowed_types = cfg.get('inbox_allowed_types', {})
     hs = cfg['hubspot_properties']
     status_f = hs['status_field']
     inbox_f = hs['inbox_field']
@@ -204,7 +205,7 @@ def run_enrollment_dispatcher(force=False, dry_run=False):
                     contact, segment, today, committed, inboxes, cadence,
                     max_per_day, dry_run, api_delay, status_f, inbox_f,
                     date_f, trigger_f, hubspot_update_contact, summary,
-                    enrolled_so_far,
+                    enrolled_so_far, inbox_allowed_types=inbox_allowed_types,
                 )
 
         # Fill remaining capacity with unknown-segment contacts (D2)
@@ -217,7 +218,7 @@ def run_enrollment_dispatcher(force=False, dry_run=False):
                     contact, '_unknown', today, committed, inboxes, cadence,
                     max_per_day, dry_run, api_delay, status_f, inbox_f,
                     date_f, trigger_f, hubspot_update_contact, summary,
-                    enrolled_so_far,
+                    enrolled_so_far, inbox_allowed_types=inbox_allowed_types,
                 )
 
         # Per-inbox remaining capacity (D5)
@@ -280,7 +281,7 @@ def get_run_history(limit=20):
 def _enroll_contact(contact, segment, today, committed, inboxes, cadence,
                     max_per_day, dry_run, api_delay, status_f, inbox_f,
                     date_f, trigger_f, hubspot_update_contact, summary,
-                    enrolled_so_far):
+                    enrolled_so_far, inbox_allowed_types=None):
     """Enroll a single contact. Returns updated enrolled_so_far count."""
     contact_id = contact.get('id')
     if not contact_id:
@@ -288,6 +289,7 @@ def _enroll_contact(contact, segment, today, committed, inboxes, cadence,
 
     inbox = best_inbox_for_enrollment(
         today, committed, inboxes, cadence, max_per_day,
+        outreach_type=segment, inbox_allowed_types=inbox_allowed_types,
     )
     if not inbox:
         summary['errors'].append(f'No inbox capacity for contact {contact_id}')

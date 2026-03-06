@@ -22,9 +22,11 @@ _DEFAULTS = {
     'sequence_steps': 5,
     'outreach_weights': {
         'schedule_call': 4,
+        'rewarm_schedule_call': 2,
         'interest_check': 2,
         'self_service': 1,
     },
+    'inbox_allowed_types': {},
     'api_delay': 0.1,
     'timezone': 'America/Los_Angeles',
     'hubspot_properties': {

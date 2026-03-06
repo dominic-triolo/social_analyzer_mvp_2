@@ -504,88 +504,159 @@ class TestGenerateCreatorProfile:
 
 # ── extract_first_names_from_instagram_profile ───────────────────────────────
 
+class TestDeterministicFirstName:
+    """_deterministic_first_name() — Layer 1 deterministic extraction."""
+
+    def test_simple_name_extracted(self):
+        from app.services.openai_client import _deterministic_first_name
+        assert _deterministic_first_name("Sarah Johnson") == "Sarah"
+
+    def test_single_name(self):
+        from app.services.openai_client import _deterministic_first_name
+        assert _deterministic_first_name("Maria") == "Maria"
+
+    def test_lowercases_and_capitalizes(self):
+        from app.services.openai_client import _deterministic_first_name
+        assert _deterministic_first_name("sarah jones") == "Sarah"
+
+    def test_strips_emoji(self):
+        from app.services.openai_client import _deterministic_first_name
+        assert _deterministic_first_name("✨ Sarah Johnson 🌟") == "Sarah"
+
+    def test_returns_none_for_couple_with_and(self):
+        from app.services.openai_client import _deterministic_first_name
+        assert _deterministic_first_name("John and Jane Smith") is None
+
+    def test_returns_none_for_couple_with_ampersand(self):
+        from app.services.openai_client import _deterministic_first_name
+        assert _deterministic_first_name("John & Jane") is None
+
+    def test_returns_none_for_prefix_the(self):
+        from app.services.openai_client import _deterministic_first_name
+        assert _deterministic_first_name("The Travel Club") is None
+
+    def test_returns_none_for_prefix_dr(self):
+        from app.services.openai_client import _deterministic_first_name
+        assert _deterministic_first_name("Dr. Smith") is None
+
+    def test_returns_none_for_prefix_coach(self):
+        from app.services.openai_client import _deterministic_first_name
+        assert _deterministic_first_name("Coach Mike") is None
+
+    def test_returns_none_for_prefix_dj(self):
+        from app.services.openai_client import _deterministic_first_name
+        assert _deterministic_first_name("DJ Beats") is None
+
+    def test_returns_none_for_empty_string(self):
+        from app.services.openai_client import _deterministic_first_name
+        assert _deterministic_first_name("") is None
+
+    def test_returns_none_for_none(self):
+        from app.services.openai_client import _deterministic_first_name
+        assert _deterministic_first_name(None) is None
+
+    def test_returns_none_for_single_char(self):
+        from app.services.openai_client import _deterministic_first_name
+        assert _deterministic_first_name("A") is None
+
+    def test_returns_none_for_numeric_first_word(self):
+        from app.services.openai_client import _deterministic_first_name
+        assert _deterministic_first_name("123 Brand") is None
+
+    def test_returns_none_for_emoji_only(self):
+        from app.services.openai_client import _deterministic_first_name
+        assert _deterministic_first_name("✨🌟🎉") is None
+
+
 class TestExtractFirstNames:
     """extract_first_names_from_instagram_profile() — name extraction with fallbacks."""
 
-    @patch('app.services.openai_client.client')
-    def test_returns_extracted_name(self, mock_client):
+    def test_deterministic_layer_bypasses_gpt(self):
+        """Layer 1 returns name without calling GPT at all."""
         from app.services.openai_client import extract_first_names_from_instagram_profile
 
-        mock_client.chat.completions.create.return_value = _mock_chat_response("Sarah")
-
-        result = extract_first_names_from_instagram_profile(
-            username="sarahtravel", full_name="Sarah Johnson", bio="Travel lover",
-        )
+        with patch('app.services.openai_client.client') as mock_client:
+            result = extract_first_names_from_instagram_profile(
+                username="sarahtravel", full_name="Sarah Johnson", bio="Travel lover",
+            )
+            mock_client.chat.completions.create.assert_not_called()
         assert result == "Sarah"
 
-    @patch('app.services.openai_client.client')
-    def test_strips_quotes_from_response(self, mock_client):
+    def test_deterministic_layer_handles_emoji_names(self):
+        """Layer 1 strips emoji and extracts name."""
         from app.services.openai_client import extract_first_names_from_instagram_profile
 
-        mock_client.chat.completions.create.return_value = _mock_chat_response('"Sarah"')
-
-        result = extract_first_names_from_instagram_profile(
-            username="sarahtravel", full_name="Sarah Johnson", bio="Travel lover",
-        )
-        assert result == "Sarah"
+        with patch('app.services.openai_client.client') as mock_client:
+            result = extract_first_names_from_instagram_profile(
+                username="explorer", full_name="✨ Maria Rodriguez", bio="",
+            )
+            mock_client.chat.completions.create.assert_not_called()
+        assert result == "Maria"
 
     @patch('app.services.openai_client.client')
-    def test_falls_back_to_full_name_on_empty_response(self, mock_client):
+    def test_couple_name_falls_through_to_gpt(self, mock_client):
+        """Couple names (with '&') skip Layer 1 and hit GPT."""
         from app.services.openai_client import extract_first_names_from_instagram_profile
 
-        mock_client.chat.completions.create.return_value = _mock_chat_response("")
+        mock_client.chat.completions.create.return_value = _mock_chat_response("John and Jane")
 
         result = extract_first_names_from_instagram_profile(
-            username="someone", full_name="Jane Doe", bio="Bio here",
+            username="jj_travel", full_name="John & Jane Smith", bio="Couple travelers",
         )
-        assert result == "Jane"
+        assert result == "John and Jane"
+        mock_client.chat.completions.create.assert_called_once()
 
     @patch('app.services.openai_client.client')
-    def test_falls_back_to_full_name_on_none_response(self, mock_client):
+    def test_prefix_name_falls_through_to_gpt(self, mock_client):
+        """Prefixed names (Dr., Coach) skip Layer 1 and hit GPT."""
         from app.services.openai_client import extract_first_names_from_instagram_profile
 
-        mock_client.chat.completions.create.return_value = _mock_chat_response("none")
+        mock_client.chat.completions.create.return_value = _mock_chat_response("Mike")
 
         result = extract_first_names_from_instagram_profile(
-            username="someone", full_name="Bob Smith", bio="Bio here",
+            username="coachmike", full_name="Coach Mike Jones", bio="Fitness coach",
         )
-        assert result == "Bob"
+        assert result == "Mike"
+        mock_client.chat.completions.create.assert_called_once()
 
     @patch('app.services.openai_client.client')
-    def test_falls_back_to_full_name_on_unknown_response(self, mock_client):
+    def test_gpt_unknown_response_falls_back_to_username(self, mock_client):
+        """Layer 2 unknown → Layer 3 uses short alpha username."""
         from app.services.openai_client import extract_first_names_from_instagram_profile
 
         mock_client.chat.completions.create.return_value = _mock_chat_response("unknown")
 
         result = extract_first_names_from_instagram_profile(
-            username="someone", full_name="Alice Wonder", bio="Bio here",
+            username="marco", full_name="", bio="Bio here",
         )
-        assert result == "Alice"
+        assert result == "Marco"
 
     @patch('app.services.openai_client.client')
-    def test_falls_back_to_there_when_no_full_name(self, mock_client):
+    def test_gpt_unknown_response_long_username_returns_there(self, mock_client):
+        """Layer 3: non-alpha or long username → 'there'."""
         from app.services.openai_client import extract_first_names_from_instagram_profile
 
         mock_client.chat.completions.create.return_value = _mock_chat_response("unknown")
 
         result = extract_first_names_from_instagram_profile(
-            username="someone", full_name="", bio="Bio here",
+            username="brand_official_page", full_name="", bio="Bio here",
         )
         assert result == "there"
 
     @patch('app.services.openai_client.client')
-    def test_falls_back_on_api_exception(self, mock_client):
+    def test_falls_back_on_api_exception_with_full_name(self, mock_client):
         from app.services.openai_client import extract_first_names_from_instagram_profile
 
         mock_client.chat.completions.create.side_effect = Exception("API down")
 
+        # full_name has prefix, so deterministic returns None → GPT fails → fallback
         result = extract_first_names_from_instagram_profile(
-            username="creator", full_name="Tina Turner", bio="Music lover",
+            username="creator", full_name="Dr. Tina Turner", bio="Music lover",
         )
-        assert result == "Tina"
+        assert result == "Dr."  # _full_name_fallback splits on space
 
     @patch('app.services.openai_client.client')
-    def test_falls_back_to_there_on_exception_with_no_name(self, mock_client):
+    def test_falls_back_to_username_on_exception_with_no_name(self, mock_client):
         from app.services.openai_client import extract_first_names_from_instagram_profile
 
         mock_client.chat.completions.create.side_effect = Exception("API down")
@@ -593,7 +664,7 @@ class TestExtractFirstNames:
         result = extract_first_names_from_instagram_profile(
             username="brand", full_name="", bio="",
         )
-        assert result == "there"
+        assert result == "Brand"  # short alpha username → capitalize
 
     def test_returns_there_when_no_username_and_no_full_name(self):
         """No username + no full_name returns 'there' immediately."""
@@ -605,8 +676,8 @@ class TestExtractFirstNames:
         assert result == "there"
 
     @patch('app.services.openai_client.client', None)
-    def test_returns_full_name_fallback_when_client_is_none(self):
-        """If openai_client is None (no API key), falls back to full_name split."""
+    def test_returns_deterministic_when_client_is_none(self):
+        """If openai_client is None, Layer 1 still works for simple names."""
         from app.services.openai_client import extract_first_names_from_instagram_profile
 
         result = extract_first_names_from_instagram_profile(
@@ -615,26 +686,28 @@ class TestExtractFirstNames:
         assert result == "Maria"
 
     @patch('app.services.openai_client.client', None)
-    def test_returns_there_when_client_none_and_no_full_name(self):
+    def test_returns_username_when_client_none_and_no_full_name(self):
         from app.services.openai_client import extract_first_names_from_instagram_profile
 
         result = extract_first_names_from_instagram_profile(
             username="traveler", full_name="", bio="",
         )
-        assert result == "there"
+        assert result == "Traveler"
 
     @patch('app.services.openai_client.client')
     def test_content_analyses_included_in_prompt(self, mock_client):
+        """When GPT is called, content context is included."""
         from app.services.openai_client import extract_first_names_from_instagram_profile
 
-        mock_client.chat.completions.create.return_value = _mock_chat_response("Dave")
+        mock_client.chat.completions.create.return_value = _mock_chat_response("Dave and Amy")
 
         content = [
             {"summary": "Dave shares his hiking adventures", "caption": ""},
             {"summary": "", "caption": "Another great day on the trail"},
         ]
+        # Couple name to force GPT path
         extract_first_names_from_instagram_profile(
-            username="davehikes", full_name="Dave Hill", bio="Hiker",
+            username="davehikes", full_name="Dave & Amy Hill", bio="Hiker",
             content_analyses=content,
         )
 
@@ -644,12 +717,14 @@ class TestExtractFirstNames:
 
     @patch('app.services.openai_client.client')
     def test_uses_gpt4o_mini(self, mock_client):
+        """When GPT is called, it uses gpt-4.1-mini."""
         from app.services.openai_client import extract_first_names_from_instagram_profile
 
-        mock_client.chat.completions.create.return_value = _mock_chat_response("Test")
+        mock_client.chat.completions.create.return_value = _mock_chat_response("Mike")
 
+        # Use prefix to force GPT path
         extract_first_names_from_instagram_profile(
-            username="test", full_name="Test User", bio="bio",
+            username="test", full_name="Coach Mike", bio="bio",
         )
 
         call_kwargs = mock_client.chat.completions.create.call_args[1]

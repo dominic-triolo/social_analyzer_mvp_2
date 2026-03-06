@@ -299,21 +299,90 @@ Return JSON with these fields:
     return result
 
 
+import re
+
+# Prefixes that are not first names — used by deterministic Layer 1
+_NON_NAME_PREFIXES = {
+    'the', 'dr', 'dr.', 'coach', 'dj', 'mc', 'pastor', 'rev', 'rev.',
+    'chef', 'prof', 'prof.', 'sir', 'lady', 'king', 'queen', 'prince',
+    'princess', 'captain', 'capt', 'capt.', 'mr', 'mr.', 'mrs', 'mrs.',
+    'ms', 'ms.', 'miss',
+}
+
+# Couple signal patterns
+_COUPLE_PATTERN = re.compile(r'\s+and\s+|\s*&\s*', re.IGNORECASE)
+
+
+def _deterministic_first_name(full_name: str) -> str | None:
+    """Layer 1: Extract first name deterministically from full_name.
+
+    Returns the first name if it's obviously extractable, or None to
+    fall through to GPT.
+    """
+    if not full_name or not full_name.strip():
+        return None
+
+    # Strip emoji and non-ASCII decorators
+    cleaned = re.sub(r'[^\w\s&.\'-]', '', full_name, flags=re.UNICODE).strip()
+    if not cleaned:
+        return None
+
+    # Detect couple signals — defer to GPT
+    if _COUPLE_PATTERN.search(cleaned):
+        return None
+
+    parts = cleaned.split()
+    if not parts:
+        return None
+
+    first_word = parts[0]
+
+    # Skip non-name prefixes — defer to GPT for these
+    if first_word.lower() in _NON_NAME_PREFIXES:
+        return None
+
+    # Must be at least 2 alpha chars and purely alphabetic
+    if len(first_word) < 2 or not first_word.isalpha():
+        return None
+
+    return first_word.capitalize()
+
+
 def extract_first_names_from_instagram_profile(
     username: str, full_name: str, bio: str,
     content_analyses: List[Dict] = None,
 ) -> str:
-    """Use OpenAI to extract properly formatted first name(s) from Instagram profile."""
+    """Extract first name(s) from Instagram profile.
+
+    3-layer approach:
+      Layer 1 (deterministic): Clean first word from full_name if unambiguous.
+      Layer 2 (GPT-4o-mini): Existing logic for complex cases.
+      Layer 3 (fallback): Short alpha username or "there".
+    """
     def _full_name_fallback() -> str:
         if full_name and full_name.strip():
             first = full_name.strip().split(' ')[0]
             return first if first else "there"
         return "there"
 
-    if not client:
-        return _full_name_fallback()
+    def _username_fallback() -> str:
+        """Layer 3: Short alpha username → capitalize. Otherwise → 'there'."""
+        if username and username.isalpha() and 2 <= len(username) <= 12:
+            return username.capitalize()
+        return "there"
+
     if not username and not full_name:
         return "there"
+
+    # Layer 1: deterministic extraction
+    deterministic = _deterministic_first_name(full_name)
+    if deterministic:
+        logger.debug("@%s -> '%s' (deterministic)", username, deterministic)
+        return deterministic
+
+    # Layer 2: GPT extraction
+    if not client:
+        return _username_fallback() if not full_name else _full_name_fallback()
 
     content_context = ""
     if content_analyses:
@@ -357,9 +426,9 @@ Return ONLY the name(s). No quotes, no explanation."""
         )
         first_names = response.choices[0].message.content.strip().strip('"').strip("'")
         if not first_names or first_names.lower() in ('', 'none', 'unknown', 'n/a', 'not provided', 'there'):
-            first_names = _full_name_fallback()
-        logger.debug("@%s -> '%s'", username, first_names)
+            first_names = _username_fallback()
+        logger.debug("@%s -> '%s' (gpt)", username, first_names)
         return first_names
     except Exception as e:
         logger.error("Error extracting first name for @%s: %s", username, e)
-        return _full_name_fallback()
+        return _username_fallback() if not full_name else _full_name_fallback()

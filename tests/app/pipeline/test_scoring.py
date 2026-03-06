@@ -517,7 +517,7 @@ class TestGenerateEvidenceBasedScore:
         assert result['priority_tier'] == 'auto_enroll'
 
     def test_tier_auto_enroll_by_full_score(self, evidence_inputs, mock_openai):
-        """Manual score < 0.65 but full_score >= 0.80 -> auto_enroll."""
+        """Manual score < 0.65 but full_score >= 0.49 -> auto_enroll."""
         with patch('app.pipeline.scoring.client', mock_openai(
             niche_and_audience_identity=0.6,
             creator_authenticity_and_presence=0.6,
@@ -533,14 +533,16 @@ class TestGenerateEvidenceBasedScore:
 
         assert result['priority_tier'] == 'auto_enroll'
 
-    def test_tier_standard_review(self, evidence_inputs, mock_openai):
-        """Below auto_enroll thresholds -> standard_review."""
+    def test_tier_standard_priority_review(self, evidence_inputs, mock_openai):
+        """Full score >= 0.25 but < 0.49 -> standard_priority_review."""
+        # Scores: 0.3*0.30 + 0.3*0.30 + 0.3*0.20 + 0.3*0.15 + 0.3*0.05 = 0.30
+        # No follower boost (10k), no engagement adj → full_score=0.30
         with patch('app.pipeline.scoring.client', mock_openai(
             niche_and_audience_identity=0.3,
             creator_authenticity_and_presence=0.3,
-            monetization_and_business_mindset=0.2,
-            community_infrastructure=0.2,
-            engagement_and_connection=0.1,
+            monetization_and_business_mindset=0.3,
+            community_infrastructure=0.3,
+            engagement_and_connection=0.3,
         )):
             evidence_inputs['follower_count'] = 10000
             evidence_inputs['thumbnail_evidence']['engagement_metrics'] = {
@@ -548,10 +550,11 @@ class TestGenerateEvidenceBasedScore:
             }
             result = generate_evidence_based_score(**evidence_inputs)
 
-        assert result['priority_tier'] == 'standard_review'
+        assert result['priority_tier'] == 'standard_priority_review'
+        assert result['expected_precision'] == 0.681
 
-    def test_tier_standard_review_low_scores(self, evidence_inputs, mock_openai):
-        """Very low scores also get standard_review (no separate low tier)."""
+    def test_tier_auto_enroll_fallback_below_all_thresholds(self, evidence_inputs, mock_openai):
+        """Very low scores get auto_enroll via fallback (auto_enroll_fallback=true)."""
         with patch('app.pipeline.scoring.client', mock_openai(
             niche_and_audience_identity=0.1,
             creator_authenticity_and_presence=0.1,
@@ -565,8 +568,9 @@ class TestGenerateEvidenceBasedScore:
             }
             result = generate_evidence_based_score(**evidence_inputs)
 
-        assert result['priority_tier'] == 'standard_review'
+        assert result['priority_tier'] == 'auto_enroll'
         assert result['expected_precision'] == 0.0
+        assert 'fallback' in result['score_reasoning'].lower()
 
     def test_score_reasoning_includes_adjustments(self, evidence_inputs, mock_openai):
         """Reasoning string includes follower boost and engagement info when present."""
@@ -821,7 +825,7 @@ class TestIntegration:
             result = generate_evidence_based_score(**evidence_inputs)
 
         assert 0.0 <= result['lead_score'] <= 1.0
-        assert result['priority_tier'] in ('auto_enroll', 'standard_review')
+        assert result['priority_tier'] in ('auto_enroll', 'standard_priority_review', 'standard_review')
         assert all(dim in result['section_scores'] for dim in [
             'niche_and_audience_identity', 'creator_authenticity_and_presence',
             'monetization_and_business_mindset', 'community_infrastructure',

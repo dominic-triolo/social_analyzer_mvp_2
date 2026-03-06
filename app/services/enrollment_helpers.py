@@ -146,8 +146,15 @@ def allocate_slots_by_weight(total_slots: int, weights: Dict[str, float],
 
 def best_inbox_for_enrollment(d: date, committed: Dict[str, Dict[date, int]],
                                inboxes: dict, cadence: int,
-                               max_per_day: int) -> Optional[str]:
+                               max_per_day: int,
+                               outreach_type: Optional[str] = None,
+                               inbox_allowed_types: Optional[Dict[str, list]] = None,
+                               ) -> Optional[str]:
     """Pick the inbox with the most available capacity on date d.
+
+    If outreach_type and inbox_allowed_types are provided, only inboxes
+    that are allowed for the given type are considered. Inboxes not listed
+    in inbox_allowed_types have no restriction (can handle all types).
 
     Returns inbox name or None if no capacity.
     """
@@ -155,6 +162,11 @@ def best_inbox_for_enrollment(d: date, committed: Dict[str, Dict[date, int]],
     best_slots = 0
 
     for inbox in inboxes:
+        # Filter by allowed types if configured
+        if outreach_type and inbox_allowed_types and inbox in inbox_allowed_types:
+            if outreach_type not in inbox_allowed_types[inbox]:
+                continue
+
         slots = available_slots_for_inbox(inbox, d, committed, cadence, max_per_day)
         if slots > best_slots:
             best_slots = slots

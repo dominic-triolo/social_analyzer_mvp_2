@@ -55,13 +55,14 @@ def _default_config():
             'auto_enroll': {
                 'manual_score_threshold': 0.65,
                 'manual_score_precision': 0.833,
-                'full_score_threshold': 0.80,
-                'full_score_precision': 0.705,
+                'full_score_threshold': 0.49,
+                'full_score_precision': 0.70,
             },
-            'standard_review': {
+            'standard_priority_review': {
                 'full_score_threshold': 0.25,
                 'precision': 0.681,
             },
+            'auto_enroll_fallback': True,
         },
         'travel_experience_floor': 0.50,
         'engagement_penalties': {
@@ -353,16 +354,25 @@ RESPOND ONLY with JSON:
 
     # Tier assignment from config
     ae_cfg = tiers_cfg.get('auto_enroll', {})
-    sr_cfg = tiers_cfg.get('standard_review', {})
+    spr_cfg = tiers_cfg.get('standard_priority_review', {})
+    fallback_auto_enroll = tiers_cfg.get('auto_enroll_fallback', False)
 
     if manual_score_with_penalty >= ae_cfg.get('manual_score_threshold', 0.65):
         priority_tier = "auto_enroll"
         expected_precision = ae_cfg.get('manual_score_precision', 0.833)
         tier_reasoning = f"Manual score >={ae_cfg.get('manual_score_threshold', 0.65)} ({int(expected_precision*100)}% precision)"
-    elif full_score >= ae_cfg.get('full_score_threshold', 0.80):
+    elif full_score >= ae_cfg.get('full_score_threshold', 0.49):
         priority_tier = "auto_enroll"
-        expected_precision = ae_cfg.get('full_score_precision', 0.705)
-        tier_reasoning = f"Full score >={ae_cfg.get('full_score_threshold', 0.80)} ({int(expected_precision*100)}% precision)"
+        expected_precision = ae_cfg.get('full_score_precision', 0.70)
+        tier_reasoning = f"Full score >={ae_cfg.get('full_score_threshold', 0.49)} ({int(expected_precision*100)}% precision)"
+    elif full_score >= spr_cfg.get('full_score_threshold', 0.25):
+        priority_tier = "standard_priority_review"
+        expected_precision = spr_cfg.get('precision', 0.681)
+        tier_reasoning = f"Full score >={spr_cfg.get('full_score_threshold', 0.25)} ({int(expected_precision*100)}% precision)"
+    elif fallback_auto_enroll:
+        priority_tier = "auto_enroll"
+        expected_precision = 0.0
+        tier_reasoning = "Below all thresholds — auto-enroll fallback"
     else:
         priority_tier = "standard_review"
         expected_precision = 0.0
