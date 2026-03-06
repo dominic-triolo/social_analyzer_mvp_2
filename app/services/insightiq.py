@@ -282,7 +282,9 @@ class InsightIQDiscovery:
 
         parameters = self.FIXED_PARAMS.copy()
         parameters['work_platform_id'] = platform_config['work_platform_id']
-        parameters['max_results'] = min(user_filters.get('max_results', 500), 4000)
+        from app.config import DISCOVERY_MAX_CAP
+        hard_cap = DISCOVERY_MAX_CAP or 4000
+        parameters['max_results'] = min(user_filters.get('max_results', 500), hard_cap)
 
         # Follower count
         follower_filter = user_filters.get('follower_count', {})

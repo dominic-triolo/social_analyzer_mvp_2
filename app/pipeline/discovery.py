@@ -76,8 +76,11 @@ class PatreonDiscovery(StageAdapter):
             raise ValueError("APIFY_API_TOKEN must be set")
 
         filters = run.filters or {}
+        from app.config import DISCOVERY_MAX_CAP
         search_keywords = filters.get('search_keywords', [])
         max_results = filters.get('max_results', 100)
+        if DISCOVERY_MAX_CAP:
+            max_results = min(max_results, DISCOVERY_MAX_CAP)
         location = (filters.get('location') or 'United States').strip()
 
         # Normalize: string → list (API callers may send "travel, adventure" instead of ["travel", "adventure"])
@@ -135,8 +138,11 @@ class FacebookDiscovery(StageAdapter):
             raise ValueError("APIFY_API_TOKEN must be set")
 
         filters = run.filters or {}
+        from app.config import DISCOVERY_MAX_CAP
         keywords = filters.get('keywords', [])
         max_results = filters.get('max_results', 100)
+        if DISCOVERY_MAX_CAP:
+            max_results = min(max_results, DISCOVERY_MAX_CAP)
         visibility = filters.get('visibility', 'all')
 
         # Normalize: string → list (API callers may send "hiking, outdoors" instead of ["hiking", "outdoors"])
