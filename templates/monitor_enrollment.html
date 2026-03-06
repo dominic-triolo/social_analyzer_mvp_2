@@ -159,11 +159,18 @@ async function loadConfig() {
   } catch(e) { console.error('Config load error', e); }
 }
 
+const TYPE_LABELS = {
+  'schedule_call':        'Schedule Call',
+  'rewarm_schedule_call': 'Rewarm (Schedule Call)',
+  'interest_check':       'Interest Check',
+  'self_service':         'Self Service',
+};
+
 function renderWeightFields(weights) {
   const container = document.getElementById('weight-fields');
   container.innerHTML = '';
   for (const [type, val] of Object.entries(weights)) {
-    const label = type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    const label = TYPE_LABELS[type] || type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
     container.innerHTML += `
       <div class="flex items-center gap-3">
         <label class="text-sm text-slate-600 w-36">${label}</label>
@@ -334,9 +341,14 @@ function renderTypeBreakdown(data) {
     return;
   }
 
-  const colors = {'schedule_call':'#00b2c9','interest_check':'#f59e0b','self_service':'#10b981'};
+  const colors = {
+    'schedule_call':        '#00b2c9',
+    'rewarm_schedule_call': '#8b5cf6',
+    'interest_check':       '#f59e0b',
+    'self_service':         '#10b981',
+  };
   el.innerHTML = types.map(([type, cnt]) => {
-    const label = type.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
+    const label = TYPE_LABELS[type] || type.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
     const pct   = Math.round((cnt / total) * 100);
     const clr   = colors[type] || '#6b7280';
     return `
