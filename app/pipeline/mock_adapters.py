@@ -65,20 +65,35 @@ class MockInstagramDiscovery(StageAdapter):
         for creator in selected:
             _simulate_delay()
             username = f"{creator['username']}_{run_suffix}"
+            # Match _standardize_results() in insightiq.py exactly
             profile = {
-                'contact_id': str(uuid.uuid4()),
-                'id': str(uuid.uuid4()),
-                'url': f"https://instagram.com/{username}",
-                'profile_url': f"https://instagram.com/{username}",
-                'platform_username': username,
-                'name': creator['name'],
-                'bio': creator['bio'],
-                'follower_count': creator['followers'],
-                'primary_category': creator['category'],
+                'first_and_last_name': creator['name'],
+                'flagship_social_platform_handle': username,
+                'instagram_handle': f"https://www.instagram.com/{username}/",
+                'instagram_bio': creator['bio'],
+                'instagram_followers': creator['followers'],
+                'average_engagement': round(random.uniform(0.01, 0.08), 4),
+                'email': f"{username}@email.com",
+                'phone': None,
+                'tiktok_handle': None,
+                'youtube_profile_link': None,
+                'facebook_profile_link': None,
+                'patreon_link': None,
+                'pinterest_profile_link': None,
+                'city': random.choice(['Los Angeles', 'New York', 'Austin', 'Denver', 'Portland']),
+                'state': None,
+                'country': 'US',
+                'flagship_social_platform': 'instagram',
+                'channel': 'Outbound',
+                'channel_host_prospected': 'Phyllo',
+                'funnel': 'Creator',
+                'enrichment_status': 'pending',
             }
             discovered.append(profile)
             run.increment_stage_progress('discovery', 'completed')
             logger.info("Found @%s (%s followers)", username, f"{creator['followers']:,}")
+            # Carry primary_category for downstream analysis mock
+            profile['_primary_category'] = creator['category']
 
         return StageResult(
             profiles=discovered,
@@ -160,11 +175,14 @@ class MockInstagramPrescreen(StageAdapter):
             if random.random() < 0.80:
                 profile['_prescreen_result'] = 'passed'
                 profile['_prescreen_reason'] = 'Active content, good engagement'
-                # Attach content items like the real prescreen does
+                # Attach content items — match InsightIQ content API format
                 profile['_content_items'] = [
                     {
-                        'type': random.choice(['image', 'reel', 'carousel']),
+                        'type': random.choice(['IMAGE', 'VIDEO', 'COLLECTION']),
                         'url': f"https://instagram.com/p/{uuid.uuid4().hex[:11]}",
+                        'thumbnail_url': f"https://scontent.cdninstagram.com/{uuid.uuid4().hex[:8]}.jpg",
+                        'title': '',
+                        'description': f"Mock caption for content piece #{idx}",
                         'published_at': '2026-02-10T12:00:00Z',
                         'is_pinned': False,
                         'likes_and_views_disabled': random.random() < 0.1,
@@ -173,15 +191,15 @@ class MockInstagramPrescreen(StageAdapter):
                             'comment_count': random.randint(2, 200),
                         },
                     }
-                    for _ in range(12)
+                    for idx in range(12)
                 ]
                 passed.append(profile)
                 run.increment_stage_progress('pre_screen', 'completed')
-                logger.info("PASS @%s", profile.get('platform_username', '?'))
+                logger.info("PASS @%s", profile.get('flagship_social_platform_handle', '?'))
             else:
                 failed += 1
                 run.increment_stage_progress('pre_screen', 'failed')
-                logger.info("FILTERED @%s — inactive", profile.get('platform_username', '?'))
+                logger.info("FILTERED @%s — inactive", profile.get('flagship_social_platform_handle', '?'))
 
         return StageResult(
             profiles=passed,
@@ -242,9 +260,9 @@ class MockInstagramEnrichment(StageAdapter):
             profile['_social_data'] = {
                 'data': [{
                     'profile': {
-                        'platform_username': profile.get('platform_username', ''),
-                        'full_name': profile.get('name', ''),
-                        'introduction': profile.get('bio', ''),
+                        'platform_username': profile.get('flagship_social_platform_handle', ''),
+                        'full_name': profile.get('first_and_last_name', ''),
+                        'introduction': profile.get('instagram_bio', ''),
                     }
                 }]
             }
@@ -299,8 +317,8 @@ class MockInstagramAnalysis(StageAdapter):
     def run(self, profiles, run) -> StageResult:
         for profile in profiles:
             _simulate_delay(0.2, 0.5)
-            username = profile.get('platform_username', 'unknown')
-            category = profile.get('primary_category', 'Travel')
+            username = profile.get('flagship_social_platform_handle', 'unknown')
+            category = profile.get('_primary_category', 'Travel')
 
             niche_score = random.uniform(0.4, 0.95)
             has_events = random.random() < 0.4
@@ -331,7 +349,7 @@ class MockInstagramAnalysis(StageAdapter):
             }
             profile['_content_analyses'] = [
                 {
-                    'type': random.choice(['reel', 'image', 'carousel']),
+                    'type': random.choice(['VIDEO', 'IMAGE', 'COLLECTION']),
                     'summary': f'{category} content showing authentic lifestyle',
                     'shows_pov': random.random() < 0.6,
                     'shows_authenticity': random.random() < 0.7,
@@ -420,7 +438,7 @@ class MockInstagramScoring(StageAdapter):
 
             manual_score = (niche * 0.30 + auth * 0.30 + monet * 0.20 + comm * 0.15 + eng * 0.05)
 
-            followers = profile.get('follower_count', 0)
+            followers = profile.get('instagram_followers', 0)
             if followers >= 100000:
                 boost = 0.15
             elif followers >= 75000:
@@ -454,16 +472,16 @@ class MockInstagramScoring(StageAdapter):
                 'category_penalty': 0.0,
                 'priority_tier': tier,
                 'expected_precision': 0.75,
-                'score_reasoning': f"Strong {profile.get('primary_category', 'niche')} creator with authentic community presence.",
+                'score_reasoning': f"Strong {profile.get('_primary_category', 'niche')} creator with authentic community presence.",
             }
-            profile['_first_name'] = profile.get('name', 'Creator').split()[0]
+            profile['_first_name'] = profile.get('first_and_last_name', 'Creator').split()[0]
 
             if tier in run.tier_distribution:
                 run.tier_distribution[tier] += 1
 
             scored.append(profile)
             run.increment_stage_progress('scoring', 'completed')
-            logger.info("@%s: %.3f (%s)", profile.get('platform_username', '?'), full_score, tier)
+            logger.info("@%s: %.3f (%s)", profile.get('flagship_social_platform_handle', '?'), full_score, tier)
 
         return StageResult(profiles=scored, processed=len(profiles), cost=len(profiles) * 0.02)
 
@@ -525,7 +543,7 @@ class MockInstagramCrmSync(StageAdapter):
             profile['_synced_to_crm'] = True
             synced.append(profile)
             run.increment_stage_progress('crm_sync', 'completed')
-            logger.info("Synced @%s to HubSpot", profile.get('platform_username', '?'))
+            logger.info("Synced @%s to HubSpot", profile.get('flagship_social_platform_handle', '?'))
 
         run.contacts_synced = len(synced)
         run.save()

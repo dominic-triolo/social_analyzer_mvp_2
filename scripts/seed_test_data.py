@@ -59,7 +59,17 @@ def make_id():
 def _save_run_to_redis(run_data: dict):
     """Save a run dict to Redis via the Run model."""
     run = Run.__new__(Run)
+    # Ensure all fields that to_dict() reads are present
     run_data.setdefault('stage_timings', {})
+    run_data.setdefault('stage_outputs', {})
+    run_data.setdefault('profiles_discovered', run_data.get('profiles_found', 0))
+    run_data.setdefault('hubspot_duplicates', 0)
+    run_data.setdefault('error_count', len(run_data.get('errors', [])))
+    run_data.setdefault('errors', [])
+    run_data.setdefault('summary', '')
+    run_data.setdefault('estimated_cost', 0.0)
+    run_data.setdefault('actual_cost', 0.0)
+    run_data.setdefault('bdr_assignment', '')
     for k, v in run_data.items():
         setattr(run, k, v)
     run.save()

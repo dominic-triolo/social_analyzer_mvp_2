@@ -7,3 +7,6 @@ local.db
 roadmap_share.pdf
 .venv/
 .pytest_cache/
+.dev.pids
+.dev-flask.log
+.dev-worker.log
