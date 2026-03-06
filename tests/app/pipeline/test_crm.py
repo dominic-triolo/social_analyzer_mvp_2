@@ -13,6 +13,14 @@ from app.pipeline.crm import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _enable_hubspot():
+    """Ensure HubSpot config is set so CRM sync guards don't skip."""
+    with patch('app.pipeline.crm.HUBSPOT_WEBHOOK_URL', 'https://fake-webhook.test'), \
+         patch('app.pipeline.crm.HUBSPOT_API_KEY', 'fake-key'):
+        yield
+
+
 # ── ADAPTERS registry ──────────────────────────────────────────────────────
 
 class TestAdaptersRegistry:
