@@ -15,16 +15,18 @@ from app.routes.dashboard import PLATFORM_SVG
 bp = Blueprint('monitor', __name__)
 
 STAGE_ORDER = ['discovery', 'pre_screen', 'enrichment', 'analysis', 'scoring', 'crm_sync']
+REWARM_STAGE_ORDER = ['segment_import', 'enrichment', 'analysis', 'scoring', 'crm_sync']
 
 
 def _build_stages(run_dict):
     """Compute stage statuses for a run dict."""
+    stage_order = REWARM_STAGE_ORDER if run_dict.get('run_type') == 'rewarm' else STAGE_ORDER
     current_stage = run_dict.get('current_stage', '')
     run_status = run_dict.get('status', '')
-    current_idx = STAGE_ORDER.index(current_stage) if current_stage in STAGE_ORDER else -1
+    current_idx = stage_order.index(current_stage) if current_stage in stage_order else -1
 
     stages = []
-    for i, key in enumerate(STAGE_ORDER):
+    for i, key in enumerate(stage_order):
         if run_status == 'cancelled' and i == current_idx:
             s = 'cancelled'
         elif run_status == 'failed' and i == current_idx:
@@ -332,6 +334,7 @@ def runs_table_partial():
     """HTMX partial: filtered runs table."""
     platform = request.args.get('platform', 'all')
     status = request.args.get('status', 'all')
+    run_type = request.args.get('type', 'all')
 
     all_runs = Run.list_recent(limit=50)
     all_dicts = [run.to_dict() for run in all_runs]
@@ -339,6 +342,8 @@ def runs_table_partial():
 
     if platform != 'all':
         filtered = [r for r in filtered if r.get('platform') == platform]
+    if run_type != 'all':
+        filtered = [r for r in filtered if r.get('run_type', 'discovery') == run_type]
     if status == 'active':
         filtered = [r for r in filtered if r.get('status') not in ('completed', 'failed', 'cancelled')]
     elif status != 'all':

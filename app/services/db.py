@@ -33,6 +33,7 @@ def persist_run(run):
         if db_run is None:
             db_run = DbRun(
                 id=run.id,
+                run_type=getattr(run, 'run_type', 'discovery') or 'discovery',
                 platform=run.platform,
                 status=run.status,
                 filters=run.filters,

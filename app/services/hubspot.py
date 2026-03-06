@@ -432,3 +432,313 @@ def hubspot_update_contact(contact_id: str, properties: Dict) -> bool:
     except Exception as e:
         logger.error("HubSpot update contact %s exception: %s", contact_id, e)
         return False
+
+
+# ── List / Segment helpers (rewarm pipeline) ───────────────────────────
+
+
+def hubspot_list_all() -> list:
+    """Fetch ALL HubSpot lists, paginating through the search endpoint.
+
+    Returns list of dicts: [{"id": list_id, "name": name, "size": size}, ...]
+    Typically called once and cached in-memory by the route layer.
+    """
+    if not HUBSPOT_API_KEY:
+        logger.warning("hubspot_list_all: no API key set")
+        return []
+
+    from app.services.circuit_breaker import get_breaker
+    cb = get_breaker('hubspot')
+
+    all_lists = []
+    offset = 0
+    page_size = 100
+
+    try:
+        while True:
+            resp = cb.call(
+                requests.post,
+                f"{HUBSPOT_API_URL}/crm/v3/lists/search",
+                headers={
+                    'Authorization': f'Bearer {HUBSPOT_API_KEY}',
+                    'Content-Type': 'application/json',
+                },
+                json={
+                    'query': '',
+                    'processingTypes': ['MANUAL', 'SNAPSHOT', 'DYNAMIC'],
+                    'objectTypeId': '0-1',
+                    'count': page_size,
+                    'offset': offset,
+                },
+                timeout=15,
+            )
+
+            if resp.status_code != 200:
+                logger.error("hubspot_list_all error at offset %d: %d — %s",
+                             offset, resp.status_code, resp.text[:200])
+                break
+
+            data = resp.json()
+            for item in data.get('lists', []):
+                all_lists.append({
+                    'id': str(item.get('listId', '')),
+                    'name': item.get('name', ''),
+                    'size': int(item.get('additionalProperties', {}).get('hs_list_size', 0)),
+                    'processing_type': item.get('processingType'),
+                })
+
+            if not data.get('hasMore'):
+                break
+            offset = data.get('offset', offset + page_size)
+
+        logger.info("hubspot_list_all: fetched %d lists total", len(all_lists))
+        return all_lists
+
+    except Exception as e:
+        logger.error("hubspot_list_all exception: %s", e)
+        return all_lists  # return whatever we got so far
+
+
+def hubspot_list_search(query: str) -> list:
+    """Search HubSpot lists/segments by name.
+
+    POST /crm/v3/lists/search
+    Returns list of dicts: [{"id": list_id, "name": name, "size": size}, ...]
+    """
+    if not HUBSPOT_API_KEY:
+        logger.warning("hubspot_list_search: no API key set")
+        return []
+
+    from app.services.circuit_breaker import get_breaker
+    cb = get_breaker('hubspot')
+
+    try:
+        resp = cb.call(
+            requests.post,
+            f"{HUBSPOT_API_URL}/crm/v3/lists/search",
+            headers={
+                'Authorization': f'Bearer {HUBSPOT_API_KEY}',
+                'Content-Type': 'application/json',
+            },
+            json={
+                'query': query,
+                'processingTypes': ['MANUAL', 'SNAPSHOT', 'DYNAMIC'],
+                'objectTypeId': '0-1',
+                'count': 100,
+            },
+            timeout=15,
+        )
+
+        if resp.status_code != 200:
+            logger.error("hubspot_list_search error: %d — %s",
+                         resp.status_code, resp.text[:200])
+            return []
+
+        data = resp.json()
+        results = []
+        for item in data.get('lists', []):
+            results.append({
+                'id': str(item.get('listId', '')),
+                'name': item.get('name', ''),
+                'size': int(item.get('additionalProperties', {}).get('hs_list_size', 0)),
+            })
+
+        logger.info("hubspot_list_search(%s): %d lists found", query, len(results))
+        return results
+
+    except Exception as e:
+        logger.error("hubspot_list_search exception: %s", e)
+        return []
+
+
+def hubspot_get_list_members(list_id: str, limit: int = 500) -> list:
+    """Get contact IDs from a HubSpot list.
+
+    GET /crm/v3/lists/{listId}/memberships — paginated via paging.next.after.
+    Returns list of contact ID strings, capped at `limit`.
+    """
+    if not HUBSPOT_API_KEY:
+        logger.warning("hubspot_get_list_members: no API key set")
+        return []
+
+    from app.services.circuit_breaker import get_breaker
+    cb = get_breaker('hubspot')
+
+    all_ids = []
+    after = None
+
+    while len(all_ids) < limit:
+        try:
+            params = {}
+            if after:
+                params['after'] = after
+
+            resp = cb.call(
+                requests.get,
+                f"{HUBSPOT_API_URL}/crm/v3/lists/{list_id}/memberships",
+                headers={
+                    'Authorization': f'Bearer {HUBSPOT_API_KEY}',
+                },
+                params=params,
+                timeout=15,
+            )
+
+            if resp.status_code != 200:
+                logger.error("hubspot_get_list_members error: %d — %s",
+                             resp.status_code, resp.text[:200])
+                break
+
+            data = resp.json()
+            members = data.get('results', [])
+            for m in members:
+                all_ids.append(str(m))
+                if len(all_ids) >= limit:
+                    break
+
+            paging = data.get('paging', {}).get('next', {})
+            after = paging.get('after')
+            if not after or not members:
+                break
+
+        except Exception as e:
+            logger.error("hubspot_get_list_members exception: %s", e)
+            break
+
+        time.sleep(0.1)
+
+    logger.info("hubspot_get_list_members(%s): %d contact IDs", list_id, len(all_ids))
+    return all_ids
+
+
+_DEFAULT_CONTACT_PROPERTIES = [
+    'email', 'firstname', 'lastname', 'instagram_handle',
+    'instagram_followers', 'city', 'state', 'country',
+]
+
+
+def hubspot_batch_get_contacts(contact_ids: list, properties: list = None) -> list:
+    """Batch-read contacts by ID with requested properties.
+
+    POST /crm/v3/objects/contacts/batch/read — 100 per batch.
+    Returns list of flattened property dicts with 'id' included.
+    """
+    if not HUBSPOT_API_KEY:
+        logger.warning("hubspot_batch_get_contacts: no API key set")
+        return []
+
+    if properties is None:
+        properties = list(_DEFAULT_CONTACT_PROPERTIES)
+
+    from app.services.circuit_breaker import get_breaker
+    cb = get_breaker('hubspot')
+
+    all_contacts = []
+
+    for i in range(0, len(contact_ids), 100):
+        batch = contact_ids[i:i + 100]
+        try:
+            resp = cb.call(
+                requests.post,
+                f"{HUBSPOT_API_URL}/crm/v3/objects/contacts/batch/read",
+                headers={
+                    'Authorization': f'Bearer {HUBSPOT_API_KEY}',
+                    'Content-Type': 'application/json',
+                },
+                json={
+                    'inputs': [{'id': cid} for cid in batch],
+                    'properties': properties,
+                },
+                timeout=15,
+            )
+
+            if resp.status_code in (200, 207):
+                for result in resp.json().get('results', []):
+                    contact = {'id': result.get('id', '')}
+                    props = result.get('properties', {})
+                    for prop in properties:
+                        contact[prop] = props.get(prop, '')
+                    all_contacts.append(contact)
+            else:
+                logger.error("hubspot_batch_get_contacts batch %d error: %d — %s",
+                             (i // 100) + 1, resp.status_code, resp.text[:200])
+
+        except Exception as e:
+            logger.error("hubspot_batch_get_contacts batch %d exception: %s",
+                         (i // 100) + 1, e)
+
+        if i + 100 < len(contact_ids):
+            time.sleep(0.1)
+
+    logger.info("hubspot_batch_get_contacts: %d contacts retrieved", len(all_contacts))
+    return all_contacts
+
+
+def sync_hubspot_lists_to_db() -> Dict:
+    """Fetch all HubSpot lists and persist to hubspot_lists table.
+
+    Truncate + reinsert in a single transaction.  Refuses to truncate if
+    the API returns an empty result (protects against API failures wiping
+    the cache).
+
+    Updates AppConfig key ``hubspot_lists_synced_at`` with the current
+    timestamp.
+
+    Returns ``{"count": N, "synced_at": "ISO timestamp"}``.
+    """
+    from app.database import get_session
+    from app.models.hubspot_list import HubSpotList
+    from app.models.app_config import AppConfig
+
+    lists = hubspot_list_all()
+    if not lists:
+        logger.warning("sync_hubspot_lists_to_db: API returned 0 lists — skipping truncate")
+        return {'count': 0, 'synced_at': None}
+
+    session = get_session()
+    try:
+        session.query(HubSpotList).delete()
+        session.bulk_save_objects([
+            HubSpotList(
+                list_id=item['id'],
+                name=item['name'],
+                size=item['size'],
+                processing_type=item.get('processing_type'),
+            )
+            for item in lists
+        ])
+        from datetime import timezone
+        now = datetime.now(tz=timezone.utc).isoformat()
+        cfg = session.get(AppConfig, 'hubspot_lists_synced_at')
+        if cfg:
+            cfg.value = now
+        else:
+            session.add(AppConfig(key='hubspot_lists_synced_at', value=now))
+        session.commit()
+        logger.info("sync_hubspot_lists_to_db: wrote %d lists", len(lists))
+        return {'count': len(lists), 'synced_at': now}
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
+def hubspot_import_segment(list_id: str, platform: str = 'instagram') -> list:
+    """Import a HubSpot list/segment as profile dicts for the rewarm pipeline.
+
+    Combines: get members → batch get contacts → return profile dicts.
+    """
+    if not HUBSPOT_API_KEY:
+        logger.warning("hubspot_import_segment: no API key set")
+        return []
+
+    contact_ids = hubspot_get_list_members(list_id)
+    if not contact_ids:
+        logger.info("hubspot_import_segment(%s): no members found", list_id)
+        return []
+
+    contacts = hubspot_batch_get_contacts(contact_ids)
+
+    logger.info("hubspot_import_segment(%s): %d contacts imported from list %s",
+                platform, len(contacts), list_id)
+    return contacts

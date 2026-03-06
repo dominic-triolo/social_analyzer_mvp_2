@@ -17,6 +17,7 @@ import app.models.preset  # noqa: F401
 import app.models.metric_snapshot  # noqa: F401
 import app.models.enrollment_run  # noqa: F401
 import app.models.app_config  # noqa: F401
+import app.models.hubspot_list  # noqa: F401
 
 config = context.config
 

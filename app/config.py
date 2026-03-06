@@ -75,3 +75,11 @@ PIPELINE_STAGES = [
     'scoring',
     'crm_sync',
 ]
+
+REWARM_PIPELINE_STAGES = [
+    'segment_import',
+    'enrichment',
+    'analysis',
+    'scoring',
+    'crm_sync',
+]

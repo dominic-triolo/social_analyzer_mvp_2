@@ -1,0 +1,393 @@
+{% extends 'base.html' %}
+{% set active_page = 'rewarm' %}
+{% block title %}New Rewarm{% endblock %}
+{% block page_title %}New Rewarm{% endblock %}
+
+{% block head %}
+<style>
+    .segment-dropdown {
+        position: absolute; top: 100%; left: 0; right: 0;
+        background: white; border: 1px solid rgba(60,72,88,0.12);
+        border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+        max-height: 220px; overflow-y: auto; z-index: 20;
+        display: none;
+    }
+    .segment-dropdown.open { display: block; }
+    .segment-item {
+        display: flex; align-items: center; justify-content: space-between;
+        width: 100%; padding: 10px 14px;
+        background: none; border: none; border-bottom: 1px solid rgba(60,72,88,0.06);
+        cursor: pointer; font-family: inherit; text-align: left;
+        transition: background 0.1s;
+    }
+    .segment-item:hover { background: #f0fafb; }
+    .segment-item:last-child { border-bottom: none; }
+
+    .selected-segments { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .segment-chip {
+        display: inline-flex; align-items: center; gap: 6px;
+        background: #e0f7fa; color: #005c69;
+        font-size: 12px; font-weight: 500;
+        padding: 4px 10px; border-radius: 6px;
+    }
+    .segment-chip .remove-btn {
+        color: #00b2c9; font-weight: 700; line-height: 1;
+        cursor: pointer; background: none; border: none; font-size: 14px;
+        font-family: inherit;
+    }
+    .segment-chip .remove-btn:hover { color: #f65c4e; }
+
+    .toggle-switch {
+        position: relative; width: 40px; height: 22px;
+        background: rgba(60,72,88,0.15); border-radius: 11px;
+        cursor: pointer; transition: background 0.2s;
+        flex-shrink: 0;
+    }
+    .toggle-switch.active { background: #005c69; }
+    .toggle-switch::after {
+        content: ''; position: absolute;
+        width: 18px; height: 18px; border-radius: 50%;
+        background: white; top: 2px; left: 2px;
+        transition: transform 0.2s;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+    }
+    .toggle-switch.active::after { transform: translateX(18px); }
+
+    /* Sync progress bar */
+    .sync-bar {
+        display: none; align-items: center; gap: 10px;
+        padding: 10px 14px; margin-top: 10px;
+        background: #f0fafb; border-radius: 8px;
+        border: 1px solid rgba(0,178,201,0.15);
+    }
+    .sync-bar.active { display: flex; }
+    .sync-bar .spinner {
+        width: 16px; height: 16px; border: 2px solid rgba(0,92,105,0.2);
+        border-top-color: #005c69; border-radius: 50%;
+        animation: spin 0.8s linear infinite; flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .sync-bar .progress-track {
+        flex: 1; height: 4px; background: rgba(0,178,201,0.15); border-radius: 2px; overflow: hidden;
+    }
+    .sync-bar .progress-track .bar {
+        height: 100%; background: #00b2c9; border-radius: 2px;
+        animation: indeterminate 1.5s ease-in-out infinite;
+    }
+    @keyframes indeterminate {
+        0%   { width: 0%; margin-left: 0; }
+        50%  { width: 40%; margin-left: 30%; }
+        100% { width: 0%; margin-left: 100%; }
+    }
+
+    /* Refresh button */
+    .refresh-btn {
+        display: inline-flex; align-items: center; gap: 5px;
+        font-size: 11px; font-weight: 600; font-family: inherit;
+        padding: 4px 10px; border-radius: 6px;
+        background: #f0fafb; color: #005c69;
+        border: 1px solid rgba(0,92,105,0.12);
+        cursor: pointer; transition: all 0.15s;
+    }
+    .refresh-btn:hover { background: #e0f7fa; border-color: rgba(0,92,105,0.25); }
+    .refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+</style>
+{% endblock %}
+
+{% block content %}
+    <div class="max-w-3xl mx-auto" hx-boost="false">
+        <div class="mb-6 animate-in">
+            <h1 class="text-xl font-bold" style="color:#005c69;">New Rewarm Run</h1>
+            <p class="mt-1 text-sm" style="color:#3c4858;opacity:0.6;">Import contacts from HubSpot segments and re-evaluate through the pipeline</p>
+        </div>
+
+        <!-- Platform Selector -->
+        <div class="card p-5 mb-4 animate-in" style="animation-delay:0.08s;">
+            <h2 class="section-label mb-4">Platform</h2>
+            <div class="platform-grid" id="platform-selector">
+                <button type="button" data-platform="instagram" class="platform-card active">
+                    <div class="platform-card-icon">
+                        <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="1.5" width="13" height="13" rx="4" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.3"/><circle cx="11.8" cy="4.2" r="0.8" fill="currentColor"/></svg>
+                    </div>
+                    <div>
+                        <div class="platform-card-name">Instagram</div>
+                        <div class="platform-card-source">HubSpot Segments</div>
+                    </div>
+                </button>
+
+                <button type="button" class="platform-card" disabled style="opacity:0.45;cursor:default;">
+                    <div class="platform-card-icon">
+                        <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><circle cx="10" cy="5.5" r="3.5" stroke="currentColor" stroke-width="1.3"/><rect x="2" y="2" width="2" height="12" rx="1" fill="currentColor" opacity="0.6"/></svg>
+                    </div>
+                    <div>
+                        <div class="platform-card-name">Patreon</div>
+                        <div class="platform-card-source" style="color:#f59e0b;">Coming soon</div>
+                    </div>
+                </button>
+
+                <button type="button" class="platform-card" disabled style="opacity:0.45;cursor:default;">
+                    <div class="platform-card-icon">
+                        <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M13 2H3V10C3 10.55 3.45 11 4 11H9L13 14V2Z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </div>
+                    <div>
+                        <div class="platform-card-name">Facebook</div>
+                        <div class="platform-card-source" style="color:#f59e0b;">Coming soon</div>
+                    </div>
+                </button>
+            </div>
+        </div>
+
+        <!-- Segment Search -->
+        <div class="card p-5 mb-4 animate-in" style="animation-delay:0.12s;overflow:visible;position:relative;z-index:10;">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="section-label">HubSpot Segments</h2>
+                <div class="flex items-center gap-3">
+                    <span class="text-xs" style="color:#3c4858;opacity:0.4;" id="sync-staleness"></span>
+                    <button type="button" class="refresh-btn" id="refresh-btn" onclick="syncSegments()">
+                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M2 8C2 4.686 4.686 2 8 2C9.657 2 11.157 2.632 12.243 3.757L14 2V7H9L10.828 5.172C10.078 4.422 9.078 4 8 4C5.791 4 4 5.791 4 8C4 10.209 5.791 12 8 12C9.485 12 10.773 11.133 11.465 9.854" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        Refresh
+                    </button>
+                </div>
+            </div>
+            <p class="text-xs mb-3" style="color:#3c4858;opacity:0.5;">Search and select one or more HubSpot lists to import contacts from</p>
+
+            <div class="relative" id="segment-search-wrapper">
+                <input type="text"
+                       class="input-field"
+                       placeholder="Loading segments..."
+                       autocomplete="off"
+                       id="segment-search-input"
+                       disabled>
+
+                <div class="segment-dropdown" id="segment-dropdown">
+                    <div id="segment-results"></div>
+                </div>
+            </div>
+
+            <!-- Sync progress bar -->
+            <div class="sync-bar" id="sync-bar">
+                <div class="spinner"></div>
+                <div>
+                    <div class="text-xs font-medium" style="color:#005c69;">Syncing segments from HubSpot...</div>
+                    <div class="progress-track"><div class="bar"></div></div>
+                </div>
+            </div>
+
+            <div class="selected-segments" id="selected-segments">
+                <!-- Selected segment chips appear here -->
+            </div>
+        </div>
+
+        <!-- Options -->
+        <div class="card p-5 mb-4 animate-in" style="animation-delay:0.16s;">
+            <h2 class="section-label mb-4">Options</h2>
+
+            <div class="flex items-center gap-3">
+                <div class="toggle-switch active" id="dry-run-toggle" onclick="toggleDryRun()"></div>
+                <div>
+                    <div class="text-sm font-medium" style="color:#3c4858;">Dry Run</div>
+                    <div class="text-xs" style="color:#3c4858;opacity:0.5;">Skip CRM sync — score only</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Launch Button -->
+        <div class="animate-in" style="animation-delay:0.20s;">
+            <button class="btn-primary w-full" id="launch-btn" onclick="launchRewarm()" disabled>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8C2 4.686 4.686 2 8 2C9.657 2 11.157 2.632 12.243 3.757L14 2V7H9L10.828 5.172C10.078 4.422 9.078 4 8 4C5.791 4 4 5.791 4 8C4 10.209 5.791 12 8 12C9.485 12 10.773 11.133 11.465 9.854" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Start Rewarm Run
+            </button>
+        </div>
+    </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    /* ── State ─────────────────────────────────────── */
+    var allSegments = [];
+    var selectedSegments = {};
+    var dryRun = true;
+    var syncedAt = null;
+
+    function applySegments(data) {
+        allSegments = data.segments || [];
+        syncedAt = data.synced_at;
+        var input = document.getElementById('segment-search-input');
+        input.disabled = false;
+        input.placeholder = 'Select a segment or type to filter... (' + allSegments.length + ' lists)';
+        var el = document.getElementById('sync-staleness');
+        el.textContent = syncedAt ? 'Synced ' + timeSince(syncedAt) : '';
+    }
+
+    /* ── Load on page load ────────────────────────── */
+    fetch('/api/rewarm/segments')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.needs_sync) { syncSegments(); return; }
+            applySegments(data);
+        })
+        .catch(function() {
+            document.getElementById('segment-search-input').disabled = false;
+            document.getElementById('segment-search-input').placeholder = 'Failed to load segments';
+        });
+
+    /* ── Refresh button ───────────────────────────── */
+    function syncSegments() {
+        var bar = document.getElementById('sync-bar');
+        var btn = document.getElementById('refresh-btn');
+        var input = document.getElementById('segment-search-input');
+        bar.classList.add('active');
+        btn.disabled = true;
+        input.disabled = true;
+        input.placeholder = 'Syncing...';
+
+        fetch('/api/rewarm/segments/sync', { method: 'POST' })
+            .then(function(r) {
+                if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Sync failed'); });
+                return r.json();
+            })
+            .then(function(data) {
+                applySegments(data);
+            })
+            .catch(function(err) {
+                input.disabled = false;
+                input.placeholder = 'Select a segment or type to filter...';
+                showModal(err.message, {type: 'error', title: 'Sync Failed'});
+            })
+            .finally(function() {
+                bar.classList.remove('active');
+                btn.disabled = false;
+            });
+    }
+
+    /* ── Platform selector ─────────────────────────── */
+    document.querySelectorAll('#platform-selector .platform-card:not([disabled])').forEach(function(card) {
+        card.addEventListener('click', function() {
+            document.querySelectorAll('#platform-selector .platform-card').forEach(function(c) { c.classList.remove('active'); });
+            card.classList.add('active');
+        });
+    });
+
+    /* ── Segment combo box ────────────────────────── */
+    var searchInput = document.getElementById('segment-search-input');
+
+    searchInput.addEventListener('focus', function() { renderDropdown(); });
+    searchInput.addEventListener('input', function() { renderDropdown(); });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', function(e) {
+        var wrapper = document.getElementById('segment-search-wrapper');
+        if (wrapper && !wrapper.contains(e.target)) {
+            document.getElementById('segment-dropdown').classList.remove('open');
+        }
+    });
+
+    function renderDropdown() {
+        var query = searchInput.value.toLowerCase();
+        var container = document.getElementById('segment-results');
+        var filtered = allSegments.filter(function(seg) {
+            if (selectedSegments[seg.id]) return false;
+            if (query && seg.name.toLowerCase().indexOf(query) === -1) return false;
+            return true;
+        });
+
+        // Cap visible items at 50
+        var capped = filtered.slice(0, 50);
+        var html = '';
+        capped.forEach(function(seg) {
+            html += '<button type="button" class="segment-item" data-segment-id="' + seg.id + '" onclick="selectSegment(\'' + seg.id + '\', \'' + escapeHtml(seg.name).replace(/'/g, "\\'") + '\', ' + seg.size + ')">' +
+                '<span class="font-medium" style="font-size:13px;color:#3c4858;">' + escapeHtml(seg.name) + '</span>' +
+                '<span class="text-xs" style="color:#3c4858;opacity:0.5;">' + seg.size.toLocaleString() + ' contacts</span>' +
+                '</button>';
+        });
+
+        if (filtered.length > 50) {
+            html += '<div class="text-center py-3 text-xs" style="color:#005c69;opacity:0.6;border-top:1px solid rgba(60,72,88,0.08);">' + filtered.length + ' matches — type to narrow down</div>';
+        }
+        if (filtered.length === 0) {
+            html = '<div class="text-center py-4 text-xs" style="color:#3c4858;opacity:0.4;">No segments found</div>';
+        }
+
+        container.innerHTML = html;
+        document.getElementById('segment-dropdown').classList.add('open');
+    }
+
+    /* ── Segment selection ─────────────────────────── */
+    function selectSegment(id, name, size) {
+        if (selectedSegments[id]) return;
+        selectedSegments[id] = {name: name, size: size};
+        renderSelectedSegments();
+        updateLaunchButton();
+        searchInput.value = '';
+        document.getElementById('segment-dropdown').classList.remove('open');
+    }
+
+    function removeSegment(id) {
+        delete selectedSegments[id];
+        renderSelectedSegments();
+        updateLaunchButton();
+    }
+
+    function renderSelectedSegments() {
+        var container = document.getElementById('selected-segments');
+        var html = '';
+        for (var id in selectedSegments) {
+            var seg = selectedSegments[id];
+            html += '<div class="segment-chip">' +
+                '<span>' + escapeHtml(seg.name) + '</span>' +
+                '<span class="text-xs" style="opacity:0.6;">' + seg.size.toLocaleString() + '</span>' +
+                '<button class="remove-btn" onclick="removeSegment(\'' + id + '\')">&times;</button>' +
+                '</div>';
+        }
+        container.innerHTML = html;
+    }
+
+    /* ── Dry run toggle ────────────────────────────── */
+    function toggleDryRun() {
+        dryRun = !dryRun;
+        var toggle = document.getElementById('dry-run-toggle');
+        if (dryRun) { toggle.classList.add('active'); }
+        else { toggle.classList.remove('active'); }
+    }
+
+    /* ── Launch button state ───────────────────────── */
+    function updateLaunchButton() {
+        document.getElementById('launch-btn').disabled = Object.keys(selectedSegments).length === 0;
+    }
+
+    /* ── Launch rewarm run ─────────────────────────── */
+    function launchRewarm() {
+        var btn = document.getElementById('launch-btn');
+        if (btn.disabled) return;
+
+        var platform = document.querySelector('#platform-selector .platform-card.active');
+        var platformName = platform ? platform.dataset.platform : 'instagram';
+        var listIds = Object.keys(selectedSegments);
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="animate-pulse">Launching...</span>';
+
+        fetch('/api/rewarm', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                platform: platformName,
+                hubspot_list_ids: listIds,
+                dry_run: dryRun,
+            }),
+        })
+        .then(function(resp) {
+            if (!resp.ok) return resp.json().then(function(d) { throw new Error(d.error || 'Launch failed'); });
+            return resp.json();
+        })
+        .then(function(data) {
+            window.location.href = '/runs/' + data.id;
+        })
+        .catch(function(err) {
+            showModal(err.message, {type: 'error', title: 'Launch Failed'});
+            btn.disabled = false;
+            btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8C2 4.686 4.686 2 8 2C9.657 2 11.157 2.632 12.243 3.757L14 2V7H9L10.828 5.172C10.078 4.422 9.078 4 8 4C5.791 4 4 5.791 4 8C4 10.209 5.791 12 8 12C9.485 12 10.773 11.133 11.465 9.854" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg> Start Rewarm Run';
+        });
+    }
+</script>
+{% endblock %}

@@ -60,6 +60,8 @@ def _save_run_to_redis(run_data: dict):
     """Save a run dict to Redis via the Run model."""
     run = Run.__new__(Run)
     # Ensure all fields that to_dict() reads are present
+    run_data.setdefault('run_type', 'discovery')
+    run_data.setdefault('cancelled', False)
     run_data.setdefault('stage_timings', {})
     run_data.setdefault('stage_outputs', {})
     run_data.setdefault('profiles_discovered', run_data.get('profiles_found', 0))

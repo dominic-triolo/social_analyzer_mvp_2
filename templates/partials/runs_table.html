@@ -6,7 +6,8 @@
     'enrichment': '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="5.5" cy="8" r="2.5" stroke="currentColor" stroke-width="1.5"/><circle cx="10.5" cy="8" r="2.5" stroke="currentColor" stroke-width="1.5"/></svg>',
     'analysis':   '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 10L7 7L9.5 9L11 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     'scoring':    '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2L9.8 5.6L14 6.2L11 9.1L11.7 13.3L8 11.4L4.3 13.3L5 9.1L2 6.2L6.2 5.6L8 2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>',
-    'crm_sync':   '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M14 10L8 14L2 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 6L8 10L2 6L8 2L14 6Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>',
+    'crm_sync':       '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M14 10L8 14L2 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 6L8 10L2 6L8 2L14 6Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>',
+    'segment_import': '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 8C2 4.686 4.686 2 8 2C9.657 2 11.157 2.632 12.243 3.757L14 2V7H9L10.828 5.172C10.078 4.422 9.078 4 8 4C5.791 4 4 5.791 4 8C4 10.209 5.791 12 8 12C9.485 12 10.773 11.133 11.465 9.854" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 } %}
 
 <span class="text-xs" style="color:#3c4858;opacity:0.4;"
@@ -52,6 +53,9 @@
                 {% if _f.get('bio_phrase') %}{% if _parts.append('"' + _f.bio_phrase + '"') %}{% endif %}{% endif %}
                 {% if _parts %}
                 <div class="text-xs mt-0.5 truncate" style="color:#64748b;max-width:200px;">{{ _parts | join(', ') | truncate(60) }}</div>
+                {% endif %}
+                {% if run.get('run_type') == 'rewarm' %}
+                <span class="inline-block text-xs px-1.5 py-0.5 rounded-full mt-0.5" style="background:#e0f2fe;color:#0369a1;">rewarm</span>
                 {% endif %}
             </td>
             <td class="py-3 px-4">

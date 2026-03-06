@@ -25,13 +25,13 @@
     <div class="chip-group" id="platform-filters">
         <button class="chip active" data-platform="all"
                 hx-get="/partials/runs-table"
-                hx-vals='js:{platform: "all", status: document.querySelector("#status-filters .chip.active")?.dataset.status || "all"}'
+                hx-vals='js:{platform: "all", status: document.querySelector("#status-filters .chip.active")?.dataset.status || "all", type: document.querySelector("#type-filters .chip.active")?.dataset.type || "all"}'
                 hx-target="#runs-container"
                 hx-swap="innerHTML"
                 onclick="setActiveChip(this)">All platforms</button>
         <button class="chip" data-platform="instagram"
                 hx-get="/partials/runs-table"
-                hx-vals='js:{platform: "instagram", status: document.querySelector("#status-filters .chip.active")?.dataset.status || "all"}'
+                hx-vals='js:{platform: "instagram", status: document.querySelector("#status-filters .chip.active")?.dataset.status || "all", type: document.querySelector("#type-filters .chip.active")?.dataset.type || "all"}'
                 hx-target="#runs-container"
                 hx-swap="innerHTML"
                 onclick="setActiveChip(this)">
@@ -40,7 +40,7 @@
         </button>
         <button class="chip" data-platform="patreon"
                 hx-get="/partials/runs-table"
-                hx-vals='js:{platform: "patreon", status: document.querySelector("#status-filters .chip.active")?.dataset.status || "all"}'
+                hx-vals='js:{platform: "patreon", status: document.querySelector("#status-filters .chip.active")?.dataset.status || "all", type: document.querySelector("#type-filters .chip.active")?.dataset.type || "all"}'
                 hx-target="#runs-container"
                 hx-swap="innerHTML"
                 onclick="setActiveChip(this)">
@@ -49,7 +49,7 @@
         </button>
         <button class="chip" data-platform="facebook"
                 hx-get="/partials/runs-table"
-                hx-vals='js:{platform: "facebook", status: document.querySelector("#status-filters .chip.active")?.dataset.status || "all"}'
+                hx-vals='js:{platform: "facebook", status: document.querySelector("#status-filters .chip.active")?.dataset.status || "all", type: document.querySelector("#type-filters .chip.active")?.dataset.type || "all"}'
                 hx-target="#runs-container"
                 hx-swap="innerHTML"
                 onclick="setActiveChip(this)">
@@ -60,28 +60,51 @@
 
     <div class="chip-divider"></div>
 
+    <div class="chip-group" id="type-filters">
+        <button class="chip active" data-type="all"
+                hx-get="/partials/runs-table"
+                hx-vals='js:{platform: document.querySelector("#platform-filters .chip.active")?.dataset.platform || "all", status: document.querySelector("#status-filters .chip.active")?.dataset.status || "all", type: "all"}'
+                hx-target="#runs-container"
+                hx-swap="innerHTML"
+                onclick="setActiveChip(this)">All types</button>
+        <button class="chip" data-type="discovery"
+                hx-get="/partials/runs-table"
+                hx-vals='js:{platform: document.querySelector("#platform-filters .chip.active")?.dataset.platform || "all", status: document.querySelector("#status-filters .chip.active")?.dataset.status || "all", type: "discovery"}'
+                hx-target="#runs-container"
+                hx-swap="innerHTML"
+                onclick="setActiveChip(this)">Discovery</button>
+        <button class="chip" data-type="rewarm"
+                hx-get="/partials/runs-table"
+                hx-vals='js:{platform: document.querySelector("#platform-filters .chip.active")?.dataset.platform || "all", status: document.querySelector("#status-filters .chip.active")?.dataset.status || "all", type: "rewarm"}'
+                hx-target="#runs-container"
+                hx-swap="innerHTML"
+                onclick="setActiveChip(this)">Rewarm</button>
+    </div>
+
+    <div class="chip-divider"></div>
+
     <div class="chip-group" id="status-filters">
         <button class="chip active" data-status="all"
                 hx-get="/partials/runs-table"
-                hx-vals='js:{platform: document.querySelector("#platform-filters .chip.active")?.dataset.platform || "all", status: "all"}'
+                hx-vals='js:{platform: document.querySelector("#platform-filters .chip.active")?.dataset.platform || "all", status: "all", type: document.querySelector("#type-filters .chip.active")?.dataset.type || "all"}'
                 hx-target="#runs-container"
                 hx-swap="innerHTML"
                 onclick="setActiveChip(this)">Any status</button>
         <button class="chip" data-status="active"
                 hx-get="/partials/runs-table"
-                hx-vals='js:{platform: document.querySelector("#platform-filters .chip.active")?.dataset.platform || "all", status: "active"}'
+                hx-vals='js:{platform: document.querySelector("#platform-filters .chip.active")?.dataset.platform || "all", status: "active", type: document.querySelector("#type-filters .chip.active")?.dataset.type || "all"}'
                 hx-target="#runs-container"
                 hx-swap="innerHTML"
                 onclick="setActiveChip(this)">Active</button>
         <button class="chip" data-status="completed"
                 hx-get="/partials/runs-table"
-                hx-vals='js:{platform: document.querySelector("#platform-filters .chip.active")?.dataset.platform || "all", status: "completed"}'
+                hx-vals='js:{platform: document.querySelector("#platform-filters .chip.active")?.dataset.platform || "all", status: "completed", type: document.querySelector("#type-filters .chip.active")?.dataset.type || "all"}'
                 hx-target="#runs-container"
                 hx-swap="innerHTML"
                 onclick="setActiveChip(this)">Completed</button>
         <button class="chip" data-status="failed"
                 hx-get="/partials/runs-table"
-                hx-vals='js:{platform: document.querySelector("#platform-filters .chip.active")?.dataset.platform || "all", status: "failed"}'
+                hx-vals='js:{platform: document.querySelector("#platform-filters .chip.active")?.dataset.platform || "all", status: "failed", type: document.querySelector("#type-filters .chip.active")?.dataset.type || "all"}'
                 hx-target="#runs-container"
                 hx-swap="innerHTML"
                 onclick="setActiveChip(this)">Failed</button>
@@ -95,7 +118,7 @@
      hx-get="/partials/runs-table"
      hx-trigger="load, every 15s"
      hx-swap="innerHTML"
-     hx-vals='js:{platform: document.querySelector("#platform-filters .chip.active")?.dataset.platform || "all", status: document.querySelector("#status-filters .chip.active")?.dataset.status || "all"}'>
+     hx-vals='js:{platform: document.querySelector("#platform-filters .chip.active")?.dataset.platform || "all", status: document.querySelector("#status-filters .chip.active")?.dataset.status || "all", type: document.querySelector("#type-filters .chip.active")?.dataset.type || "all"}'>
     <div class="text-center py-8 text-sm" style="color:#3c4858;opacity:0.35;">Loading runs...</div>
 </div>
 {% endblock %}

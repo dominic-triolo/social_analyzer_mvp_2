@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Dict, Optional, List
 
 from app.extensions import redis_client as r
-from app.config import PIPELINE_STAGES
+from app.config import PIPELINE_STAGES, REWARM_PIPELINE_STAGES
 
 
 RUN_TTL = 86400 * 7  # 7 days
@@ -32,14 +32,17 @@ class Run:
         platform: str = 'instagram',
         filters: Dict = None,
         bdr_assignment: str = '',
+        run_type: str = 'discovery',
     ):
         self.id = id or str(uuid.uuid4())
         self.status = status
         self.platform = platform
+        self.run_type = run_type
         self.created_at = datetime.now().isoformat()
         self.updated_at = self.created_at
         self.current_stage = ''
-        self.stage_progress = {stage: {'total': 0, 'completed': 0, 'failed': 0} for stage in PIPELINE_STAGES}
+        stages_list = REWARM_PIPELINE_STAGES if run_type == 'rewarm' else PIPELINE_STAGES
+        self.stage_progress = {stage: {'total': 0, 'completed': 0, 'failed': 0} for stage in stages_list}
         self.filters = filters or {}
         self.profiles_discovered = 0
         self.profiles_found = 0
@@ -67,6 +70,7 @@ class Run:
             'id': self.id,
             'status': self.status,
             'platform': self.platform,
+            'run_type': self.run_type,
             'created_at': self.created_at,
             'updated_at': self.updated_at,
             'current_stage': self.current_stage,
@@ -152,6 +156,7 @@ class Run:
         run.id = db_run.id
         run.status = db_run.status
         run.platform = db_run.platform
+        run.run_type = getattr(db_run, 'run_type', 'discovery') or 'discovery'
         run.created_at = db_run.created_at.isoformat() if db_run.created_at else ''
         run.updated_at = (db_run.finished_at or db_run.created_at or '').isoformat() if db_run.created_at else ''
         run.current_stage = db_run.current_stage or ''
@@ -187,6 +192,7 @@ class Run:
             run.id = d['id']
             run.status = d['status']
             run.platform = d['platform']
+            run.run_type = d.get('run_type', 'discovery')
             run.created_at = d['created_at']
             run.updated_at = d['updated_at']
             run.current_stage = d.get('current_stage', '')

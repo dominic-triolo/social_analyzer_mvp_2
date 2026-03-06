@@ -124,6 +124,7 @@ def create_app():
     from app.routes.monitor import bp as monitor_bp
     from app.routes.evaluation import bp as evaluation_bp
     from app.routes.enrollment import bp as enrollment_bp
+    from app.routes.rewarm import bp as rewarm_bp
 
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(discovery_bp)
@@ -131,6 +132,7 @@ def create_app():
     app.register_blueprint(monitor_bp)
     app.register_blueprint(evaluation_bp)
     app.register_blueprint(enrollment_bp)
+    app.register_blueprint(rewarm_bp)
 
     # Initialize circuit breakers for external API services
     from app.extensions import redis_client
@@ -148,5 +150,6 @@ def create_app():
     importlib.import_module('app.models.metric_snapshot')
     importlib.import_module('app.models.enrollment_run')
     importlib.import_module('app.models.app_config')
+    importlib.import_module('app.models.hubspot_list')
 
     return app

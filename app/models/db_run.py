@@ -11,6 +11,7 @@ class DbRun(Base):
     __tablename__ = 'runs'
 
     id = Column(Text, primary_key=True)
+    run_type = Column(Text, nullable=False, default='discovery', server_default='discovery')
     platform = Column(Text, nullable=False)
     status = Column(Text, nullable=False, default='queued')
     current_stage = Column(Text, default='')

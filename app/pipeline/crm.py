@@ -69,6 +69,13 @@ class InstagramCrmSync(StageAdapter):
         if not profiles:
             return StageResult(profiles=[], processed=0)
 
+        if run.filters.get('dry_run'):
+            logger.info("Dry run — skipping CRM sync for %d profiles", len(profiles))
+            for p in profiles:
+                p['_synced_to_crm'] = False
+                run.increment_stage_progress('crm_sync', 'completed')
+            return StageResult(profiles=profiles, processed=len(profiles))
+
         if not HUBSPOT_WEBHOOK_URL:
             logger.warning("HUBSPOT_WEBHOOK_URL not set — skipping CRM sync")
             for p in profiles:
@@ -156,6 +163,12 @@ class PatreonCrmSync(StageAdapter):
         if not profiles:
             return StageResult(profiles=[], processed=0)
 
+        if run.filters.get('dry_run'):
+            logger.info("Dry run — skipping Patreon CRM sync for %d profiles", len(profiles))
+            for p in profiles:
+                run.increment_stage_progress('crm_sync', 'completed')
+            return StageResult(profiles=profiles, processed=len(profiles))
+
         if not HUBSPOT_API_KEY:
             logger.warning("HUBSPOT_API_KEY not set — skipping Patreon CRM sync")
             for p in profiles:
@@ -197,6 +210,12 @@ class FacebookCrmSync(StageAdapter):
     def run(self, profiles, run) -> StageResult:
         if not profiles:
             return StageResult(profiles=[], processed=0)
+
+        if run.filters.get('dry_run'):
+            logger.info("Dry run — skipping Facebook CRM sync for %d profiles", len(profiles))
+            for p in profiles:
+                run.increment_stage_progress('crm_sync', 'completed')
+            return StageResult(profiles=profiles, processed=len(profiles))
 
         if not HUBSPOT_API_KEY:
             logger.warning("HUBSPOT_API_KEY not set — skipping Facebook CRM sync")

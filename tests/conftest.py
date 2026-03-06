@@ -19,6 +19,7 @@ def db_engine():
     import app.models.metric_snapshot
     import app.models.enrollment_run
     import app.models.app_config
+    import app.models.hubspot_list
     Base.metadata.create_all(engine)
     yield engine
     engine.dispose()
@@ -83,6 +84,7 @@ def make_run():
         defaults = dict(
             id='run-test-001',
             platform='instagram',
+            run_type='discovery',
             status='queued',
             current_stage='',
             filters={'max_results': 10},

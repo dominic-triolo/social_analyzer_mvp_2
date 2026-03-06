@@ -583,9 +583,63 @@ class MockFacebookCrmSync(StageAdapter):
         return StageResult(profiles=profiles, processed=len(profiles))
 
 
+# ── Stage 0 (rewarm): Segment Import ─────────────────────────────────────────
+
+class MockSegmentImportInstagram(StageAdapter):
+    platform = 'instagram'
+    stage = 'segment_import'
+    description = '[MOCK] Simulated HubSpot segment import'
+    apis = ['Mock']
+
+    def run(self, profiles, run) -> StageResult:
+        count = random.randint(5, 10)
+        selected = random.sample(MOCK_CREATORS, count)
+
+        run_suffix = uuid.uuid4().hex[:4]
+
+        imported = []
+        for creator in selected:
+            _simulate_delay()
+            username = f"{creator['username']}_{run_suffix}"
+            profile = {
+                'first_and_last_name': creator['name'],
+                'flagship_social_platform_handle': username,
+                'instagram_handle': f"https://www.instagram.com/{username}/",
+                'instagram_bio': '',
+                'instagram_followers': creator['followers'],
+                'average_engagement': 0,
+                'email': f"{username}@email.com",
+                'phone': None,
+                'tiktok_handle': None,
+                'youtube_profile_link': None,
+                'facebook_profile_link': None,
+                'patreon_link': None,
+                'pinterest_profile_link': None,
+                'city': random.choice(['Los Angeles', 'New York', 'Austin', 'Denver', 'Portland']),
+                'state': random.choice(['CA', 'NY', 'TX', 'CO', 'OR']),
+                'country': 'US',
+                'flagship_social_platform': 'instagram',
+                'channel': 'Outbound',
+                'channel_host_prospected': 'HubSpot Rewarm',
+                'funnel': 'Creator',
+                'enrichment_status': 'pending',
+            }
+            imported.append(profile)
+            run.increment_stage_progress('segment_import', 'completed')
+            logger.info("Imported @%s (%s followers)", username, f"{creator['followers']:,}")
+            # Carry primary_category for downstream analysis mock
+            profile['_primary_category'] = creator['category']
+
+        return StageResult(
+            profiles=imported,
+            processed=count,
+        )
+
+
 # ── Registry (same shape as real stage modules) ──────────────────────────────
 
 MOCK_STAGE_REGISTRY = {
+    'segment_import': {'instagram': MockSegmentImportInstagram},
     'discovery':   {'instagram': MockInstagramDiscovery, 'patreon': MockPatreonDiscovery, 'facebook': MockFacebookDiscovery},
     'pre_screen':  {'instagram': MockInstagramPrescreen, 'patreon': MockPatreonPrescreen, 'facebook': MockFacebookPrescreen},
     'enrichment':  {'instagram': MockInstagramEnrichment, 'patreon': MockPatreonEnrichment, 'facebook': MockFacebookEnrichment},

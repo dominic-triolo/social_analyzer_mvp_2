@@ -15,7 +15,7 @@ from datetime import datetime
 from typing import Dict, Type
 
 from app.models.run import Run
-from app.config import PIPELINE_STAGES, BDR_OWNER_IDS
+from app.config import PIPELINE_STAGES, REWARM_PIPELINE_STAGES, BDR_OWNER_IDS
 from app.pipeline.base import StageAdapter, StageResult, get_adapter
 from app.services.db import (
     persist_run, persist_lead_results,
@@ -34,6 +34,7 @@ from app.pipeline import enrichment as enrichment_mod
 from app.pipeline import analysis as analysis_mod
 from app.pipeline import scoring as scoring_mod
 from app.pipeline import crm as crm_mod
+from app.pipeline import segment_import as segment_import_mod
 
 
 # ── Lazy RQ queue (avoids import-time Redis connection in preview mode) ───
@@ -59,12 +60,13 @@ if os.getenv('MOCK_PIPELINE'):
     logger.info("MOCK_PIPELINE active — using fake adapters")
 else:
     STAGE_REGISTRY: Dict[str, Dict[str, Type[StageAdapter]]] = {
-        'discovery':   discovery_mod.ADAPTERS,
-        'pre_screen':  prescreen_mod.ADAPTERS,
-        'enrichment':  enrichment_mod.ADAPTERS,
-        'analysis':    analysis_mod.ADAPTERS,
-        'scoring':     scoring_mod.ADAPTERS,
-        'crm_sync':    crm_mod.ADAPTERS,
+        'discovery':       discovery_mod.ADAPTERS,
+        'pre_screen':      prescreen_mod.ADAPTERS,
+        'enrichment':      enrichment_mod.ADAPTERS,
+        'analysis':        analysis_mod.ADAPTERS,
+        'scoring':         scoring_mod.ADAPTERS,
+        'crm_sync':        crm_mod.ADAPTERS,
+        'segment_import':  segment_import_mod.ADAPTERS,
     }
 
 
@@ -103,6 +105,31 @@ def launch_run(platform: str, filters: dict, bdr_names: list = None) -> Run:
     persist_run(run)
 
     # Launch async via RQ
+    _get_queue().enqueue(run_pipeline, run.id, job_timeout=14400)
+
+    return run
+
+
+def launch_rewarm(platform: str, filters: dict) -> Run:
+    """
+    Create a rewarm Run and enqueue it through the rewarm pipeline stages.
+
+    Rewarm imports contacts from HubSpot segments and re-evaluates them through
+    enrichment → analysis → scoring → crm_sync.
+    """
+    if platform not in STAGE_REGISTRY.get('segment_import', {}):
+        raise ValueError(f"Rewarm not supported for platform: {platform}. "
+                         f"Available: {list(STAGE_REGISTRY.get('segment_import', {}).keys())}")
+
+    run = Run(
+        platform=platform,
+        filters=filters,
+        run_type='rewarm',
+    )
+
+    run.save()
+    persist_run(run)
+
     _get_queue().enqueue(run_pipeline, run.id, job_timeout=14400)
 
     return run
@@ -148,16 +175,20 @@ def run_pipeline(run_id: str, retry_from_stage: str = None):
         logger.error("Run %s not found", run_id)
         return
 
-    logger.info("Starting run %s for platform=%s", run_id, run.platform)
+    # Select stages list based on run type
+    run_type = getattr(run, 'run_type', 'discovery') or 'discovery'
+    stages_list = REWARM_PIPELINE_STAGES if run_type == 'rewarm' else PIPELINE_STAGES
+
+    logger.info("Starting %s run %s for platform=%s", run_type, run_id, run.platform)
     profiles = []
 
     # Handle retry from checkpoint
     skipping = False
     if retry_from_stage:
         skipping = True
-        stage_idx = PIPELINE_STAGES.index(retry_from_stage) if retry_from_stage in PIPELINE_STAGES else 0
+        stage_idx = stages_list.index(retry_from_stage) if retry_from_stage in stages_list else 0
         if stage_idx > 0:
-            prev_stage = PIPELINE_STAGES[stage_idx - 1]
+            prev_stage = stages_list[stage_idx - 1]
             checkpoint = (run.stage_outputs or {}).get(prev_stage)
             if checkpoint:
                 profiles = checkpoint
@@ -166,7 +197,7 @@ def run_pipeline(run_id: str, retry_from_stage: str = None):
                 logger.info("No checkpoint for '%s', starting from scratch", prev_stage)
                 skipping = False
 
-    for stage_name in PIPELINE_STAGES:
+    for stage_name in stages_list:
         # Check for user cancellation before each stage
         run = Run.load(run_id)
         if not run or run.cancelled:
@@ -219,6 +250,7 @@ def run_pipeline(run_id: str, retry_from_stage: str = None):
         # Update run status
         status_map = {
             'discovery': 'discovering',
+            'segment_import': 'importing',
             'pre_screen': 'pre_screening',
             'enrichment': 'enriching',
             'analysis': 'analyzing',
@@ -228,7 +260,7 @@ def run_pipeline(run_id: str, retry_from_stage: str = None):
         run.update_stage(stage_name, status=status_map.get(stage_name, stage_name))
 
         # Set stage totals
-        run.stage_progress[stage_name]['total'] = len(profiles) if stage_name != 'discovery' else 0
+        run.stage_progress[stage_name]['total'] = len(profiles) if stage_name not in ('discovery', 'segment_import') else 0
 
         # Execute
         try:
@@ -257,12 +289,15 @@ def run_pipeline(run_id: str, retry_from_stage: str = None):
                 'started_at': stage_started_at,
                 'finished_at': datetime.now().isoformat(),
                 'duration_s': stage_duration,
-                'profiles_in': 0 if stage_name == 'discovery' else len(profiles),
+                'profiles_in': 0 if stage_name in ('discovery', 'segment_import') else len(profiles),
                 'profiles_out': len(result.profiles),
             }
 
             # Update aggregate counters
             if stage_name == 'discovery':
+                run.profiles_discovered = len(result.profiles)
+                run.profiles_found = len(result.profiles)
+            elif stage_name == 'segment_import':
                 run.profiles_discovered = len(result.profiles)
                 run.profiles_found = len(result.profiles)
             elif stage_name == 'pre_screen':
@@ -370,9 +405,12 @@ def _generate_run_summary(run, failed: bool = False) -> str:
     estimated = run.estimated_cost or 0.0
     actual = run.actual_cost or 0.0
     platform = (run.platform or 'unknown').capitalize()
+    is_rewarm = getattr(run, 'run_type', 'discovery') == 'rewarm'
 
     # ── Zero-results short circuit ──
     if discovered == 0 and not failed:
+        if is_rewarm:
+            return f"No {platform} contacts imported from HubSpot. Check segment selection and try again."
         return f"No {platform} profiles found. Check filters and try again."
 
     # ── Failed run ──
@@ -386,19 +424,22 @@ def _generate_run_summary(run, failed: bool = False) -> str:
     # ── Narrative funnel ──
     lines = []
 
-    # Discovery line
-    discovery = f"Discovered {discovered} {platform} profiles"
-    removals = []
-    if dupes:
-        removals.append(f"{dupes} in DB")
-    if hs_dupes:
-        removals.append(f"{hs_dupes} in HubSpot")
-    if removals:
-        discovery += f", {' + '.join(removals)} already known"
-    discovery += f" — {found} new."
-    lines.append(discovery)
+    # Discovery / Import line
+    if is_rewarm:
+        lines.append(f"Imported {discovered} {platform} contacts from HubSpot — {found} to process.")
+    else:
+        discovery = f"Discovered {discovered} {platform} profiles"
+        removals = []
+        if dupes:
+            removals.append(f"{dupes} in DB")
+        if hs_dupes:
+            removals.append(f"{hs_dupes} in HubSpot")
+        if removals:
+            discovery += f", {' + '.join(removals)} already known"
+        discovery += f" — {found} new."
+        lines.append(discovery)
 
-    # Pre-screen line
+    # Pre-screen line (rewarm skips pre-screen)
     if prescreened:
         if found > 0:
             yield_pct = round((prescreened / found) * 100)
